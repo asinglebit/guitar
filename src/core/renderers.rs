@@ -268,7 +268,7 @@ pub fn render_graph_range(
 
                         if trailing_dummies > 0
                             && prev.is_some()
-                            && prev.unwrap().len() > idx
+                            && prev.unwrap().len() > idx + 1
                             && prev.unwrap()[idx + 1].is_dummy()
                         {
                             layers.merge(SYM_BRANCH_DOWN, idx + 1);
