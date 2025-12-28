@@ -5,6 +5,7 @@ use std::{
         HashMap
     }
 };
+use git2::StashFlags;
 #[rustfmt::skip]
 use git2::{
     Oid,
@@ -321,3 +322,25 @@ pub fn delete_branch(repo: &Repository, branch: &str) -> Result<(), Error> {
     Ok(())
 }
 
+pub fn stash(
+    repo: &mut Repository,
+) -> Result<Oid, git2::Error> {
+
+    let flags = StashFlags::DEFAULT | StashFlags::INCLUDE_UNTRACKED;
+
+    let message = {
+        let head = repo.head()?;
+        let commit = head.peel_to_commit()?;
+        let short_id = commit.id().to_string()[..7].to_string();
+        let summary = commit.summary().unwrap_or("WIP");
+        format!("{} {}", short_id, summary)
+    };
+
+    let stash_index = repo.stash_save(
+        &repo.signature()?,
+        message.as_str(),
+        Some(flags),
+    )?;
+
+    Ok(stash_index)
+}

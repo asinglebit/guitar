@@ -2,7 +2,7 @@
 use std::{
     io
 };
-use git2::Oid;
+use git2::{Oid, Repository};
 #[rustfmt::skip]
 use indexmap::IndexMap;
 #[rustfmt::skip]
@@ -21,6 +21,7 @@ use ratatui::{
 use edtui::{
     EditorMode,
 };
+use crate::git::actions::commits::stash;
 #[rustfmt::skip]
 use crate::{
     app::app::{
@@ -86,6 +87,7 @@ pub enum Command {
     SoloBranch,
     
     // Git
+    Stash,
     Grep,
     Fetch,
     Checkout,
@@ -149,6 +151,7 @@ impl App {
         map.insert(KeyBinding::new(Char('o'), KeyModifiers::NONE), Command::SoloBranch);
         
         // Git
+        map.insert(KeyBinding::new(Char('e'), KeyModifiers::NONE), Command::Stash);
         map.insert(KeyBinding::new(Char('g'), KeyModifiers::NONE), Command::Grep);
         map.insert(KeyBinding::new(Char('f'), KeyModifiers::NONE), Command::Fetch);
         map.insert(KeyBinding::new(Char('c'), KeyModifiers::NONE), Command::Checkout);
@@ -350,6 +353,7 @@ impl App {
                 Command::SoloBranch => self.on_solo_branch(),
 
                 // Git
+                Command::Stash => self.on_stash(),
                 Command::Grep => self.on_grep(),
                 Command::Fetch => self.on_fetch(),
                 Command::Checkout => self.on_checkout(),
@@ -1057,6 +1061,17 @@ impl App {
             }
             _ => {}
         };
+    }
+
+    pub fn on_stash(&mut self) {
+        if self.viewport == Viewport::Graph && self.focus == Focus::Viewport {
+            let path = self.repo.path().to_path_buf();
+            let mut repo = Repository::open(path).unwrap();
+
+            // Due to incosistnent git2 api, stashing requires mutalbe repo reference, im too lazy 
+            stash(&mut repo).unwrap();
+            self.reload();
+        }
     }
 
     pub fn on_grep(&mut self) {
