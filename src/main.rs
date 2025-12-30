@@ -25,6 +25,7 @@ mod app {
     pub mod app_draw_modal_create_branch;
     pub mod app_draw_modal_delete_branch;
     pub mod app_draw_modal_grep;
+    pub mod app_draw_modal_tag;
 }
 mod core {
     pub mod buffer;

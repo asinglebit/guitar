@@ -233,7 +233,7 @@ pub fn fetch_over_ssh(
         fetch_options.prune(FetchPrune::On);
 
         remote.fetch(
-            &["refs/heads/*:refs/remotes/origin/*"],
+            &["refs/heads/*:refs/remotes/origin/*", "refs/tags/*:refs/tags/*"],
             Some(&mut fetch_options),
             None,
         )?;
@@ -275,15 +275,25 @@ pub fn push_over_ssh(
         let mut push_options = PushOptions::new();
         push_options.remote_callbacks(callbacks);
 
-        // The refspec tells Git what to push
-        let refspec = if force {
-            format!("+refs/heads/{0}:refs/heads/{0}", branch) // '+' means force
+        // Build refspecs
+        let mut refspecs = vec![];
+        
+        // Branch
+        let branch_refspec = if force {
+            format!("+refs/heads/{0}:refs/heads/{0}", branch)
         } else {
             format!("refs/heads/{0}:refs/heads/{0}", branch)
         };
+        refspecs.push(branch_refspec);
+
+        // Local tags
+        for tag_name in repo.tag_names(None)?.iter().flatten() {
+            let tag_refspec = format!("refs/tags/{0}:refs/tags/{0}", tag_name);
+            refspecs.push(tag_refspec);
+        }
 
         // Perform the push
-        remote.push(&[&refspec], Some(&mut push_options))?;
+        remote.push(&refspecs.iter().map(|s| s.as_str()).collect::<Vec<_>>(), Some(&mut push_options))?;
 
         // println!("Push complete for branch '{}'", branch);
         Ok(())
@@ -372,4 +382,19 @@ pub fn pop(
     }
 
     Ok(())
+}
+
+pub fn tag(
+    repo: &Repository,
+    oid: git2::Oid,
+    tag: &str,
+) -> Result<Oid, Error> {
+    repo.tag_lightweight(tag, &repo.find_object(oid, None)?, false)
+}
+
+pub fn untag(
+    repo: &Repository,
+    tag: &str
+) -> Result<(), Error> {
+    repo.tag_delete(tag)
 }

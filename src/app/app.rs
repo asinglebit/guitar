@@ -124,7 +124,8 @@ pub enum Focus {
     ModalCommit,
     ModalCreateBranch,
     ModalDeleteBranch,
-    ModalGrep
+    ModalGrep,
+    ModalTag
 }
 
 #[derive(PartialEq, Eq)]
@@ -346,6 +347,9 @@ impl App  {
             }
             Focus::ModalGrep => {
                 self.draw_modal_grep(frame);
+            }
+            Focus::ModalTag => {
+                self.draw_modal_tag(frame);
             }
             _ => {}
         }

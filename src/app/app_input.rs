@@ -18,7 +18,7 @@ use ratatui::{
 use edtui::{
     EditorMode,
 };
-use crate::{git::actions::commits::{pop, stash}, helpers::keymap::{Command, KeyBinding, load_or_init_keymap}};
+use crate::{git::actions::commits::{pop, stash, tag, untag}, helpers::keymap::{Command, KeyBinding, load_or_init_keymap}};
 #[rustfmt::skip]
 use crate::{
     app::app::{
@@ -216,6 +216,40 @@ impl App {
                 }
                 return;
             }
+            Focus::ModalTag => {
+                if self.modal_editor.mode == EditorMode::Normal {
+                    match key_event.code {
+                        KeyCode::Esc => {
+                            self.focus = Focus::Viewport;
+                        }
+                        KeyCode::Enter => {
+                            let tag_name = editor_state_to_string(&self.modal_editor);
+
+                            // Reject obviously invalid prefixes early
+                            if tag_name.is_empty() {
+                                return;
+                            }
+                            
+                            let oid = self.oids.get_oid_by_idx(if self.graph_selected == 0 { 1 } else { self.graph_selected });
+
+                            // Get the alias
+                            tag(&self.repo, *oid, &tag_name).unwrap();
+
+                            self.reload();
+                            self.modal_editor = edtui::EditorState::default();
+                            self.focus = Focus::Viewport;
+                        }
+                        _ => {
+                            self.modal_editor_event_handler
+                                .on_key_event(key_event, &mut self.modal_editor);
+                        }
+                    }
+                } else {
+                    self.modal_editor_event_handler
+                        .on_key_event(key_event, &mut self.modal_editor);
+                }
+                return;
+            }
             Focus::Viewport => {
                 if self.viewport == Viewport::Editor {
                     if self.file_editor.mode == EditorMode::Normal {
@@ -279,6 +313,8 @@ impl App {
                 Command::Push => self.on_push(),
                 Command::CreateANewBranch => self.on_create_branch(),
                 Command::DeleteABranch => self.on_delete_branch(),
+                Command::Tag => self.on_tag(),
+                Command::Untag => self.on_untag(),
                 
                 // Layout
                 Command::GoBack => self.on_go_back(),
@@ -1237,6 +1273,52 @@ impl App {
                                     }
                                     _ => {
                                         self.focus = Focus::ModalDeleteBranch;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    pub fn on_tag(&mut self) {
+        match self.viewport {
+            Viewport::Settings | Viewport::Viewer | Viewport::Editor => {}
+            _ => {
+                if self.focus == Focus::Viewport && self.graph_selected != 0 {
+                    self.focus = Focus::ModalTag;
+                    self.modal_editor.mode = EditorMode::Insert;
+                }                
+            }
+        }
+    }
+
+    pub fn on_untag(&mut self) {
+        match self.viewport {
+            Viewport::Settings | Viewport::Viewer | Viewport::Editor => {}
+            _ => {
+                match self.focus {
+                    Focus::Tags => {
+                        let tag = &self.tags.sorted.get(self.tags_selected).unwrap().1;
+                        untag(&self.repo, tag).unwrap();
+                        self.reload();   
+                    }
+                    Focus::Viewport => {
+                        if self.graph_selected != 0 {
+                            
+                            let alias = self.oids.get_alias_by_idx(if self.graph_selected == 0 { 1 } else { self.graph_selected });
+                            if let Some(tag_names) = self.tags.local.get(&alias) {
+                                match tag_names.len() {
+                                    0 => {}
+                                    1 => {
+                                        untag(&self.repo, tag_names[0].as_str()).unwrap();
+                                        self.reload();
+                                    }
+                                    _ => {
+                                        // self.focus = Focus::ModalDeleteBranch;
                                     }
                                 }
                             }
