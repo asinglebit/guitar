@@ -14,6 +14,7 @@ use ratatui::{
         Color
     }
 };
+use crate::helpers::palette::Theme;
 #[rustfmt::skip]
 use crate::{
     core::{
@@ -64,12 +65,13 @@ impl Tags {
         self.indices = Vec::new();
         
         // Branch tuple vectors
-        let mut sorted: Vec<(u32, String)> = self.local.iter().flat_map(|(&alias, tags)| {
+        let sorted: Vec<(u32, String)> = self.local.iter().flat_map(|(&alias, tags)| {
                 tags.iter().map(move |tag| (alias, tag.clone()))
             }).collect();
+        self.sorted = sorted;
 
         // Sorting tuples
-        sorted.sort_by(|a, b| a.1.cmp(&b.1));
+        self.sorted.sort_by(|a, b| a.1.cmp(&b.1));
 
         // Set tag colors
         for (oidi, &lane_idx) in tags_lanes.iter() {
@@ -86,5 +88,14 @@ impl Tags {
         sorted_time.iter().for_each(|(oidi, _)| {
             self.indices.push(oids.get_sorted_aliases().iter().position(|o| oidi == o).unwrap_or(usize::MAX));
         });
+
+    }
+    
+    pub fn get_sorted_aliases(&self) -> &Vec<(u32, String)> {
+        &self.sorted
+    }
+
+    pub fn get_color(&self, theme: &Theme, branch_alias: &u32) -> Color {
+        *self.colors.get(branch_alias).unwrap_or(&theme.COLOR_TEXT)
     }
 }

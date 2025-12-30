@@ -1,3 +1,12 @@
+TODO:
+
+- local branches window
+- remote branches window
+- tags window
+- jump to tag
+- add tag with modal
+- remove tag
+
 <div align="center">
   <pre>
     </br>

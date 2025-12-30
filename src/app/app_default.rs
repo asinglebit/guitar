@@ -120,6 +120,8 @@ impl Default for App {
             is_shas: true,
             is_minimal: false,
             is_branches: false,
+            is_tags: false,
+            is_stashes: false,
             is_status: false,
             is_inspector: false,
             viewport: Viewport::Splash,
@@ -129,6 +131,14 @@ impl Default for App {
             branches_selected: 0,
             branches_scroll: 0.into(),
             
+            // Tags
+            tags_selected: 0,
+            tags_scroll: 0.into(),
+
+            // Stashes
+            stashes_selected: 0,
+            stashes_scroll: 0.into(),
+
             // Graph
             graph_selected: 0,
             graph_scroll: 0.into(),

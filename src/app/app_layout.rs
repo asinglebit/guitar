@@ -18,6 +18,10 @@ pub struct Layout {
     pub app: Rect,
     pub branches: Rect,
     pub branches_scrollbar: Rect,
+    pub tags: Rect,
+    pub tags_scrollbar: Rect,
+    pub stashes: Rect,
+    pub stashes_scrollbar: Rect,
     pub graph: Rect,
     pub graph_scrollbar: Rect,
     pub inspector: Rect,
@@ -59,13 +63,22 @@ impl App {
         let chunks_horizontal = ratatui::layout::Layout::default()
             .direction(ratatui::layout::Direction::Horizontal)
             .constraints([
-                ratatui::layout::Constraint::Length(if self.is_branches && !is_settings { 45 } else { 0 }),
+                ratatui::layout::Constraint::Length(if (self.is_branches || self.is_tags || self.is_stashes ) && !is_settings { 45 } else { 0 }),
                 ratatui::layout::Constraint::Max(500),
                 ratatui::layout::Constraint::Length(if is_right_pane { 46 } else { 0 }),
             ])
             .split(chunks_vertical[1]);
 
-        let chunks_pane = ratatui::layout::Layout::default()
+        let chunks_pane_left = ratatui::layout::Layout::default()
+            .direction(ratatui::layout::Direction::Vertical)
+            .constraints([
+                ratatui::layout::Constraint::Percentage(if self.is_branches { if !self.is_tags && !self.is_stashes { 100 } else if self.is_tags && self.is_stashes { 33 } else { 50 } } else { 0 }),
+                ratatui::layout::Constraint::Percentage(if self.is_tags { if !self.is_branches && !self.is_stashes { 100 } else if self.is_branches && self.is_stashes { 33 } else { 50 } } else { 0 }),
+                ratatui::layout::Constraint::Percentage(if self.is_stashes { if !self.is_branches && !self.is_tags { 100 } else if self.is_branches && self.is_tags { 33 } else { 50 } } else { 0 }),
+            ])
+            .split(chunks_horizontal[0]);
+
+        let chunks_pane_right = ratatui::layout::Layout::default()
             .direction(ratatui::layout::Direction::Vertical)
             .constraints([
                 ratatui::layout::Constraint::Percentage(if is_inspector { if !is_status { 100 } else { 35 } } else { 0 }),
@@ -79,7 +92,7 @@ impl App {
                 ratatui::layout::Constraint::Percentage(if self.graph_selected == 0 { 50 } else { 100 }),
                 ratatui::layout::Constraint::Percentage(if self.graph_selected == 0 { 50 } else { 0 }),
             ])
-            .split(chunks_pane[1]);
+            .split(chunks_pane_right[1]);
 
         let chunks_status_bar = ratatui::layout::Layout::default()
             .direction(ratatui::layout::Direction::Horizontal)
@@ -90,10 +103,22 @@ impl App {
             .split(chunks_vertical[2]);
 
         // Branches
-        let mut branches_scrollbar = chunks_horizontal[0];
+        let mut branches_scrollbar = chunks_pane_left[0];
         branches_scrollbar.width += 1;
-        let mut branches = chunks_horizontal[0];
-        branches.y += 1; 
+        let mut branches = chunks_pane_left[0];
+        branches.y += 1;
+
+        // Tags
+        let mut tags_scrollbar = chunks_pane_left[1];
+        tags_scrollbar.width += 1;
+        let mut tags = chunks_pane_left[1];
+        tags.y += 1;
+
+        // Stashes
+        let mut stashes_scrollbar = chunks_pane_left[2];
+        stashes_scrollbar.width += 1;
+        let mut stashes = chunks_pane_left[2];
+        stashes.y += 1;
 
         // Graph
         let graph_scrollbar = chunks_horizontal[1];
@@ -102,8 +127,8 @@ impl App {
         graph.height = graph.height.saturating_sub(2);
 
         // Inspector
-        let mut inspector_scrollbar = chunks_pane[0];
-        let mut inspector = chunks_pane[0];
+        let mut inspector_scrollbar = chunks_pane_right[0];
+        let mut inspector = chunks_pane_right[0];
         inspector.y += 1;
         if self.is_status && self.graph_selected != 0 {
            inspector.height += 2; 
@@ -136,6 +161,10 @@ impl App {
             app: chunks_vertical[1],
             branches,
             branches_scrollbar,
+            tags,
+            tags_scrollbar,
+            stashes,
+            stashes_scrollbar,
             graph,
             graph_scrollbar,
             inspector,

@@ -59,6 +59,8 @@ pub enum Command {
     Minimize,
     ToggleShas,
     ToggleBranches,
+    ToggleTags,
+    ToggleStashes,
     ToggleStatus,
     ToggleInspector,
     ToggleSettings,
@@ -111,6 +113,8 @@ fn default_keymap() -> IndexMap<KeyBinding, Command> {
     map.insert(KeyBinding::new(Char('.'), KeyModifiers::NONE), Command::Minimize);
     map.insert(KeyBinding::new(Char('w'), KeyModifiers::NONE), Command::ToggleShas);
     map.insert(KeyBinding::new(Char('`'), KeyModifiers::NONE), Command::ToggleBranches);
+    map.insert(KeyBinding::new(Char('3'), KeyModifiers::NONE), Command::ToggleTags);
+    map.insert(KeyBinding::new(Char('4'), KeyModifiers::NONE), Command::ToggleStashes);
     map.insert(KeyBinding::new(Char('2'), KeyModifiers::NONE), Command::ToggleStatus);
     map.insert(KeyBinding::new(Char('1'), KeyModifiers::NONE), Command::ToggleInspector);
     map.insert(KeyBinding::new(F(1), KeyModifiers::NONE), Command::ToggleSettings);

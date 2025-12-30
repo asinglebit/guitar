@@ -151,7 +151,7 @@ impl App {
         // Conditional constraints
         let constraints = if self.is_shas {
             vec![
-                ratatui::layout::Constraint::Length(6),
+                ratatui::layout::Constraint::Length(9),
                 ratatui::layout::Constraint::Length(width + 5),
                 ratatui::layout::Constraint::Min(0),
             ]

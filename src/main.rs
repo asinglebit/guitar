@@ -9,6 +9,8 @@ mod app {
     pub mod app_layout;
     pub mod app_draw_title;
     pub mod app_draw_branches;
+    pub mod app_draw_tags;
+    pub mod app_draw_stashes;
     pub mod app_draw_graph;
     pub mod app_draw_editor;
     pub mod app_draw_viewer;

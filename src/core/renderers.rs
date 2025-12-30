@@ -450,7 +450,7 @@ pub fn render_sha_range(
             let oid = oids.get_oid_by_alias(alias);
             
             lines.push(Line::from(Span::styled(
-                format!("{:.6} ", oid),
+                format!("{:.9} ", oid),
                 Style::default().fg(theme.COLOR_GREY_700),
             )));
         } else {
@@ -520,7 +520,7 @@ pub fn render_message_range(
                         spans.push(Span::styled(
                             format!(
                                 "{} {} ",
-                                "⚑",
+                                SYM_TAG,
                                 tag
                             ),
                             Style::default().fg(if let Some(color) = tag_colors.get(&alias) {

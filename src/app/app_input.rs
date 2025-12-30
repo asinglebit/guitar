@@ -64,6 +64,31 @@ impl App {
     pub fn load_keymap(&mut self) {
         self.keymap = load_or_init_keymap();
     }
+    
+    fn get_focusable_panes(&self) -> Vec<Focus> {
+        let mut order = Vec::new();
+        for focus in &[
+            Focus::Viewport,
+            Focus::Inspector,
+            Focus::StatusTop,
+            Focus::StatusBottom,
+            Focus::Branches,
+            Focus::Tags,
+            Focus::Stashes,
+        ] {
+            match focus {
+                Focus::Viewport => order.push(Focus::Viewport),
+                Focus::Inspector if self.is_inspector && self.graph_selected != 0 => order.push(Focus::Inspector),
+                Focus::StatusTop if self.is_status => order.push(*focus),
+                Focus::StatusBottom if self.is_status && self.graph_selected == 0 => order.push(*focus),
+                Focus::Branches if self.is_branches => order.push(Focus::Branches),
+                Focus::Tags if self.is_tags => order.push(Focus::Tags),
+                Focus::Stashes if self.is_stashes => order.push(Focus::Stashes),
+                _ => {}
+            }
+        }
+        order
+    }
 
     pub fn handle_events(&mut self) -> io::Result<()> {
         match event::read()? {
@@ -221,7 +246,7 @@ impl App {
                 // List navigation
                 Command::Select => self.on_select(),
                 Command::NextPane => self.on_next_pane(),
-                Command::PreviousPane => self.on_previous_pane(),
+                Command::PreviousPane => self.on_prev_pane(),
                 Command::PageUp => self.on_scroll_page_up(),
                 Command::PageDown => self.on_scroll_page_down(),
                 Command::ScrollUp => self.on_scroll_up(),
@@ -261,6 +286,8 @@ impl App {
                 Command::Minimize => self.on_minimize(),
                 Command::ToggleShas => self.on_toggle_shas(),
                 Command::ToggleBranches => self.on_toggle_branches(),
+                Command::ToggleTags => self.on_toggle_tags(),
+                Command::ToggleStashes => self.on_toggle_stashes(),
                 Command::ToggleStatus => self.on_toggle_status(),
                 Command::ToggleInspector => self.on_toggle_inspector(),
                 Command::ToggleSettings => self.on_toggle_settings(),
@@ -380,93 +407,31 @@ impl App {
     }
 
     pub fn on_next_pane(&mut self) {
-        self.focus = match self.focus {
-            Focus::Branches => Focus::Viewport,
-            Focus::Viewport => {
-                if self.focus == Focus::Viewport && (self.viewport == Viewport::Editor || self.viewport == Viewport::Settings) {
-                    return;
-                }
-                if self.is_inspector && self.graph_selected != 0 {
-                    Focus::Inspector
-                } else if self.is_status {
-                    Focus::StatusTop
-                } else if self.is_branches {
-                    Focus::Branches
-                } else {
-                    Focus::Viewport
-                }
-            }
-            Focus::Inspector => {
-                if self.is_status {
-                    Focus::StatusTop
-                } else if self.is_branches {
-                    Focus::Branches
-                } else {
-                    Focus::Viewport
-                }
-            }
-            Focus::StatusTop => {
-                if self.graph_selected == 0 {
-                    Focus::StatusBottom
-                } else if self.is_branches {
-                    Focus::Branches
-                } else {
-                    Focus::Viewport
-                }
-            }
-            Focus::StatusBottom => {
-                if self.is_branches {
-                    Focus::Branches
-                } else {
-                    Focus::Viewport
-                }
-            }
-            _ => Focus::Viewport,
-        };
+        let active = self.get_focusable_panes();
+        if active.is_empty() {
+            return;
+        }
+
+        let idx = active
+            .iter()
+            .position(|&f| f == self.focus)
+            .unwrap_or(0);
+
+        self.focus = active[(idx + 1) % active.len()];
     }
     
-    pub fn on_previous_pane(&mut self) {
-        self.focus = match self.focus {
-            Focus::Branches => {
-                if self.is_status && self.graph_selected == 0 {
-                    Focus::StatusBottom
-                } else if self.is_status {
-                    Focus::StatusTop
-                } else if self.is_inspector && self.graph_selected != 0 {
-                    Focus::Inspector
-                } else {
-                    Focus::Viewport
-                }
-            }
-            Focus::Viewport => {
-                if self.focus == Focus::Viewport && (self.viewport == Viewport::Editor || self.viewport == Viewport::Settings) {
-                    return;
-                }
-                if self.is_branches {
-                    Focus::Branches
-                } else if self.is_status && self.graph_selected == 0 {
-                    Focus::StatusBottom
-                } else if self.is_status {
-                    Focus::StatusTop
-                } else {
-                    Focus::Inspector
-                }
-            }
-            Focus::Inspector => {
-                Focus::Viewport
-            }
-            Focus::StatusTop => {
-                if self.is_inspector && self.graph_selected != 0 {
-                    Focus::Inspector
-                } else {
-                    Focus::Viewport
-                }
-            }
-            Focus::StatusBottom => {
-                Focus::StatusTop
-            }
-            _ => Focus::Viewport,
-        };
+    pub fn on_prev_pane(&mut self) {
+        let active = self.get_focusable_panes();
+        if active.is_empty() {
+            return;
+        }
+
+        let idx = active
+            .iter()
+            .position(|&f| f == self.focus)
+            .unwrap_or(0);
+
+        self.focus = active[(idx + active.len() - 1) % active.len()];
     }
 
     pub fn on_scroll_page_up(&mut self) {
@@ -474,6 +439,14 @@ impl App {
             Focus::Branches => {
                 let page = self.layout.branches.height as usize - 1;
                 self.branches_selected = self.branches_selected.saturating_sub(page);
+            }
+            Focus::Tags => {
+                let page = self.layout.tags.height as usize - 1;
+                self.tags_selected = self.tags_selected.saturating_sub(page);
+            }
+            Focus::Stashes => {
+                let page = self.layout.stashes.height as usize - 1;
+                self.stashes_selected = self.stashes_selected.saturating_sub(page);
             }
             Focus::Viewport => {
                 let page = self.layout.graph.height as usize - 1;
@@ -530,6 +503,14 @@ impl App {
                 let page = self.layout.branches.height as usize - 1;
                 self.branches_selected += page;
             }
+            Focus::Tags => {
+                let page = self.layout.tags.height as usize - 1;
+                self.tags_selected += page;
+            }
+            Focus::Stashes => {
+                let page = self.layout.stashes.height as usize - 1;
+                self.stashes_selected += page;
+            }
             Focus::Viewport => {
                 let page = self.layout.graph.height as usize - 1;
                 match self.viewport {
@@ -582,6 +563,12 @@ impl App {
         match self.focus {
             Focus::Branches => {
                 self.branches_selected = self.branches_selected.saturating_sub(1);
+            }
+            Focus::Tags => {
+                self.tags_selected = self.tags_selected.saturating_sub(1);
+            }
+            Focus::Stashes => {
+                self.stashes_selected = self.stashes_selected.saturating_sub(1);
             }
             Focus::Viewport => {
                 match self.viewport {
@@ -659,6 +646,12 @@ impl App {
             Focus::Branches => {
                 self.branches_selected += 1;
             }
+            Focus::Tags => {
+                self.tags_selected += 1;
+            }
+            Focus::Stashes => {
+                self.stashes_selected += 1;
+            }
             Focus::Viewport => match self.viewport {
                 Viewport::Graph => {
                     if self.graph_selected + 1 < self.oids.get_commit_count() {
@@ -732,6 +725,12 @@ impl App {
             Focus::Branches => {
                 self.branches_selected /= 2
             },
+            Focus::Tags => {
+                self.tags_selected /= 2
+            },
+            Focus::Stashes => {
+                self.stashes_selected /= 2
+            },
             _ => {}
         };
     }
@@ -745,6 +744,14 @@ impl App {
             Focus::Branches => {
                 let total = self.branches.sorted.len();
                 self.branches_selected = self.branches_selected + (total - self.branches_selected) / 2
+            },
+            Focus::Tags => {
+                let total = self.tags.sorted.len();
+                self.tags_selected = self.tags_selected + (total - self.tags_selected) / 2
+            },
+            Focus::Stashes => {
+                let total = self.oids.stashes.len();
+                self.stashes_selected = self.stashes_selected + (total - self.stashes_selected) / 2
             },
             _ => {}
         };
@@ -832,6 +839,12 @@ impl App {
             Focus::Branches => {
                 self.branches_selected = 0;
             }
+            Focus::Tags => {
+                self.tags_selected = 0;
+            }
+            Focus::Stashes => {
+                self.stashes_selected = 0;
+            }
             Focus::Viewport => match self.viewport {
                 Viewport::Graph => {
                     self.graph_selected = 0;
@@ -861,6 +874,12 @@ impl App {
         match self.focus {
             Focus::Branches => {
                 self.branches_selected = usize::MAX;
+            }
+            Focus::Tags => {
+                self.tags_selected = usize::MAX;
+            }
+            Focus::Stashes => {
+                self.stashes_selected = usize::MAX;
             }
             Focus::Viewport => match self.viewport {
                 Viewport::Graph => {
@@ -1246,6 +1265,30 @@ impl App {
         }
         if self.is_branches {
             self.focus = Focus::Branches;
+        } else {
+            self.focus = Focus::Viewport;
+        }
+    }
+
+    pub fn on_toggle_tags(&mut self) {
+        self.is_tags = !self.is_tags;
+        if self.viewport == Viewport::Editor || self.viewport == Viewport::Settings {
+            return;
+        }
+        if self.is_tags {
+            self.focus = Focus::Tags;
+        } else {
+            self.focus = Focus::Viewport;
+        }
+    }
+
+    pub fn on_toggle_stashes(&mut self) {
+        self.is_stashes = !self.is_stashes;
+        if self.viewport == Viewport::Editor || self.viewport == Viewport::Settings {
+            return;
+        }
+        if self.is_stashes {
+            self.focus = Focus::Stashes;
         } else {
             self.focus = Focus::Viewport;
         }

@@ -110,13 +110,15 @@ pub enum Viewport {
     Settings
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone, Copy)]
 pub enum Focus {
     Viewport,
     Inspector,
     StatusTop,
     StatusBottom,
     Branches,
+    Tags,
+    Stashes,
     ModalCheckout,
     ModalSolo,
     ModalCommit,
@@ -174,6 +176,8 @@ pub struct App {
     pub is_minimal: bool,
     pub is_branches: bool,
     pub is_status: bool,
+    pub is_tags: bool,
+    pub is_stashes: bool,
     pub is_inspector: bool,
     pub viewport: Viewport,
     pub focus: Focus,
@@ -181,6 +185,14 @@ pub struct App {
     // Branches
     pub branches_selected: usize,
     pub branches_scroll: Cell<usize>,
+
+    // Tags
+    pub tags_selected: usize,
+    pub tags_scroll: Cell<usize>,
+
+    // Stashes
+    pub stashes_selected: usize,
+    pub stashes_scroll: Cell<usize>,
 
     // Graph
     pub graph_selected: usize,
@@ -294,6 +306,12 @@ impl App  {
             _ => {
                 if self.is_branches {
                     self.draw_branches(frame);
+                }
+                if self.is_tags {
+                    self.draw_tags(frame);
+                }
+                if self.is_stashes {
+                    self.draw_stashes(frame);
                 }
                 if self.is_status {
                     self.draw_status(frame);

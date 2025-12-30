@@ -58,7 +58,7 @@ impl App {
 
         // Get vertical dimensions
         let total_lines = lines.len();
-        let visible_height = self.layout.branches.height as usize - 2;
+        let visible_height = self.layout.branches.height as usize - 1;
 
         // Clamp selection
         if total_lines == 0 {
@@ -103,7 +103,7 @@ impl App {
         let mut scrollbar_state = ScrollbarState::new(total_lines.saturating_sub(visible_height)).position(self.branches_scroll.get());
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
             .begin_symbol(Some("─"))
-            .end_symbol(Some("─"))
+            .end_symbol(Some(if self.is_tags || self.is_stashes { "│" } else { "─" }))
             .track_symbol(Some("│"))
             .thumb_symbol(if total_lines > visible_height { "▌" } else { "│" })
             .thumb_style(Style::default().fg(if total_lines > visible_height && self.focus == Focus::Branches {

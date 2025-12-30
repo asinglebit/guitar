@@ -11,3 +11,4 @@ pub const SYM_BRANCH_UP: &str = "╯";
 pub const SYM_BRANCH_DOWN: &str = "╮";
 pub const SYM_MERGE: &str = "•";
 pub const SYM_UNCOMMITED: &str = "◌";
+pub const SYM_TAG: &str = "⚑";
