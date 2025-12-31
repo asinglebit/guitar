@@ -18,83 +18,112 @@ Beautiful and cozy terminal-based Git client
   </pre>
 </div>
 
-![untitled(1)](https://github.com/user-attachments/assets/e39b0ebb-52dc-45bd-a430-0f592d5fc315)
+![2](https://github.com/user-attachments/assets/177dbf13-b9ad-480e-a1be-71a333454a44)
 
-<div align="center">
-<pre>
-  .Keyboard Mappings
-╭─────────────────────────────────────────────────────────────────────╮
-│ [_]   [_][_][_][_] [_][_][_][_] [_][_][_][_] [_][_][_] [_][_][_][_] │
-│                                                                     │
-│ [`][1][2][_][_][_][_][_][_][_][_][_][_][___] [_][*][*] [_][_][_][_] │
-│ [__][_][_][_][r][_][_][u][_][o][p][_][_][* │ [_][*][*] [_][_][_][ | │
-│ [___][a][s][_][f][_][h][j][_][_][_][_][_][_│           [_][_][_][_| │
-│ [*][_][_][_][c][_][_][_][m][_][.][_][______]    [*]    [_][_][_][ | │
-│ [*_][_][__][_____________________][__][_][_] [_][*][_] [____][.][_| │
-╰─────────────────────────────────────────────────────────────────────╯
+### Disclaimer
 
-
-Select                                                            Enter 
-Next Pane                                                           Tab 
-Previous Pane                                                 Shift + ? 
-Page Up                                                          Pageup 
-Page Down                                                      Pagedown 
-Scroll Up                                                            Up 
-Scroll Down                                                        Down 
-Scroll Up Half                                               Shift + Up 
-Scroll Down Half                                           Shift + Down 
-Scroll Up Branch                                              Ctrl + Up 
-Scroll Down Branch                                          Ctrl + Down 
-Scroll Up Commit                                               Alt + Up 
-Scroll Down Commit                                           Alt + Down 
-Go To Beginning                                                    Home 
-Go To End                                                           End 
-Jump To Branch                                                        j 
-Solo Branch                                                           o 
-Fetch                                                                 f 
-Checkout                                                              c 
-Hard Reset                                                            h 
-Mixed Reset                                                           m 
-Unstage All                                                           u 
-Stage All                                                             s 
-Commit                                                                a 
-Push                                                                  p 
-Create A New Branch                                                   b 
-Delete A Branch                                                       d 
-Go Back                                                             Esc 
-Reload                                                                r 
-Minimize                                                              . 
-Toggle Branches                                                       ` 
-Toggle Status                                                         2 
-Toggle Inspector                                                      1 
-Toggle Settings                                                      F1 
-Exit                                                           Ctrl + c 
-</pre>
-</div>
-
-### Features
-
-- 🖼️ **Beautiful graph rendering** – visualize commit history clearly.  
-- 🚀 **Blazing-fast traversal** – works smoothly with very large repositories.  
-- ⏩ **Immediate jumps** – move through history without waiting.  
-- 🎨 **Vibrant, terminal-friendly colors** – easy on the eyes for long coding sessions.  
-- 🧰 **Built-in diff viewer** – inspect changes without leaving the terminal.  
-- 🦀 **Written in Rust** – safety, speed, and fun.  
-- 🖥️ **Pure TUI experience** – ratatui based rendering.
+I work on `guita╭` in my spare time, and give priority to the features I need in my day-to-day life. Use it with caution, and feel free to report issues or even better - contribute improvements! Im a lazy dude, and since this is a hobby project I just put unwrap() everywhere, such is life. `guita╭` is a tool I sometimes work on to make my day-to-day life as a developer easier.
 
 ### Motivation
 
-I am building **guita╭** as a personal exercise in procrustination.
+I needed a git client that would make it easy for me to understand where I am topologically at any given point in time. I also want it to be terminal based and cross-platform. I needed it to be fast. I also wanted to learn rust. So this is the project i picked to meet all of these goals at the same time.
 
-The goal is simple:
+### Features
 
-- Render Git commit graphs beautifully and efficiently in the terminal.  
-- Traverse massive repositories instantly – hundreds of thousands of commits spanning decades.  
-- Jump anywhere in history without lag.
-- Enjoy a cozy experience with pleasing colors and smooth, terminal-friendly navigation.
-- Include a fast, built-in diff viewer.
+- **Beautiful graph rendering** – Visualize commit history clearly.  
+- **Immediate jumps** – Move through history without waiting.  
+- **Pure TUI experience** – Ratatui based rendering.
+- **Auth** – Currently simply attaches to the running ssh agent.  
+- **Built-in diff viewer** – Inspect changes without leaving the terminal, however its very rudimentary.  
+- **Tag management** – Create, view or remove tags.  
+- **Stash management** – Create, view or remove stashes.  
+- **Cherrypicking** – Happy path only for now.  
+- **Opinionated** – Fetches prune branches and pull tags. Pushes are always hard and push local tags.
+- **Keymap** – Keymap is completely customizable and is serilazied into `~/.config/guitar` folder (depending on your OS).
+- **Layout** – Somewhat primitive, also serilazied into `~/.config/guitar` folder (depending on your OS).
+- **Terminal-friendly colors** – Easy on the eyes for long coding sessions with three builtin themes. 
 
-### Installation
+### Planned features
+
+- **Rebasing** – Ability to rebase.  
+- **Merge** – Ability to merge.  
+- **Conflicts** – Issue an alert with conflicting files to resolve externally.  
+
+### Maybe I get to it someday features
+
+- **Auth** – Comprehensive auth management.
+- **Keymaps** – In-app keymap configuration.
+- **Themes** – Customizable themes.
+- **Recent repos** – List of most recent repositories.
+- **Heatmap** – Render a github-style heatmap of the repository.
+
+### Keyboard mappings
+
+<div align="center">
+<pre>
+╭─────────────────────────────────────────────────────────────────────╮
+│ [_]   [_][_][_][_] [_][_][_][_] [_][_][_][_] [_][_][_] [_][_][_][_] │
+│                                                                     │
+│ [_][_][_][_][_][_][_][_][_][_][_][_][_][___] [_][_][_] [_][_][_][_] │
+│ [__][_][_][_][_][_][_][_][_][_][_][_][_][_ │ [_][_][_] [_][_][_][ | │
+│ [___][_][_][_][_][_][_][_][_][_][_][_][_][_│           [_][_][_][_| │
+│ [_][_][_][_][_][_][_][_][_][_][_][_][______]    [_]    [_][_][_][ | │
+│ [__][_][__][_____________________][__][_][_] [_][_][_] [____][_][_| │
+╰─────────────────────────────────────────────────────────────────────╯
+
+Select                                                            Enter
+Next Pane                                                           Tab
+Previous Pane                                               Shift + Tab
+Page Up                                                          Pageup
+Page Down                                                      Pagedown
+Scroll Up                                                            Up
+Scroll Down                                                        Down
+Scroll Up Half                                               Shift + Up
+Scroll Down Half                                           Shift + Down
+Scroll Up Branch                                              Ctrl + Up
+Scroll Down Branch                                          Ctrl + Down
+Scroll Up Commit                                               Alt + Up
+Scroll Down Commit                                           Alt + Down
+Go To Beginning                                                    Home
+Go To End                                                           End
+Jump                                                                  j
+Solo Branch                                                           o
+Drop                                                                  y
+Pop                                                                   t
+Stash                                                                 e
+Grep                                                                  g
+Fetch                                                                 f
+Checkout                                                              c
+Hard Reset                                                            h
+Mixed Reset                                                           m
+Unstage All                                                           u
+Stage All                                                             s
+Commit                                                                a
+Push                                                                  p
+Create A New Branch                                                   b
+Delete A Branch                                                       d
+Tag                                                                   /
+Untag                                                                 ?
+Cherrypick                                                            ]
+Go Back                                                             Esc
+Reload                                                                r
+Minimize                                                              .
+Toggle Shas                                                           w
+Toggle Branches                                                       `
+Toggle Tags                                                           3
+Toggle Stashes                                                        4
+Toggle Status                                                         2
+Toggle Inspector                                                      1
+Toggle Settings                                                      F1
+Exit                                                           Ctrl + c
+</pre>
+</div>
+
+### Releases
+
+Please check the releases for the latest versions: https://github.com/asinglebit/guitar/releases
+
+### Build yourself
 
 Clone the repo and build with Cargo:
 
@@ -116,34 +145,9 @@ Copy it wherever you want and run with a path to repo you wish to inspect
 guitar ../path/to/your/repo
 ```
 
-### Work in Progress
-
-**guita╭** is still a work in progress. Some areas that need attention include:
-
-- **Logging window** – show detailed logs and messages in-app.  
-- **Credential manager** – smooth handling of SSH/HTTPS credentials.  
-- **Manage remotes** – add, remove, and inspect Git remotes.  
-- **Add tests** – many parts of the app are experimental and require thorough testing, especially on large repositories.  
-- **Git features**:
-    - Rename branches 
-    - Pull branches
-    - Rebase branches  
-    - Merge branches
-    - Octopus merge handling and rendering  
-    - Cherry-pick commit
-    - Stash changes
-    - Pop changes
-    - Render tags
-
-I work on **guita╭** in my spare time, and give priority to the features I need in my day-to-day life. Use it with caution, and feel free to report issues or contribute improvements!
-
-### 🖼️ Screenshots
-
-<img width="1920" height="1008" alt="untitled" src="https://github.com/user-attachments/assets/5e175648-efc5-46a4-8fc1-6dda4c709d8e" />
-<img width="1920" height="1080" alt="1" src="https://github.com/user-attachments/assets/87db026a-f419-46e3-8f20-f6389f3fa967" />
-<img width="1920" height="1080" alt="2" src="https://github.com/user-attachments/assets/6cfbc5c0-222c-437d-a569-870446ed35ed" />
-<img width="1920" height="1080" alt="3" src="https://github.com/user-attachments/assets/933a695d-5cec-4c82-8ef0-902cbcc1125b" />
-<img width="1920" height="1080" alt="4" src="https://github.com/user-attachments/assets/67d6c13c-ff7e-4e97-8bb4-36228461c151" />
-<img width="1920" height="1080" alt="5" src="https://github.com/user-attachments/assets/edc667bd-fb27-4b4c-8a4b-03ace73904a9" />
-<img width="1920" height="1080" alt="6" src="https://github.com/user-attachments/assets/93c4e948-e3f3-49dd-aa63-a6fef5f6c1c4" />
-<img width="1920" height="1080" alt="7" src="https://github.com/user-attachments/assets/b1534ac9-15a0-406d-97d4-8e15205b2d8d" />
+### Screenshots
+![1](https://github.com/user-attachments/assets/37df457b-bbf4-4d51-a965-c300b426cb62)
+![6](https://github.com/user-attachments/assets/2ed8f14e-193b-4815-b37e-283bd129787f)
+![5](https://github.com/user-attachments/assets/15e4630f-a141-4724-9d35-1b8601006598)
+![4](https://github.com/user-attachments/assets/10389ec5-6780-4bcb-85dc-67f9e012ed63)
+![3](https://github.com/user-attachments/assets/a408af0c-ef85-4692-914b-81562d3873e4)
