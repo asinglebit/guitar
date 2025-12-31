@@ -22,7 +22,7 @@ Beautiful and cozy terminal-based Git client
 
 ### Disclaimer
 
-I work on `guita╭` in my spare time, and give priority to the features I need in my day-to-day life. Use it with caution, and feel free to report issues or even better - contribute improvements! Im a lazy dude, and since this is a hobby project I just put unwrap() everywhere, such is life. `guita╭` is a tool I sometimes work on to make my day-to-day life as a developer easier.
+I work on `guita╭` in my spare time, and give priority to the features I need in my day-to-day life. Use it with caution, and feel free to report issues or even better - contribute improvements! Im a lazy dude, and since this is a hobby project I just put unwrap() everywhere, such is life.
 
 ### Motivation
 
