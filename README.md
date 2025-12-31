@@ -31,6 +31,7 @@ I needed a git client that would make it easy for me to understand where I am to
 ### Features
 
 - **Beautiful graph rendering** – Visualize commit history clearly.  
+- **Reloading** – Reload the client manually using the shortcut when needed. Doesn't watch the directory.  
 - **Immediate jumps** – Move through history without waiting.  
 - **Pure TUI experience** – Ratatui based rendering.
 - **Auth** – Currently simply attaches to the running ssh agent.  
