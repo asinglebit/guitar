@@ -26,7 +26,7 @@ I work on `guita╭` in my spare time, and give priority to the features I need 
 
 ### Motivation
 
-I needed a git client that would make it easy for me to understand where I am topologically at any given point in time. I also want it to be terminal based and cross-platform. I needed it to be fast. I also wanted to learn rust. So this is the project i picked to meet all of these goals at the same time.
+I needed a git client that would make it easy for me to understand where I am topologically at any given point in time. I also wanted it to be terminal based and cross-platform. I needed it to be fast. I also wanted to learn rust. So this is the project i picked to meet all of these goals at the same time.
 
 ### Features
 
