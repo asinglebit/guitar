@@ -41,10 +41,11 @@ impl Buffer {
         self.backup();  
 
         // Erase trailing dummy chunk
-        while self.curr.last().is_some_and(|c| c.is_dummy()) {
+        while let Some(last_idx) = self.curr.len().checked_sub(1) {
+            if !self.curr[last_idx].is_dummy() { break; }
             self.curr.pop_back();
             self.delta.ops.push_back(DeltaOp::Remove {
-                index: self.curr.len() - 1,
+                index: last_idx,
             });
         }
 

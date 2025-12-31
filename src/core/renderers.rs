@@ -251,6 +251,7 @@ pub fn render_graph_range(
                     }
 
                     if !is_merger_found {
+                        
                         // Count how many dummies in the end to get the real last element, append there
                         let mut idx = last.len() - 1;
                         let mut trailing_dummies = 0;
@@ -262,6 +263,21 @@ pub fn render_graph_range(
                                 trailing_dummies += 1;
                             }
                         }
+
+                        // Meet some corner cases against the previous buffer line - if there are further branches
+                        if let Some(prev) = prev {
+                            let mut prev_trailing_dummies = 0;
+                            for (_, c) in prev.iter().enumerate().rev() {
+                                if c.is_dummy() {
+                                    prev_trailing_dummies += 1;
+                                } else {
+                                    break;
+                                }
+                            }
+                            if prev_trailing_dummies < trailing_dummies {
+                                trailing_dummies = prev_trailing_dummies;
+                            }
+                        }   
 
                         if trailing_dummies > 0
                             && prev.is_some()
@@ -381,29 +397,41 @@ pub fn render_buffer_range(
     start: usize,
     end: usize,
 ) -> Vec<Line<'static>> {
-    
-    let mut idx = start;
-    let mut lines_buffer: Vec<Line> = Vec::new();
 
-    // Iterate over the selected snapshots
-    for snapshot in history.iter().skip(start + 1).take(end + 1 - start - 1) {
-        
-        // Get the oid of the commit
-        let oid = oids.get_oid_by_idx(idx);
+    let mut lines = Vec::new();
 
-        // Setup the line
-        let mut spans =vec![
-            Span::styled(format!("{:.2} ", oid), Style::default().fg(theme.COLOR_TEXT))
+    for global_idx in start..end {
+
+        if history.is_empty() {
+            lines.push(Line::default());
+            continue;
+        }
+
+        let delta = (history.len() + global_idx).saturating_sub(end);
+        let snapshot = match history.get(delta) {
+            Some(s) => s,
+            None => {
+                lines.push(Line::default());
+                continue;
+            }
+        };
+
+        let oid = oids.get_oid_by_idx(global_idx);
+
+        let mut spans = vec![
+            Span::styled(
+                format!("{:.2} ", oid),
+                Style::default().fg(theme.COLOR_TEXT),
+            )
         ];
 
-        // Parse the snaphshot
-        let formatted_snapshot: String = snapshot
+        let formatted_snapshot = snapshot
             .iter()
             .map(|chunk| {
                 let oid_str = if chunk.alias == NONE {
                     "--".to_string()
                 } else {
-                    format!("{}", chunk.alias)
+                    chunk.alias.to_string()
                 };
 
                 let parents_formatted = match (chunk.parent_a, chunk.parent_b) {
@@ -413,27 +441,22 @@ pub fn render_buffer_range(
                     (a, b) => format!("{:.2},{:.2}", a, b),
                 };
 
-                format!("{}({:<5})", &oid_str, parents_formatted)
+                format!("{}({:<5})", oid_str, parents_formatted)
             })
-            .collect::<Vec<String>>()
+            .collect::<Vec<_>>()
             .join(" ");
 
-        // Append to the line
         spans.push(Span::styled(
             formatted_snapshot,
             Style::default().fg(theme.COLOR_TEXT),
         ));
 
-        // Push back the line for the current snapshot
-        lines_buffer.push(Line::from(spans));
-
-        idx += 1;
+        lines.push(Line::from(spans));
     }
 
-    lines_buffer
+    lines
 }
 
-#[allow(dead_code)]
 pub fn render_sha_range(
     theme: &Theme,
     oids: &Oids,

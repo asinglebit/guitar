@@ -30,13 +30,6 @@ use crate::{
     }
 };
 
-// macro_rules! logf { ($($t:tt)*) => {{
-//     use std::io::Write;
-//     let mut f = std::fs::OpenOptions::new().create(true).append(true).open("guitar.log").unwrap();
-//     writeln!(f, $($t)*).unwrap();
-// }}}
-// logf!("{}, {}", self.tags.local.len(), self.tags.sorted.len());
-
 impl App {
 
     pub fn draw_tags(&mut self, frame: &mut Frame) {

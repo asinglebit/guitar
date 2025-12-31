@@ -37,46 +37,19 @@ impl App {
 
     pub fn draw_modal_delete_branch(&mut self, frame: &mut Frame) {
         
-        let current = get_current_branch(&self.repo);
+        let mut length = 30;
+        let mut height = 8;
         let alias = self.oids.get_alias_by_idx(self.graph_selected);
-        let color = self.branches.colors.get(&alias).unwrap();
-        
         let mut lines = Vec::new();
-        let mut length = 25;
-
-        // Static lines
-        if let Some(branch) = &current {
-            length = length.max(2 + branch.len());
-            lines.push(Line::from(vec![
-                Span::styled("you are on a branch", Style::default().fg(self.theme.COLOR_TEXT)),
-            ]));
-        lines.push(Line::default());
-            lines.push(Line::from(vec![
-                Span::styled(format!("● {}", branch), Style::default().fg(self.theme.COLOR_GRASS)),
-            ]));
-        } else {
-            let oid = self.repo.head().unwrap().target().unwrap();
-            length = length.max(26);
-            lines.push(Line::from(vec![
-                Span::styled("you are on a detached head", Style::default().fg(self.theme.COLOR_TEXT)),
-            ]));
-        lines.push(Line::default());
-            lines.push(Line::from(vec![
-                Span::styled(format!("#{:.6}", oid), Style::default().fg(self.theme.COLOR_GRASS)),
-            ]));
-        }
-
-        // Second static line
         let line_text = "select a branch to delete";
         lines.push(Line::default());
         lines.push(Line::from(vec![Span::styled(line_text, Style::default().fg(self.theme.COLOR_TEXT))]));
-
-        // Empty line
         lines.push(Line::default());
-            
-        let mut height = 10;
+        
+        // Render list
+        let current = get_current_branch(&self.repo);
+        let color = self.branches.colors.get(&alias).unwrap();
         let branches = self.branches.visible.get(&alias).unwrap();
-
         branches
             .iter()
             .filter(|branch| current.as_ref() != Some(*branch))
@@ -100,6 +73,7 @@ impl App {
                 )));
             });
 
+        // Background
         let bg_block = Block::default().style(Style::default().fg(self.theme.COLOR_BORDER));
         bg_block.render(frame.area(), frame.buffer_mut());
 
@@ -110,9 +84,9 @@ impl App {
         let x = frame.area().x + (frame.area().width - modal_width) / 2;
         let y = frame.area().y + (frame.area().height - modal_height) / 2;
         let modal_area = Rect::new(x, y, modal_width, modal_height);
-
         frame.render_widget(Clear, modal_area);
 
+        // Padding
         let padding = ratatui::widgets::Padding {
             left: 3,
             right: 3,

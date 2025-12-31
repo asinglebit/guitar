@@ -27,19 +27,19 @@ use crate::app::app::{
 impl App {
 
     pub fn draw_modal_solo(&mut self, frame: &mut Frame) {
-        
+                
+        let mut length = 30;
+        let mut height = 8;
         let alias = self.oids.get_alias_by_idx(self.graph_selected);
-        let color = self.branches.colors.get(&alias).unwrap();
-        let mut length = 39;
-        let mut lines = vec![
-            Line::from(vec![
-                Span::styled("select a branch to solo".to_string(), Style::default().fg(self.theme.COLOR_TEXT))
-            ]),
-            Line::from("")
-        ];
-        let mut height = 6;
-        let branches = self.branches.visible.get(&alias).unwrap();
+        let mut lines = Vec::new();
+        let line_text = "select a branch to solo";
+        lines.push(Line::default());
+        lines.push(Line::from(vec![Span::styled(line_text, Style::default().fg(self.theme.COLOR_TEXT))]));
+        lines.push(Line::default());
 
+        // Render list
+        let color = self.branches.colors.get(&alias).unwrap();
+        let branches = self.branches.visible.get(&alias).unwrap();
         branches.iter().enumerate().for_each(|(idx, branch)| {
             height += 1;
             let is_local = self.branches.local.values().any(|branches| branches.iter().any(|b| b.as_str() == branch));
@@ -50,6 +50,7 @@ impl App {
             )));
         });
 
+        // Background
         let bg_block = Block::default().style(Style::default().fg(self.theme.COLOR_BORDER));
         bg_block.render(frame.area(), frame.buffer_mut());
 
@@ -59,9 +60,9 @@ impl App {
         let x = frame.area().x + (frame.area().width - modal_width) / 2;
         let y = frame.area().y + (frame.area().height - modal_height) / 2;
         let modal_area = Rect::new(x, y, modal_width, modal_height);
-
         frame.render_widget(Clear, modal_area);
 
+        // Padding
         let padding = ratatui::widgets::Padding {
             left: 3,
             right: 3,

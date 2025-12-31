@@ -56,6 +56,7 @@ pub mod helpers {
     pub mod text;
     pub mod time;
     pub mod copy;
+    pub mod logger;
 }
 
 use crate::app::app::App;

@@ -67,7 +67,7 @@ impl App {
             &self.theme,
             &self.oids,
             &buffer.history,
-            start,
+            start + 1,
             end + 1
         );
         let sha_range = if self.is_shas {
