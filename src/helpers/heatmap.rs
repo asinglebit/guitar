@@ -16,26 +16,26 @@ pub fn build_heatmap(
     let start = today - Duration::days((WEEKS * 7) as i64);
 
     for week in 0..WEEKS {
-        for day in 0..DAYS {
+        for (day, row) in grid.iter_mut().enumerate() {
             let date = start + Duration::days((week * 7 + day) as i64);
-            grid[day][week] = *counts.get(&date).unwrap_or(&0);
+            row[week] = *counts.get(&date).unwrap_or(&0);
         }
     }
 
     grid
 }
 
-pub fn heat_cell(count: usize, theme: &Theme) -> Span {
+pub fn heat_cell(count: usize, theme: &Theme) -> Span<'_> {
     let (ch, color) = match count {
-        0 => (" ", None),
-        1 => ("⠁", Some(theme.COLOR_GREY_800)),
-        2 => ("⠃", Some(theme.COLOR_GREY_800)),
-        3 => ("⠇", Some(theme.COLOR_GREY_800)),
-        4 => ("⠏", Some(theme.COLOR_GREY_800)),
-        5 => ("⠟", Some(theme.COLOR_GREY_800)),
-        6 => ("⠿", Some(theme.COLOR_GREY_800)),
-        7 => ("⡿", Some(theme.COLOR_GREY_800)),
-        _ => ("⣿", Some(theme.COLOR_GREY_800)),
+        0 => ("🞝 ", Some(theme.COLOR_GREY_800)),
+        1 => ("⠁ ", Some(theme.COLOR_GRASS)),
+        2 => ("⠃ ", Some(theme.COLOR_GRASS)),
+        3 => ("⠇ ", Some(theme.COLOR_GRASS)),
+        4 => ("⠏ ", Some(theme.COLOR_GRASS)),
+        5 => ("⠟ ", Some(theme.COLOR_GRASS)),
+        6 => ("⠿ ", Some(theme.COLOR_GRASS)),
+        7 => ("⡿ ", Some(theme.COLOR_GRASS)),
+        _ => ("⣿ ", Some(theme.COLOR_GRASS)),
     };
 
     let mut style = Style::default();

@@ -89,7 +89,7 @@ impl App {
         
         // Setup the list
         if self.is_branches || self.is_tags {
-            let top_border = Paragraph::new("─".repeat(self.layout.tags.width as usize - 1 as usize))
+            let top_border = Paragraph::new("─".repeat(self.layout.tags.width as usize - 1_usize))
                 .style(Style::default().fg(self.theme.COLOR_BORDER));
             frame.render_widget(top_border, Rect {
                 x: self.layout.tags.x + 1,

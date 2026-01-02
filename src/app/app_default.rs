@@ -124,7 +124,7 @@ impl Default for App {
             layout: Layout::default(),
             
             // Focus
-            is_shas: true,
+            is_shas: false,
             is_minimal: false,
             is_branches: false,
             is_tags: false,

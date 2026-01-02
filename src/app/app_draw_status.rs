@@ -47,7 +47,7 @@ impl App {
         };
         
         // Calculate maximum available width for text
-        let available_width = self.layout.status_top.width as usize - 3;
+        let available_width = self.layout.status_top.width.saturating_sub(3) as usize;
         let max_text_width = available_width.saturating_sub(2);
 
         // Flags
@@ -175,7 +175,7 @@ impl App {
         {
             // Get vertical dimensions
             let total_lines = lines_status_top.len();
-            let visible_height = self.layout.status_top.height as usize - 2;
+            let visible_height = self.layout.status_top.height.saturating_sub(2) as usize;
 
             // Clamp selection
             if total_lines == 0 {

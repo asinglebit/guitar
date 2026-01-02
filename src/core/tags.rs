@@ -29,6 +29,7 @@ use crate::{
     }
 };
 
+#[derive(Default)]
 pub struct Tags {
     pub local: HashMap<u32, Vec<String>>,
     pub colors: HashMap<u32, Color>,
@@ -36,17 +37,6 @@ pub struct Tags {
     pub indices: Vec<usize>,
 }
 
-impl Default for Tags {
-
-    fn default() -> Self {
-        Self {
-            local: Default::default(),
-            colors: Default::default(),
-            sorted: Default::default(),
-            indices: Default::default(),
-        }
-    }
-}
 
 impl Tags {
 

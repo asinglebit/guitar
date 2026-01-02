@@ -51,7 +51,7 @@ impl App {
 
             // Text
             let truncated = truncate_with_ellipsis(message.as_str(), max_text_width - 1);
-            let color = if let Some(color) = self.stashes.colors.get(&stash_alias) { *color } else { self.theme.COLOR_TEXT };
+            let color = if let Some(color) = self.stashes.colors.get(stash_alias) { *color } else { self.theme.COLOR_TEXT };
 
             // Render a stash
             lines.push(Line::from(Span::styled(format!("{SYM_COMMIT_STASH} {truncated}"), Style::default().fg(color))));
@@ -93,7 +93,7 @@ impl App {
         
         // Setup the list
         if self.is_branches || self.is_tags {
-            let top_border = Paragraph::new("─".repeat(self.layout.stashes.width as usize - 1 as usize))
+            let top_border = Paragraph::new("─".repeat(self.layout.stashes.width as usize - 1_usize))
                 .style(Style::default().fg(self.theme.COLOR_BORDER));
             frame.render_widget(top_border, Rect {
                 x: self.layout.stashes.x + 1,

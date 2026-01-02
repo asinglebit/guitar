@@ -21,18 +21,9 @@ use ratatui::{
 };
 use crate::helpers::symbols::SYM_TAG;
 #[rustfmt::skip]
-use crate::{
-    app::app::{
+use crate::app::app::{
         App
-    },
-    git::{
-        queries::{
-            commits::{
-                get_current_branch
-            }
-        }
-    }
-};
+    };
 
 impl App {
 

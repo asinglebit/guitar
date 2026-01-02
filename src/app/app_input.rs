@@ -1105,12 +1105,11 @@ impl App {
     }
 
     pub fn on_grep(&mut self) {
-        if self.viewport == Viewport::Graph {
-            if self.focus == Focus::Viewport {
+        if self.viewport == Viewport::Graph
+            && self.focus == Focus::Viewport {
                 self.focus = Focus::ModalGrep;
                 self.modal_editor.mode = EditorMode::Insert;
             }
-        }
     }
 
     pub fn on_fetch(&mut self) {
@@ -1359,13 +1358,12 @@ impl App {
     }
 
     pub fn on_cherrypick(&mut self) {
-        if self.viewport == Viewport::Graph && self.focus == Focus::Viewport {
-            if self.graph_selected != 0 {
+        if self.viewport == Viewport::Graph && self.focus == Focus::Viewport
+            && self.graph_selected != 0 {
                 let oid = self.oids.get_oid_by_idx(if self.graph_selected == 0 { 1 } else { self.graph_selected });
                 cherry_pick_commit(&self.repo, *oid, Some("message"), true).unwrap();
                 self.reload();
             }
-        }
     }
 
     pub fn on_go_back(&mut self) {

@@ -239,12 +239,6 @@ pub fn pascal_to_spaced(s: &str) -> String {
 pub fn fill_width(left: &str, right: &str, width: usize) -> String {
     let left_len = left.chars().count();
     let right_len = right.chars().count();
-
-    let spaces = if width > left_len + right_len {
-        width - left_len - right_len
-    } else {
-        1 // at least 1 space if width is too small
-    };
-
-    format!(" {}{}{} ", left, " ".repeat(spaces - 2), right)
+    let spaces = width.saturating_sub(left_len + right_len).max(1);
+    format!("{}{}{}", left, " ".repeat(spaces), right)
 }

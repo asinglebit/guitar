@@ -31,6 +31,7 @@ use crate::{
     }
 };
 
+#[derive(Default)]
 pub struct Branches {
     pub local: HashMap<u32, Vec<String>>,
     pub remote: HashMap<u32, Vec<String>>,
@@ -41,20 +42,6 @@ pub struct Branches {
     pub visible: HashMap<u32, Vec<String>>,
 }
 
-impl Default for Branches {
-
-    fn default() -> Self {
-        Self {
-            local: Default::default(),
-            remote: Default::default(),
-            all: Default::default(),
-            colors: Default::default(),
-            sorted: Default::default(),
-            indices: Default::default(),
-            visible: Default::default(),
-        }
-    }
-}
 
 impl Branches {
 

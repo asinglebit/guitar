@@ -5,7 +5,7 @@ use std::{
         HashMap
     }
 };
-use git2::{CherrypickOptions, FetchPrune, MergeOptions, StashApplyOptions, StashFlags};
+use git2::{CherrypickOptions, FetchPrune, StashApplyOptions, StashFlags};
 #[rustfmt::skip]
 use git2::{
     Oid,
@@ -374,7 +374,7 @@ pub fn pop(
     })?;
 
     if let Some(index) = stash_index {
-        if apply == true {
+        if apply {
             let mut opts = StashApplyOptions::new();
             repo.stash_apply(index, Some(&mut opts))?;
         }

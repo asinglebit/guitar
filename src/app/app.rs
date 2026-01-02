@@ -270,22 +270,25 @@ impl App  {
     }
 
     pub fn draw(&mut self, frame: &mut Frame) {
+        
+        let minimal_horizontal_space = if (self.is_branches || self.is_tags || self.is_stashes) && (self.is_inspector || self.is_status) { 100 } else { 50 };
+        let is_zen = frame.area().width < minimal_horizontal_space;
 
         // Compute the layout
         self.layout(frame);
-
-        let is_splash = self.viewport == Viewport::Splash;
+        
+        let is_splash = self.viewport == Viewport::Splash || is_zen;
 
         frame.render_widget( Block::default()
             .borders(if is_splash { Borders::NONE } else { Borders::ALL })
             .border_style(Style::default().fg(self.theme.COLOR_BORDER))
             .border_type(ratatui::widgets::BorderType::Rounded), self.layout.app);
-                
-        // Main layout
-        if !is_splash {
-            self.draw_title(frame);
-        }
 
+        if is_zen {
+            self.draw_splash(frame);
+            return;
+        }
+        
         // Viewport
         match self.viewport {
             Viewport::Graph => {
@@ -303,6 +306,11 @@ impl App  {
             Viewport::Settings => {
                 self.draw_settings(frame);
             }
+        }
+                
+        // Main layout
+        if !is_splash {
+            self.draw_title(frame);
         }
 
         // Panes

@@ -215,16 +215,11 @@ impl Walker {
             // Create commit chunk for the current commit with its parents
             let chunk = Chunk::commit(alias, parent_a, parent_b);
 
-            // Here we will store whether the 
-            let mut is_commit_found = false;
-            let mut lane_idx = 0;
-
             // Update
             self.buffer.borrow_mut().update(chunk);
 
-            for chunk in &self.buffer.borrow().curr {
+            for (lane_idx, chunk) in (&self.buffer.borrow().curr).into_iter().enumerate() {
                 if !chunk.is_dummy() && alias == chunk.alias {
-                    is_commit_found = true;
 
                     if self.branches_local.contains_key(&alias) || self.branches_remote.contains_key(&alias) {
                         self.branches_lanes.insert(alias, lane_idx);
@@ -253,8 +248,6 @@ impl Walker {
                         }
                     }
                 }
-
-                lane_idx += 1;
             }
 
             // Now we can borrow mutably

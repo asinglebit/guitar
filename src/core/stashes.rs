@@ -23,18 +23,11 @@ use crate::{
     }
 };
 
+#[derive(Default)]
 pub struct Stashes {
     pub colors: HashMap<u32, Color>,
 }
 
-impl Default for Stashes {
-
-    fn default() -> Self {
-        Self {
-            colors: Default::default(),
-        }
-    }
-}
 
 impl Stashes {
 

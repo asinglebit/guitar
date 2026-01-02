@@ -24,15 +24,10 @@ impl App {
     pub fn draw_splash(&mut self, frame: &mut Frame) {
         
         // Padding
-        let padding = ratatui::widgets::Padding {
-            left: 1,
-            right: 1,
-            top: 0,
-            bottom: 0,
-        };
+        let padding = ratatui::widgets::Padding { left: 1, right: 1, top: 0, bottom: 0 };
         
         // Calculate maximum available width for text
-        let available_width = self.layout.graph.width as usize - 1;
+        let available_width = self.layout.graph.width.saturating_sub(1) as usize;
         let _max_text_width = available_width.saturating_sub(2);
 
         // Get vertical dimensions
@@ -100,11 +95,7 @@ impl App {
         ]).centered()));
 
         // Setup the list
-        let list = List::new(list_items)
-            .block(
-                Block::default()
-                    .padding(padding)
-            );
+        let list = List::new(list_items).block(Block::default().padding(padding));
 
         // Render the list
         frame.render_widget(list, self.layout.app);
