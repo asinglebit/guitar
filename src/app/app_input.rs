@@ -107,7 +107,7 @@ impl App {
                     KeyCode::Enter => {
                         commit_staged(
                             &self.repo,
-                            &self.modal_input.value(),
+                            self.modal_input.value(),
                             &self.name,
                             &self.email,
                         )
@@ -131,7 +131,7 @@ impl App {
                     }
                     KeyCode::Enter => {
                         let oid = self.oids.get_oid_by_idx(if self.graph_selected == 0 { 1 } else { self.graph_selected });
-                        match create_branch(&self.repo, &self.modal_input.value() , *oid) {
+                        match create_branch(&self.repo, self.modal_input.value() , *oid) {
                             Ok(_) => {
                                 self.branches.visible.clear();
                                 self.modal_input.clear();
@@ -165,7 +165,7 @@ impl App {
                         
                         // Find the correpsonding oid
                         let oid: Option<Oid> = self.oids.oids.iter()
-                            .find(|oid| oid.to_string().starts_with(&sha))
+                            .find(|oid| oid.to_string().starts_with(sha))
                             .copied();
 
                         // In case oid exists
@@ -210,7 +210,7 @@ impl App {
                         let oid = self.oids.get_oid_by_idx(if self.graph_selected == 0 { 1 } else { self.graph_selected });
 
                         // Get the alias
-                        tag(&self.repo, *oid, &tag_name).unwrap();
+                        tag(&self.repo, *oid, tag_name).unwrap();
 
                         self.reload();
                         self.modal_input.clear();

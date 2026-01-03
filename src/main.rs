@@ -2,8 +2,8 @@
 use std::io;
 #[rustfmt::skip]
 mod app {
-    #[allow(clippy::module_inception)]
     pub mod input;
+    #[allow(clippy::module_inception)]
     pub mod app;
     pub mod app_default;
     pub mod app_input;
