@@ -18,11 +18,7 @@ use ratatui::{
     }
 };
 #[rustfmt::skip]
-use edtui::{
-    EditorEventHandler,
-    EditorState
-};
-use crate::{core::stashes::Stashes, git::queries::helpers::commits_per_day, helpers::heatmap::build_heatmap};
+use crate::{app::input::TextInput, core::stashes::Stashes, git::queries::helpers::commits_per_day, helpers::heatmap::build_heatmap};
 #[rustfmt::skip]
 use crate::{
     app::{
@@ -157,10 +153,6 @@ impl Default for App {
             // Viewer
             viewer_selected: 0,
             viewer_scroll: 0.into(),
-
-            // Editor
-            file_editor: EditorState::default(),
-            file_editor_event_handler: EditorEventHandler::default(),
     
             // Inspector
             inspector_selected: 0,
@@ -181,8 +173,7 @@ impl Default for App {
             modal_solo_selected: 0,
 
             // Modal editor
-            modal_editor: EditorState::default(),
-            modal_editor_event_handler: EditorEventHandler::default(),
+            modal_input: TextInput::default(),
 
             // Modal delete branch
             modal_delete_branch_selected: 0,

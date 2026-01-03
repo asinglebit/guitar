@@ -10,13 +10,8 @@ use ratatui::{
         Event,
         KeyCode,
         KeyEvent,
-        KeyEventKind,
-        KeyModifiers
+        KeyEventKind
     }
-};
-#[rustfmt::skip]
-use edtui::{
-    EditorMode,
 };
 use crate::{git::actions::commits::{cherry_pick_commit, pop, stash, tag, untag}, helpers::keymap::{Command, KeyBinding, load_or_init_keymap}};
 #[rustfmt::skip]
@@ -52,10 +47,7 @@ use crate::{
         }
     },
     helpers::{
-        palette::Theme,
-        text::{
-            editor_state_to_string,
-        }
+        palette::Theme
     }
 };
 
@@ -107,169 +99,128 @@ impl App {
         // Handle text editing
         match self.focus {
             Focus::ModalCommit => {
-                if self.modal_editor.mode == EditorMode::Normal {
-                    match key_event.code {
-                        KeyCode::Esc => {
-                            self.focus = Focus::Viewport;
-                        }
-                        KeyCode::Enter => {
-                            commit_staged(
-                                &self.repo,
-                                &editor_state_to_string(&self.modal_editor),
-                                &self.name,
-                                &self.email,
-                            )
-                            .expect("Error");
-                            self.modal_editor = edtui::EditorState::default();
-                            self.branches.visible.clear();
-                            self.reload();
-                            self.focus = Focus::Viewport;
-                        }
-                        _ => {
-                            self.modal_editor_event_handler
-                                .on_key_event(key_event, &mut self.modal_editor);
-                        }
+                match key_event.code {
+                    KeyCode::Esc => {
+                        self.focus = Focus::Viewport;
+                        self.modal_input.clear();
                     }
-                } else {
-                    self.modal_editor_event_handler
-                        .on_key_event(key_event, &mut self.modal_editor);
+                    KeyCode::Enter => {
+                        commit_staged(
+                            &self.repo,
+                            &self.modal_input.value(),
+                            &self.name,
+                            &self.email,
+                        )
+                        .expect("Error");
+                        self.modal_input.clear();
+                        self.branches.visible.clear();
+                        self.reload();
+                        self.focus = Focus::Viewport;
+                    }
+                    _ => {
+                        self.modal_input.on_key(key_event);
+                    }
                 }
                 return;
             }
             Focus::ModalCreateBranch => {
-                if self.modal_editor.mode == EditorMode::Normal {
-                    match key_event.code {
-                        KeyCode::Esc => {
-                            self.focus = Focus::Viewport;
-                        }
-                        KeyCode::Enter => {
-                            let oid = self.oids.get_oid_by_idx(if self.graph_selected == 0 { 1 } else { self.graph_selected });
-                            match create_branch(&self.repo, &editor_state_to_string(&self.modal_editor), *oid) {
-                                Ok(_) => {
-                                    self.branches.visible.clear();
-                                    self.modal_editor = edtui::EditorState::default();
-                                    self.reload();
-                                    self.focus = Focus::Viewport;
-                                }
-                                Err(_) => {
-                                    // TODO
-                                }
+                match key_event.code {
+                    KeyCode::Esc => {
+                        self.focus = Focus::Viewport;
+                        self.modal_input.clear();
+                    }
+                    KeyCode::Enter => {
+                        let oid = self.oids.get_oid_by_idx(if self.graph_selected == 0 { 1 } else { self.graph_selected });
+                        match create_branch(&self.repo, &self.modal_input.value() , *oid) {
+                            Ok(_) => {
+                                self.branches.visible.clear();
+                                self.modal_input.clear();
+                                self.reload();
+                                self.focus = Focus::Viewport;
+                            }
+                            Err(_) => {
+                                // TODO
                             }
                         }
-                        _ => {
-                            self.modal_editor_event_handler
-                                .on_key_event(key_event, &mut self.modal_editor);
-                        }
                     }
-                } else {
-                    self.modal_editor_event_handler
-                        .on_key_event(key_event, &mut self.modal_editor);
+                    _ => {
+                        self.modal_input.on_key(key_event);
+                    }
                 }
                 return;
             }
             Focus::ModalGrep => {
-                if self.modal_editor.mode == EditorMode::Normal {
-                    match key_event.code {
-                        KeyCode::Esc => {
+                match key_event.code {
+                    KeyCode::Esc => {
+                        self.focus = Focus::Viewport;
+                        self.modal_input.clear();
+                    }
+                    KeyCode::Enter => {
+                        let sha = self.modal_input.value();
+
+                        // Reject obviously invalid prefixes early
+                        if sha.is_empty() || sha.len() > 40 {
+                            return;
+                        }
+                        
+                        // Find the correpsonding oid
+                        let oid: Option<Oid> = self.oids.oids.iter()
+                            .find(|oid| oid.to_string().starts_with(&sha))
+                            .copied();
+
+                        // In case oid exists
+                        if let Some(oid) = oid {
+
+                            // Get the alias
+                            let oid_alias = self.oids.get_alias_by_oid(oid);
+
+                            // Find the position in the sorted alias vector
+                            let next = self.oids.get_sorted_aliases()
+                                .iter()
+                                .position(|&alias| alias == oid_alias)
+                                .unwrap();
+
+                            // Scroll to line number
+                            self.graph_selected = next;
+                            self.modal_input.clear();
                             self.focus = Focus::Viewport;
                         }
-                        KeyCode::Enter => {
-                            let sha = editor_state_to_string(&self.modal_editor);
 
-                            // Reject obviously invalid prefixes early
-                            if sha.is_empty() || sha.len() > 40 {
-                                return;
-                            }
-                            
-                            // Find the correpsonding oid
-                            let oid: Option<Oid> = self.oids.oids.iter()
-                                .find(|oid| oid.to_string().starts_with(&sha))
-                                .copied();
-
-                            // In case oid exists
-                            if let Some(oid) = oid {
-
-                                // Get the alias
-                                let oid_alias = self.oids.get_alias_by_oid(oid);
-
-                                // Find the position in the sorted alias vector
-                                let next = self.oids.get_sorted_aliases()
-                                    .iter()
-                                    .position(|&alias| alias == oid_alias)
-                                    .unwrap();
-
-                                // Scroll to line number
-                                self.graph_selected = next;
-                                self.modal_editor = edtui::EditorState::default();
-                                self.focus = Focus::Viewport;
-                            }
-
-                        }
-                        _ => {
-                            self.modal_editor_event_handler
-                                .on_key_event(key_event, &mut self.modal_editor);
-                        }
                     }
-                } else {
-                    self.modal_editor_event_handler
-                        .on_key_event(key_event, &mut self.modal_editor);
+                    _ => {
+                        self.modal_input.on_key(key_event);
+                    }
                 }
                 return;
             }
             Focus::ModalTag => {
-                if self.modal_editor.mode == EditorMode::Normal {
-                    match key_event.code {
-                        KeyCode::Esc => {
-                            self.focus = Focus::Viewport;
-                        }
-                        KeyCode::Enter => {
-                            let tag_name = editor_state_to_string(&self.modal_editor);
-
-                            // Reject obviously invalid prefixes early
-                            if tag_name.is_empty() {
-                                return;
-                            }
-                            
-                            let oid = self.oids.get_oid_by_idx(if self.graph_selected == 0 { 1 } else { self.graph_selected });
-
-                            // Get the alias
-                            tag(&self.repo, *oid, &tag_name).unwrap();
-
-                            self.reload();
-                            self.modal_editor = edtui::EditorState::default();
-                            self.focus = Focus::Viewport;
-                        }
-                        _ => {
-                            self.modal_editor_event_handler
-                                .on_key_event(key_event, &mut self.modal_editor);
-                        }
+                match key_event.code {
+                    KeyCode::Esc => {
+                        self.focus = Focus::Viewport;
+                        self.modal_input.clear();
                     }
-                } else {
-                    self.modal_editor_event_handler
-                        .on_key_event(key_event, &mut self.modal_editor);
+                    KeyCode::Enter => {
+                        let tag_name = self.modal_input.value();
+
+                        // Reject obviously invalid prefixes early
+                        if tag_name.is_empty() {
+                            return;
+                        }
+                        
+                        let oid = self.oids.get_oid_by_idx(if self.graph_selected == 0 { 1 } else { self.graph_selected });
+
+                        // Get the alias
+                        tag(&self.repo, *oid, &tag_name).unwrap();
+
+                        self.reload();
+                        self.modal_input.clear();
+                        self.focus = Focus::Viewport;
+                    }
+                    _ => {
+                        self.modal_input.on_key(key_event);
+                    }
                 }
                 return;
-            }
-            Focus::Viewport => {
-                if self.viewport == Viewport::Editor {
-                    if self.file_editor.mode == EditorMode::Normal {
-                        match key_event.code {
-                            KeyCode::Char('c')
-                                if key_event.modifiers.contains(KeyModifiers::CONTROL) => {}
-                            KeyCode::Esc => {
-                                self.viewport = Viewport::Graph;
-                            }
-                            _ => {
-                                self.file_editor_event_handler
-                                    .on_key_event(key_event, &mut self.file_editor);
-                            }
-                        }
-                    } else {
-                        self.file_editor_event_handler
-                            .on_key_event(key_event, &mut self.file_editor);
-                        return;
-                    }
-                }
             }
             _ => {}
         }
@@ -1108,7 +1059,6 @@ impl App {
         if self.viewport == Viewport::Graph
             && self.focus == Focus::Viewport {
                 self.focus = Focus::ModalGrep;
-                self.modal_editor.mode = EditorMode::Insert;
             }
     }
 
@@ -1191,7 +1141,7 @@ impl App {
 
     pub fn on_unstage_all(&mut self) {
         match self.viewport {
-            Viewport::Settings | Viewport::Viewer | Viewport::Editor => {}
+            Viewport::Settings | Viewport::Viewer => {}
             _ => {
                 if self.uncommitted.is_staged {
                     unstage_all(&self.repo).expect("Error");
@@ -1203,7 +1153,7 @@ impl App {
 
     pub fn on_stage_all(&mut self) {
         match self.viewport {
-            Viewport::Settings | Viewport::Viewer | Viewport::Editor => {}
+            Viewport::Settings | Viewport::Viewer => {}
             _ => {
                 if self.uncommitted.is_unstaged {
                     git_add_all(&self.repo).expect("Error");
@@ -1215,11 +1165,10 @@ impl App {
 
     pub fn on_commit(&mut self) {
         match self.viewport {
-            Viewport::Settings | Viewport::Viewer | Viewport::Editor => {}
+            Viewport::Settings | Viewport::Viewer => {}
             _ => {
                 if self.uncommitted.is_staged {
                     self.focus = Focus::ModalCommit;
-                    self.modal_editor.mode = EditorMode::Insert;
                 }
             }
         }
@@ -1227,7 +1176,7 @@ impl App {
 
     pub fn on_push(&mut self) {
         match self.viewport {
-            Viewport::Settings | Viewport::Viewer | Viewport::Editor => {}
+            Viewport::Settings | Viewport::Viewer => {}
             _ => {
                 let handle = push_over_ssh(
                     &self.path,
@@ -1248,11 +1197,10 @@ impl App {
 
     pub fn on_create_branch(&mut self) {
         match self.viewport {
-            Viewport::Settings | Viewport::Viewer | Viewport::Editor => {}
+            Viewport::Settings | Viewport::Viewer => {}
             _ => {
                 if self.graph_selected != 0 {
                     self.focus = Focus::ModalCreateBranch;
-                    self.modal_editor.mode = EditorMode::Insert;
                 }
             }
         }
@@ -1260,7 +1208,7 @@ impl App {
 
     pub fn on_delete_branch(&mut self) {
         match self.viewport {
-            Viewport::Settings | Viewport::Viewer | Viewport::Editor => {}
+            Viewport::Settings | Viewport::Viewer => {}
             _ => {
                 match self.focus {
                     Focus::Branches => {
@@ -1313,11 +1261,10 @@ impl App {
 
     pub fn on_tag(&mut self) {
         match self.viewport {
-            Viewport::Settings | Viewport::Viewer | Viewport::Editor => {}
+            Viewport::Settings | Viewport::Viewer => {}
             _ => {
                 if self.focus == Focus::Viewport && self.graph_selected != 0 {
                     self.focus = Focus::ModalTag;
-                    self.modal_editor.mode = EditorMode::Insert;
                 }                
             }
         }
@@ -1325,7 +1272,7 @@ impl App {
 
     pub fn on_untag(&mut self) {
         match self.viewport {
-            Viewport::Settings | Viewport::Viewer | Viewport::Editor => {}
+            Viewport::Settings | Viewport::Viewer => {}
             _ => {
                 match self.focus {
                     Focus::Tags => {
@@ -1408,7 +1355,7 @@ impl App {
 
     pub fn on_toggle_branches(&mut self) {
         self.is_branches = !self.is_branches;
-        if self.viewport == Viewport::Editor || self.viewport == Viewport::Settings {
+        if self.viewport == Viewport::Settings {
             return;
         }
         if self.is_branches {
@@ -1421,7 +1368,7 @@ impl App {
 
     pub fn on_toggle_tags(&mut self) {
         self.is_tags = !self.is_tags;
-        if self.viewport == Viewport::Editor || self.viewport == Viewport::Settings {
+        if self.viewport == Viewport::Settings {
             return;
         }
         if self.is_tags {
@@ -1434,7 +1381,7 @@ impl App {
 
     pub fn on_toggle_stashes(&mut self) {
         self.is_stashes = !self.is_stashes;
-        if self.viewport == Viewport::Editor || self.viewport == Viewport::Settings {
+        if self.viewport == Viewport::Settings {
             return;
         }
         if self.is_stashes {

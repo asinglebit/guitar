@@ -3,6 +3,7 @@ use std::io;
 #[rustfmt::skip]
 mod app {
     #[allow(clippy::module_inception)]
+    pub mod input;
     pub mod app;
     pub mod app_default;
     pub mod app_input;
@@ -12,7 +13,6 @@ mod app {
     pub mod app_draw_tags;
     pub mod app_draw_stashes;
     pub mod app_draw_graph;
-    pub mod app_draw_editor;
     pub mod app_draw_viewer;
     pub mod app_draw_settings;
     pub mod app_draw_splash;

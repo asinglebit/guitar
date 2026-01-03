@@ -21,11 +21,6 @@ use std::{
     io,
 };
 #[rustfmt::skip]
-use edtui::{
-    EditorEventHandler,
-    EditorState
-};
-#[rustfmt::skip]
 use git2::{
     Repository
 };
@@ -50,7 +45,7 @@ use ratatui::{
         Span
     },
 };
-use crate::{core::stashes::Stashes, helpers::{copy::{STR_CREATE_BRANCH, STR_CREATE_COMMIT, STR_CREATE_TAG, STR_FIND_SHA}, heatmap::{DAYS, WEEKS}, keymap::{Command, KeyBinding}}};
+use crate::{app::input::TextInput, core::stashes::Stashes, helpers::{copy::{STR_CREATE_BRANCH, STR_CREATE_COMMIT, STR_CREATE_TAG, STR_FIND_SHA}, heatmap::{DAYS, WEEKS}, keymap::{Command, KeyBinding}}};
 #[rustfmt::skip]
 use crate::{
     app::{
@@ -105,7 +100,6 @@ use crate::{
 pub enum Viewport {
     Graph,
     Viewer,
-    Editor,
     Splash,
     Settings
 }
@@ -208,10 +202,6 @@ pub struct App {
     pub settings_selected: usize,
     pub settings_selections: Vec<usize>,
 
-    // Editor
-    pub file_editor: EditorState,
-    pub file_editor_event_handler: EditorEventHandler,
-
     // Inspector
     pub inspector_selected: usize,
     pub inspector_scroll: Cell<usize>,
@@ -231,8 +221,7 @@ pub struct App {
     pub modal_solo_selected: i32,
 
     // Modal editor
-    pub modal_editor: EditorState,
-    pub modal_editor_event_handler: EditorEventHandler,
+    pub modal_input: TextInput,
 
     // Modal delete a branch
     pub modal_delete_branch_selected: i32,
@@ -296,9 +285,6 @@ impl App  {
             }
             Viewport::Viewer => {
                 self.draw_viewer(frame);
-            }
-            Viewport::Editor => {
-                self.draw_editor(frame);
             }
             Viewport::Splash => {
                 self.draw_splash(frame);

@@ -3,8 +3,6 @@ use ratatui::crossterm::event::{
     KeyCode,
     KeyModifiers
 };
-#[rustfmt::skip]
-use edtui::EditorState;
 
 // Truncate a string to a maximum width and appends "..." if it was cut off
 pub fn truncate_with_ellipsis(text: &str, max_width: usize) -> String {
@@ -138,15 +136,6 @@ pub fn center_line(line: &str, width: usize) -> String {
         let padding = (width - line.chars().count()) / 2;
         format!("{}{}", " ".repeat(padding), line)
     }
-}
-
-// Convert an edtui's line data into a single string
-pub fn editor_state_to_string(state: &EditorState) -> String {
-    state
-        .lines
-        .iter()
-        .filter_map(|(c, _)| c.copied())
-        .collect::<String>()
 }
 
 // Attempt to decode raw byte data into a string, handling UTF-8 and UTF-16 (LE/BE)
