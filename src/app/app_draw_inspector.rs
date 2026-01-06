@@ -1,34 +1,15 @@
-#[rustfmt::skip]
+use crate::{
+    app::app::{App, Focus},
+    helpers::{
+        text::{sanitize, truncate_with_ellipsis, wrap_words},
+        time::timestamp_to_utc,
+    },
+};
 use ratatui::{
     Frame,
     style::Style,
-    text::{
-        Line,
-        Span,
-    },
-    widgets::{
-        Block,
-        Scrollbar,
-        ScrollbarOrientation,
-        ScrollbarState,
-        List,
-        ListItem
-    },
-};
-#[rustfmt::skip]
-use crate::{
-    helpers::{
-        text::{
-            truncate_with_ellipsis,
-            sanitize,
-            wrap_words
-        },
-        time::timestamp_to_utc
-    },
-    app::app::{
-        App,
-        Focus
-    },
+    text::{Line, Span},
+    widgets::{Block, List, ListItem, Scrollbar, ScrollbarOrientation, ScrollbarState},
 };
 
 impl App {

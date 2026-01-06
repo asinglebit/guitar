@@ -23,7 +23,6 @@ impl App {
         
         // Calculate maximum available width for text
         let available_width = self.layout.graph.width.saturating_sub(1) as usize;
-        let max_text_width = available_width.saturating_sub(2);
 
         // Credentials
         let (name, email) = get_git_user_info(&self.repo).unwrap();
@@ -58,6 +57,7 @@ impl App {
         // Info
         lines.push(Line::default());
         lines.push(Line::from(Span::styled(fill_width(" version:", "0.1.22 ", heatmap_width), Style::default().fg(self.theme.COLOR_TEXT).bg(self.theme.COLOR_GREY_900))).centered());
+        self.settings_selections.push(lines.len() - 1);
 
         // Heatmap
         lines.push(Line::default());
@@ -75,7 +75,9 @@ impl App {
         pathbuf.push("guitar");
         let path = pathbuf.as_path().to_str().unwrap();
         lines.push(Line::from(Span::styled(fill_width(" keymap:", format!(" {}/keymap.json ", path).as_str(), heatmap_width), Style::default().fg(self.theme.COLOR_TEXT).bg(self.theme.COLOR_GREY_900))).centered());
+        self.settings_selections.push(lines.len() - 1);
         lines.push(Line::from(Span::styled(fill_width(" layout:", format!(" {}/layout.json ", path).as_str(), heatmap_width), Style::default().fg(self.theme.COLOR_TEXT))).centered());
+        self.settings_selections.push(lines.len() - 1);
 
         // Credentials
         lines.push(Line::default());
@@ -127,9 +129,9 @@ impl App {
             });
         }
         lines.push(Line::default());
-        lines.push(Line::from(Span::styled(fill_width(" shortcuts / git mode:", "", heatmap_width), Style::default().fg(self.theme.COLOR_TEXT))).centered());
+        lines.push(Line::from(Span::styled(fill_width(" shortcuts / action mode:", "", heatmap_width), Style::default().fg(self.theme.COLOR_TEXT))).centered());
         lines.push(Line::default());
-        if let Some(mode_keymap) = self.keymaps.get(&InputMode::Git) {
+        if let Some(mode_keymap) = self.keymaps.get(&InputMode::Action) {
             render_keybindings(&self.theme, &mode_keymap, heatmap_width).iter().enumerate().for_each(|(idx, kb_line)| {
                 let spans: Vec<Span> = kb_line.clone().spans.iter().map(|span| {
                     let mut style = span.style;

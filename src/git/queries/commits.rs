@@ -1,23 +1,7 @@
-#[rustfmt::skip]
-use std::collections::HashMap;
+use crate::core::{batcher::Batcher, oids::Oids};
 use git2::ObjectType;
-#[rustfmt::skip]
-use git2::{
-    Oid,
-    Repository,
-    Time
-};
-#[rustfmt::skip]
-use crate::{
-    core::{
-        oids::{
-            Oids
-        },
-        batcher::{
-            Batcher
-        }
-    }
-};
+use git2::{Oid, Repository, Time};
+use std::collections::HashMap;
 
 // Returns a map of commit OIDs to the branch names that point to them
 pub fn get_tip_oids(repo: &Repository, oids: &mut Oids) -> (HashMap<u32, Vec<String>>, HashMap<u32, Vec<String>>) {

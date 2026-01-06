@@ -1,46 +1,15 @@
-#[rustfmt::skip]
-use std::{
-    rc::Rc,
-    cell::{
-        RefCell
-    },
-    collections::{
-        HashMap,
-    }
-};
-#[rustfmt::skip]
-use git2::{
-    Oid,
-    Repository
-};
 use crate::git::queries::commits::get_stashed_commits;
-#[rustfmt::skip]
 use crate::{
     core::{
-        oids::{
-            Oids
-        },
-        buffer::{
-            Buffer
-        },
-        chunk::{
-            Chunk,
-            NONE
-        },
-        batcher::{
-            Batcher
-        }
+        batcher::Batcher,
+        buffer::Buffer,
+        chunk::{Chunk, NONE},
+        oids::Oids,
     },
-    git::{
-        queries::{
-            commits::{
-                get_sorted_oids,
-                get_tip_oids,
-                get_tag_oids
-            }
-        }
-    },
+    git::queries::commits::{get_sorted_oids, get_tag_oids, get_tip_oids},
 };
+use git2::{Oid, Repository};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 // Context for walking and rendering commits
 pub struct Walker {

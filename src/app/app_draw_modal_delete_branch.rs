@@ -1,36 +1,10 @@
-#[rustfmt::skip]
+use crate::{app::app::App, git::queries::commits::get_current_branch};
 use ratatui::{
     Frame,
+    layout::{Alignment, Rect},
     style::Style,
-    layout::{
-        Alignment,
-        Rect
-    },
-    text::{
-        Line,
-        Span,
-        Text
-    },
-    widgets::{
-        Block,
-        Borders,
-        Clear,
-        Paragraph,
-        Widget
-    },
-};
-#[rustfmt::skip]
-use crate::{
-    app::app::{
-        App
-    },
-    git::{
-        queries::{
-            commits::{
-                get_current_branch
-            }
-        }
-    }
+    text::{Line, Span, Text},
+    widgets::{Block, Borders, Clear, Paragraph, Widget},
 };
 
 impl App {

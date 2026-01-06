@@ -1,18 +1,9 @@
-#[rustfmt::skip]
+use crate::app::app::{App, Viewport};
+use ratatui::Frame;
+use ratatui::layout::Rect;
+use serde_json::json;
 use std::cell::Cell;
 use std::fs;
-use ratatui::layout::Rect;
-#[rustfmt::skip]
-use ratatui::{
-    Frame,
-};
-use serde_json::json;
-use toml::Value;
-#[rustfmt::skip]
-use crate::app::app::{
-    App,
-    Viewport
-};
 
 #[derive(Default)]
 pub struct Layout {

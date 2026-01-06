@@ -1,25 +1,9 @@
-#[rustfmt::skip]
-use std::{
-    rc::Rc,
-    cell::RefCell,
-    collections::HashMap
-};
-#[rustfmt::skip]
+use crate::helpers::colors::ColorPicker;
 use ratatui::{
-    style::{
-        Color,
-        Style
-    },
+    style::{Color, Style},
     text::Span,
 };
-#[rustfmt::skip]
-use crate::{
-    helpers::{
-        colors::{
-            ColorPicker
-        }
-    }
-};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 #[derive(Eq, Hash, PartialEq, Clone)]
 pub enum LayerTypes {

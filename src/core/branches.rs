@@ -1,35 +1,9 @@
-#[rustfmt::skip]
-use std::{
-    cell::{
-        RefCell
-    },
-    rc::Rc,
-    collections::{
-        HashMap
-    },
-};
-#[rustfmt::skip]
-use ratatui::{
-    style::{
-        Color
-    }
-};
-#[rustfmt::skip]
 use crate::{
-    core::{
-        oids::{
-            Oids
-        }
-    },
-    helpers::{
-        palette::{
-            Theme
-        },
-        colors::{
-            ColorPicker
-        }
-    }
+    core::oids::Oids,
+    helpers::{colors::ColorPicker, palette::Theme},
 };
+use ratatui::style::Color;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 #[derive(Default)]
 pub struct Branches {

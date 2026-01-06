@@ -1,6 +1,5 @@
 #![allow(non_snake_case)]
 
-#[rustfmt::skip]
 use ratatui::style::Color;
 
 #[derive(PartialEq, Eq)]

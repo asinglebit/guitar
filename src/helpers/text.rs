@@ -1,6 +1,4 @@
-#[rustfmt::skip]
 use ratatui::crossterm::event::{
-    KeyCode,
     KeyModifiers
 };
 

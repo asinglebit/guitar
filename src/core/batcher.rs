@@ -1,29 +1,7 @@
+use crate::core::oids::Oids;
+use git2::{BranchType, Oid, Repository, Revwalk};
 use std::cell::RefCell;
-#[rustfmt::skip]
-use std::{
-    rc::Rc,
-    sync::{
-        Mutex
-    },
-    collections::{
-        HashMap,
-    }
-};
-#[rustfmt::skip]
-use git2::{
-    BranchType,
-    Oid,
-    Repository,
-    Revwalk,
-};
-#[rustfmt::skip]
-use crate::{
-    core::{
-        oids::{
-            Oids
-        }
-    }
-};
+use std::{collections::HashMap, rc::Rc, sync::Mutex};
 
 // Encapsulate a revwalk over the git repository, allowing incremental fetching of commits
 pub struct Batcher {

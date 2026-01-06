@@ -1,27 +1,9 @@
-#[rustfmt::skip]
-use std::{
-    thread,
-    collections::{
-        HashMap
-    }
+use git2::{
+    BranchType, Cred, Error, ErrorCode, FetchOptions, Oid, PushOptions, RemoteCallbacks,
+    Repository, ResetType, Signature, StatusOptions, build::CheckoutBuilder,
 };
 use git2::{CherrypickOptions, FetchPrune, StashApplyOptions, StashFlags};
-#[rustfmt::skip]
-use git2::{
-    Oid,
-    Cred,
-    RemoteCallbacks,
-    Error,
-    ErrorCode,
-    Signature,
-    StatusOptions,
-    BranchType,
-    ResetType,
-    Repository,
-    FetchOptions,
-    PushOptions,
-    build::CheckoutBuilder
-};
+use std::{collections::HashMap, thread};
 
 pub fn checkout_head(repo: &Repository, oid: Oid) {
     // Find the commit object

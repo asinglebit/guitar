@@ -1,38 +1,11 @@
-#[rustfmt::skip]
-use std::{
-    path::Path
-};
-#[rustfmt::skip]
-use git2::{
-    Error,
-    DiffOptions,
-    Delta,
-    Oid,
-    Repository,
-    StatusOptions
-};
-#[rustfmt::skip]
 use crate::{
-    helpers::{
-        text::{
-            decode,
-            sanitize
-        }
+    git::queries::helpers::{
+        FileChange, FileStatus, Hunk, UncommittedChanges, deduplicate, diff_to_hunks, walk_tree,
     },
-    git::{
-        queries::{
-            helpers::{
-                UncommittedChanges,
-                FileChange,
-                FileStatus,
-                Hunk,
-                deduplicate,
-                diff_to_hunks,
-                walk_tree
-            }
-        }
-    }
+    helpers::text::{decode, sanitize},
 };
+use git2::{Delta, DiffOptions, Error, Oid, Repository, StatusOptions};
+use std::path::Path;
 
 // Collects and categorizes uncommitted changes in the working directory and index
 pub fn get_filenames_diff_at_workdir(repo: &Repository) -> Result<UncommittedChanges, Error> {

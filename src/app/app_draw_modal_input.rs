@@ -1,30 +1,10 @@
-#[rustfmt::skip]
+use crate::app::app::App;
 use ratatui::{
     Frame,
-    style::{
-        Style,
-    },
-    layout::{
-        Alignment,
-        Rect
-    },
-    text::{
-        Line,
-        Span,
-        Text
-    },
-    widgets::{
-        Block,
-        Borders,
-        Clear,
-        Padding,
-        Paragraph,
-        Widget
-    },
-};
-#[rustfmt::skip]
-use crate::app::app::{
-    App
+    layout::{Alignment, Rect},
+    style::Style,
+    text::{Line, Span, Text},
+    widgets::{Block, Borders, Clear, Padding, Paragraph, Widget},
 };
 
 impl App {

@@ -1,45 +1,16 @@
-#[rustfmt::skip]
+use crate::{
+    app::app::{App, Focus, Viewport},
+    git::queries::diffs::{
+        get_file_at_oid, get_file_at_workdir, get_file_diff_at_oid, get_file_diff_at_workdir,
+    },
+    helpers::text::wrap_words,
+};
 use git2::Oid;
-#[rustfmt::skip]
 use ratatui::{
     Frame,
     style::Style,
-    text::{
-        Span,
-        Line
-    },
-    widgets::{
-        Block,
-        Borders,
-        Scrollbar,
-        ScrollbarOrientation,
-        ScrollbarState,
-        List,
-        ListItem
-    }
-};
-#[rustfmt::skip]
-use crate::{
-    app::app::{
-        App,
-        Focus,
-        Viewport
-    },
-    git::{
-        queries::{
-            diffs::{
-                get_file_at_oid,
-                get_file_at_workdir,
-                get_file_diff_at_oid,
-                get_file_diff_at_workdir
-            }
-        }
-    },
-    helpers::{
-        text::{
-            wrap_words
-        }
-    }
+    text::{Line, Span},
+    widgets::{Block, Borders, List, ListItem, Scrollbar, ScrollbarOrientation, ScrollbarState},
 };
 
 impl App {

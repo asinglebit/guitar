@@ -30,7 +30,11 @@ impl App {
             .block(Block::default());
         frame.render_widget(paragraph, self.layout.title_left);
 
-        let hint = Span::styled(if self.mode == InputMode::Git { "git " } else { "normal " }, Style::default().fg(self.theme.COLOR_GREY_700));
+        let hint = if self.mode == InputMode::Action {
+            Span::styled("action ", Style::default().fg(self.theme.COLOR_GRASS))
+        } else {
+            Span::styled("normal ", Style::default().fg(self.theme.COLOR_GREY_700))
+        };
         let paragraph = ratatui::widgets::Paragraph::new(Line::from(hint))
             .right_aligned()
             .block(Block::default());

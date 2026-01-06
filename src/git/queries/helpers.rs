@@ -1,31 +1,9 @@
-#[rustfmt::skip]
-use std::{
-    collections::{
-        HashSet,
-    },
-};
-use chrono::{NaiveDate, Utc};
+use crate::helpers::text::{decode, sanitize};
 use chrono::TimeZone;
-#[rustfmt::skip]
-use git2::{
-    ObjectType,
-    Diff,
-    Repository,
-    DiffFormat::{
-        Patch
-    }
-};
+use chrono::{NaiveDate, Utc};
+use git2::{Diff, DiffFormat::Patch, ObjectType, Repository};
 use im::HashMap;
-#[rustfmt::skip]
-use crate::{
-    helpers::{
-        text::{
-            decode,
-            sanitize
-        }
-    }
-};
-
+use std::collections::HashSet;
 // Structure representing all uncommitted changes in the repository
 #[derive(Debug, Default, Clone)]
 pub struct UncommittedChanges {

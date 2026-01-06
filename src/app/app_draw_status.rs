@@ -1,37 +1,13 @@
-#[rustfmt::skip]
+use crate::{
+    app::app::{App, Focus},
+    git::queries::helpers::FileStatus,
+    helpers::text::*,
+};
 use ratatui::{
     Frame,
     style::Style,
-    text::{
-        Span,
-        Line
-    },
-    widgets::{
-        Block,
-        Borders,
-        Scrollbar,
-        ScrollbarOrientation,
-        ScrollbarState,
-        List,
-        ListItem
-    },
-};
-#[rustfmt::skip]
-use crate::{
-    git::{
-        queries::{
-            helpers::{
-                FileStatus
-            }
-        }
-    },
-    helpers::{
-        text::*
-    },
-    app::app::{
-        App,
-        Focus
-    }
+    text::{Line, Span},
+    widgets::{Block, Borders, List, ListItem, Scrollbar, ScrollbarOrientation, ScrollbarState},
 };
 
 impl App {

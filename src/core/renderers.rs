@@ -1,62 +1,25 @@
-#[rustfmt::skip]
-use im::{
-    Vector,
-    HashSet
-};
-#[rustfmt::skip]
+use im::{HashSet, Vector};
 use indexmap::IndexMap;
-#[rustfmt::skip]
-use std::{
-    cell::RefCell,
-    collections::HashMap,
-    rc::Rc
-};
-#[rustfmt::skip]
-use git2::{
-    Repository
-};
-#[rustfmt::skip]
-use ratatui::{
-    style::{
-        Style,
-        Color
-    },
-    text::{
-        Line,
-        Span
-    },
-};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use git2::Repository;
 use crate::helpers::keymap::{Command, KeyBinding, keycode_to_string};
-#[rustfmt::skip]
 use crate::{
-    layers,
-    git::{
-        queries::{
-            helpers::{
-                UncommittedChanges
-            }
-        }
-    },
     core::{
-        oids::{
-            Oids
-        },
-        chunk::{
-            Chunk,
-            NONE
-        }
+        chunk::{Chunk, NONE},
+        oids::Oids,
     },
+    git::queries::helpers::UncommittedChanges,
     helpers::{
+        colors::ColorPicker,
         palette::*,
         symbols::*,
-        colors::{
-            ColorPicker,
-        },
-        text::{
-            modifiers_to_string,
-            pascal_to_spaced
-        },
-    }
+        text::{modifiers_to_string, pascal_to_spaced},
+    },
+    layers,
+};
+use ratatui::{
+    style::{Color, Style},
+    text::{Line, Span},
 };
 
 pub fn render_graph_range(

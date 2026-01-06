@@ -1,34 +1,13 @@
-#[rustfmt::skip]
+use crate::app::app::{App, Focus};
+use crate::core::renderers::{
+    render_buffer_range, render_graph_range, render_message_range, render_sha_range,
+};
 use ratatui::{
     Frame,
     style::Style,
     widgets::{
-        Block,
-        Borders,
-        Cell as WidgetCell,
-        Row,
-        Scrollbar,
-        ScrollbarOrientation,
-        ScrollbarState,
-        Table
-    },
-};
-#[rustfmt::skip]
-use crate::{
-    core::{
-        renderers::{
-            render_buffer_range,
-            render_sha_range,
-            render_graph_range,
-            render_message_range
-        }
-    },
-};
-#[rustfmt::skip]
-use crate::{
-    app::app::{
-        App,
-        Focus
+        Block, Borders, Cell as WidgetCell, Row, Scrollbar, ScrollbarOrientation, ScrollbarState,
+        Table,
     },
 };
 

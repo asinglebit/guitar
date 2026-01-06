@@ -1,6 +1,4 @@
-#[rustfmt::skip]
 use ratatui::style::Color;
-#[rustfmt::skip]
 use crate::helpers::palette::*;
 
 #[derive(Clone)]

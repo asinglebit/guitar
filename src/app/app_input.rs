@@ -256,13 +256,13 @@ impl App {
         }
 
         // Reset mode to normal
-        if current_mode == InputMode::Git {
+        if current_mode == InputMode::Action {
             self.mode = InputMode::Normal;
         }
     }
 
     pub fn on_action_mode(&mut self) {
-        self.mode = InputMode::Git;
+        self.mode = InputMode::Action;
     }
 
     pub fn on_select(&mut self) {
@@ -271,9 +271,9 @@ impl App {
                 if self.viewport == Viewport::Settings
                     && let Some(position) = self.settings_selections.iter().position(|&x| x == self.settings_selected) {
                         match position {
-                            3 => self.theme = Theme::classic(),
-                            4 => self.theme = Theme::ansi(),
-                            5 => self.theme = Theme::monochrome(),
+                            6 => self.theme = Theme::classic(),
+                            7 => self.theme = Theme::ansi(),
+                            8 => self.theme = Theme::monochrome(),
                             _ => {}
                         }
                         self.reload();

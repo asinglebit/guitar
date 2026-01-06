@@ -8,7 +8,7 @@ use std::path::Path;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum InputMode {
     Normal,
-    Git,
+    Action,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -126,7 +126,7 @@ fn default_normal_keymap() -> IndexMap<KeyBinding, Command> {
     map
 }
 
-fn default_git_keymap() -> IndexMap<KeyBinding, Command> {
+fn default_action_keymap() -> IndexMap<KeyBinding, Command> {
     let mut map = IndexMap::new();
 
     // User Interface
@@ -183,7 +183,7 @@ fn default_keymaps() -> Keymaps {
     let mut maps = IndexMap::new();
 
     maps.insert(InputMode::Normal, default_normal_keymap());
-    maps.insert(InputMode::Git, default_git_keymap());
+    maps.insert(InputMode::Action, default_action_keymap());
 
     maps
 }
@@ -203,7 +203,7 @@ impl KeyBinding {
 #[derive(Serialize, Deserialize)]
 struct KeymapConfig {
     normal: Vec<KeyBindingEntry>,
-    git: Vec<KeyBindingEntry>,
+    action: Vec<KeyBindingEntry>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -336,12 +336,12 @@ fn keymaps_to_config(maps: &Keymaps) -> KeymapConfig {
         .map(|m| keymap_entries(m))
         .unwrap_or_default();
 
-    let git = maps
-        .get(&InputMode::Git)
+    let action = maps
+        .get(&InputMode::Action)
         .map(|m| keymap_entries(m))
         .unwrap_or_default();
 
-    KeymapConfig { normal, git }
+    KeymapConfig { normal, action }
 }
 
 fn entries_to_keymap(entries: Vec<KeyBindingEntry>) -> Result<ModeKeymap, String> {
@@ -360,7 +360,7 @@ fn config_to_keymaps(cfg: KeymapConfig) -> Result<Keymaps, String> {
     let mut maps = IndexMap::new();
 
     maps.insert(InputMode::Normal, entries_to_keymap(cfg.normal)?);
-    maps.insert(InputMode::Git, entries_to_keymap(cfg.git)?);
+    maps.insert(InputMode::Action, entries_to_keymap(cfg.action)?);
 
     Ok(maps)
 }

@@ -1,29 +1,12 @@
-#[rustfmt::skip]
+use crate::app::app::App;
+use crate::helpers::symbols::SYM_TAG;
 use ratatui::{
     Frame,
+    layout::{Alignment, Rect},
     style::Style,
-    layout::{
-        Alignment,
-        Rect
-    },
-    text::{
-        Line,
-        Span,
-        Text
-    },
-    widgets::{
-        Block,
-        Borders,
-        Clear,
-        Paragraph,
-        Widget
-    },
+    text::{Line, Span, Text},
+    widgets::{Block, Borders, Clear, Paragraph, Widget},
 };
-use crate::helpers::symbols::SYM_TAG;
-#[rustfmt::skip]
-use crate::app::app::{
-        App
-    };
 
 impl App {
 

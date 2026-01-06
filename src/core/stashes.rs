@@ -1,27 +1,6 @@
-#[rustfmt::skip]
-use std::{
-    cell::{
-        RefCell
-    },
-    rc::Rc,
-    collections::{
-        HashMap
-    },
-};
-#[rustfmt::skip]
-use ratatui::{
-    style::{
-        Color
-    }
-};
-#[rustfmt::skip]
-use crate::{
-    helpers::{
-        colors::{
-            ColorPicker
-        }
-    }
-};
+use crate::helpers::colors::ColorPicker;
+use ratatui::style::Color;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 #[derive(Default)]
 pub struct Stashes {

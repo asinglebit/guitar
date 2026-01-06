@@ -1,34 +1,15 @@
-use ratatui::{layout::Rect, widgets::{Paragraph}};
-#[rustfmt::skip]
+use crate::helpers::symbols::SYM_TAG;
+use crate::{
+    app::app::{App, Focus},
+    helpers::text::truncate_with_ellipsis,
+};
 use ratatui::{
     Frame,
     style::Style,
-    text::{
-        Line,
-        Span,
-    },
-    widgets::{
-        Block,
-        Scrollbar,
-        ScrollbarOrientation,
-        ScrollbarState,
-        List,
-        ListItem
-    },
+    text::{Line, Span},
+    widgets::{Block, List, ListItem, Scrollbar, ScrollbarOrientation, ScrollbarState},
 };
-use crate::helpers::symbols::SYM_TAG;
-#[rustfmt::skip]
-use crate::{
-    app::app::{
-        App,
-        Focus
-    },
-    helpers::{
-        text::{
-            truncate_with_ellipsis
-        }
-    }
-};
+use ratatui::{layout::Rect, widgets::Paragraph};
 
 impl App {
 

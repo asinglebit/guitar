@@ -1,11 +1,4 @@
-#[rustfmt::skip]
-use chrono::{
-    DateTime,
-    FixedOffset,
-    TimeZone,
-    Utc
-};
-#[rustfmt::skip]
+use chrono::{DateTime, FixedOffset, TimeZone, Utc};
 use git2::Time;
 
 pub fn timestamp_to_utc(time: Time) -> String {

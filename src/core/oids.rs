@@ -1,19 +1,6 @@
-#[rustfmt::skip]
-use std::{
-    collections::{
-        HashMap
-    }
-};
-#[rustfmt::skip]
-use git2::{
-    Oid
-};
-#[rustfmt::skip]
-use crate::{
-    core::{
-        chunk::NONE,
-    }
-};
+use crate::core::chunk::NONE;
+use git2::Oid;
+use std::collections::HashMap;
 
 #[derive(Clone)]
 pub struct Oids {

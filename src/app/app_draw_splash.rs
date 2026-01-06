@@ -1,22 +1,9 @@
-#[rustfmt::skip]
+use crate::app::app::App;
 use ratatui::{
     Frame,
     style::Style,
-    text::{
-        Span,
-        Line
-    },
-    widgets::{
-        Block,
-        List,
-        ListItem
-    }
-};
-#[rustfmt::skip]
-use crate::{
-    app::app::{
-        App
-    }
+    text::{Line, Span},
+    widgets::{Block, List, ListItem},
 };
 
 impl App {

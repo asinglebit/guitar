@@ -1,14 +1,5 @@
-
-#[rustfmt::skip]
-use im::{
-    Vector,
-    OrdMap
-};
-#[rustfmt::skip]
-use crate::core::chunk::{
-    Chunk,
-    NONE
-};
+use crate::core::chunk::{Chunk, NONE};
+use im::{OrdMap, Vector};
 
 #[derive(Default, Clone)]
 pub struct Delta {

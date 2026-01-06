@@ -1,31 +1,12 @@
-#[rustfmt::skip]
+use crate::{
+    app::app::{App, Focus},
+    helpers::text::truncate_with_ellipsis,
+};
 use ratatui::{
     Frame,
     style::Style,
-    text::{
-        Line,
-        Span,
-    },
-    widgets::{
-        Block,
-        Scrollbar,
-        ScrollbarOrientation,
-        ScrollbarState,
-        List,
-        ListItem
-    },
-};
-#[rustfmt::skip]
-use crate::{
-    app::app::{
-        App,
-        Focus
-    },
-    helpers::{
-        text::{
-            truncate_with_ellipsis
-        }
-    }
+    text::{Line, Span},
+    widgets::{Block, List, ListItem, Scrollbar, ScrollbarOrientation, ScrollbarState},
 };
 
 impl App {

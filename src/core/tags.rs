@@ -1,33 +1,7 @@
-#[rustfmt::skip]
-use std::{
-    cell::{
-        RefCell
-    },
-    rc::Rc,
-    collections::{
-        HashMap
-    },
-};
-#[rustfmt::skip]
-use ratatui::{
-    style::{
-        Color
-    }
-};
 use crate::helpers::palette::Theme;
-#[rustfmt::skip]
-use crate::{
-    core::{
-        oids::{
-            Oids
-        }
-    },
-    helpers::{
-        colors::{
-            ColorPicker
-        }
-    }
-};
+use crate::{core::oids::Oids, helpers::colors::ColorPicker};
+use ratatui::style::Color;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 #[derive(Default)]
 pub struct Tags {
