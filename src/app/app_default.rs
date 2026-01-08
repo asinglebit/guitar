@@ -9,6 +9,7 @@ use crate::{
         app_layout::Layout,
     },
     core::{branches::Branches, buffer::Buffer, oids::Oids, tags::Tags},
+    git::os::path::try_into_git_repo_root,
     git::queries::helpers::UncommittedChanges,
     helpers::{colors::ColorPicker, palette::*, spinner::Spinner},
 };
@@ -24,7 +25,9 @@ impl Default for App {
         let path = if args.len() > 1 { &args[1] } else { &".".to_string() };
         let theme = Theme::default();
         let color = Rc::new(RefCell::new(ColorPicker::from_theme(&theme)));
-        let absolute_path: PathBuf = std::fs::canonicalize(path).unwrap_or_else(|_| PathBuf::from(path));
+        let canonical_path = std::fs::canonicalize(path).expect("Invalid repo path");
+        let absolute_path: PathBuf =
+            try_into_git_repo_root(canonical_path).unwrap_or_else(|| PathBuf::from(path));
         let repo = Rc::new(Repository::open(absolute_path.clone()).expect("Could not open repo"));
         let logo = vec![
             Span::styled("  g", Style::default().fg(theme.COLOR_GRASS)),
