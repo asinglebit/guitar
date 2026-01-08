@@ -298,54 +298,207 @@ fn default_normal_keymap() -> IndexMap<KeyBinding, Command> {
 fn default_action_keymap() -> IndexMap<KeyBinding, Command> {
     let mut map = IndexMap::new();
 
-    map.insert(KeyBinding::new(Tab, KeyModifiers::NONE), Command::FocusNextPane);
-    map.insert(KeyBinding::new(BackTab, KeyModifiers::SHIFT), Command::FocusPreviousPane);
-    map.insert(KeyBinding::new(Right, KeyModifiers::NONE), Command::FocusNextPane);
-    map.insert(KeyBinding::new(Left, KeyModifiers::NONE), Command::FocusPreviousPane);
+    // Keep all basic navigation in action mode
+    map.insert(
+        KeyBinding::new(Char('h'), KeyModifiers::NONE),
+        Command::Back,
+    );
+    map.insert(
+        KeyBinding::new(Char('l'), KeyModifiers::NONE),
+        Command::Select,
+    );
     map.insert(KeyBinding::new(Enter, KeyModifiers::NONE), Command::Select);
     map.insert(KeyBinding::new(Esc, KeyModifiers::NONE), Command::Back);
-    map.insert(KeyBinding::new(Char('.'), KeyModifiers::NONE), Command::Minimize);
-    map.insert(KeyBinding::new(Char('1'), KeyModifiers::NONE), Command::ToggleBranches);
-    map.insert(KeyBinding::new(Char('2'), KeyModifiers::NONE), Command::ToggleTags);
-    map.insert(KeyBinding::new(Char('3'), KeyModifiers::NONE), Command::ToggleStashes);
-    map.insert(KeyBinding::new(Char('4'), KeyModifiers::NONE), Command::ToggleStatus);
-    map.insert(KeyBinding::new(Char('5'), KeyModifiers::NONE), Command::ToggleInspector);
-    map.insert(KeyBinding::new(Char('6'), KeyModifiers::NONE), Command::ToggleShas);
-    map.insert(KeyBinding::new(F(1), KeyModifiers::NONE), Command::ToggleSettings);
-    map.insert(KeyBinding::new(Char('q'), KeyModifiers::NONE), Command::Exit);
-    map.insert(KeyBinding::new(Char('c'), KeyModifiers::CONTROL), Command::Exit);
-    map.insert(KeyBinding::new(Char('r'), KeyModifiers::NONE), Command::Reload);
 
-    // Lists
-    map.insert(KeyBinding::new(PageUp, KeyModifiers::NONE), Command::PageUp);
-    map.insert(KeyBinding::new(PageDown, KeyModifiers::NONE), Command::PageDown);
+    map.insert(
+        KeyBinding::new(Char('p'), KeyModifiers::CONTROL),
+        Command::FocusPreviousPane,
+    );
+    map.insert(
+        KeyBinding::new(Char('n'), KeyModifiers::CONTROL),
+        Command::FocusNextPane,
+    );
+    map.insert(
+        KeyBinding::new(Tab, KeyModifiers::NONE),
+        Command::FocusNextPane,
+    );
+    map.insert(
+        KeyBinding::new(BackTab, KeyModifiers::SHIFT),
+        Command::FocusPreviousPane,
+    );
+
+    map.insert(
+        KeyBinding::new(Char('j'), KeyModifiers::NONE),
+        Command::ScrollDown,
+    );
+    map.insert(
+        KeyBinding::new(Char('k'), KeyModifiers::NONE),
+        Command::ScrollUp,
+    );
+    map.insert(
+        KeyBinding::new(Down, KeyModifiers::NONE),
+        Command::ScrollDown,
+    );
     map.insert(KeyBinding::new(Up, KeyModifiers::NONE), Command::ScrollUp);
-    map.insert(KeyBinding::new(Down, KeyModifiers::NONE), Command::ScrollDown);
-    map.insert(KeyBinding::new(Up, KeyModifiers::CONTROL | KeyModifiers::ALT), Command::ScrollUpHalf);
-    map.insert(KeyBinding::new(Down, KeyModifiers::CONTROL | KeyModifiers::ALT), Command::ScrollDownHalf);
-    map.insert(KeyBinding::new(Home, KeyModifiers::NONE), Command::GoToBeginning);
+
+    map.insert(
+        KeyBinding::new(Char('d'), KeyModifiers::CONTROL),
+        Command::ScrollDownHalf,
+    );
+    map.insert(
+        KeyBinding::new(Char('u'), KeyModifiers::CONTROL),
+        Command::ScrollUpHalf,
+    );
+
+    map.insert(
+        KeyBinding::new(Char('b'), KeyModifiers::CONTROL),
+        Command::PageUp,
+    );
+    map.insert(
+        KeyBinding::new(PageDown, KeyModifiers::NONE),
+        Command::PageDown,
+    );
+    map.insert(KeyBinding::new(PageUp, KeyModifiers::NONE), Command::PageUp);
+
+    map.insert(
+        KeyBinding::new(Char('g'), KeyModifiers::NONE),
+        Command::GoToBeginning,
+    );
+    map.insert(
+        KeyBinding::new(Char('G'), KeyModifiers::SHIFT),
+        Command::GoToEnd,
+    );
+    map.insert(
+        KeyBinding::new(Home, KeyModifiers::NONE),
+        Command::GoToBeginning,
+    );
     map.insert(KeyBinding::new(End, KeyModifiers::NONE), Command::GoToEnd);
 
-    // Git    
-    map.insert(KeyBinding::new(Char('f'), KeyModifiers::NONE), Command::FetchAll);
-    map.insert(KeyBinding::new(Char('u'), KeyModifiers::NONE), Command::Unstage);
-    map.insert(KeyBinding::new(Char('s'), KeyModifiers::NONE), Command::Stage);
-    map.insert(KeyBinding::new(Char('a'), KeyModifiers::NONE), Command::Commit);
-    map.insert(KeyBinding::new(Char('b'), KeyModifiers::NONE), Command::CreateBranch);
-    map.insert(KeyBinding::new(Char('/'), KeyModifiers::NONE), Command::Tag);
+    // UI toggles (same as normal mode)
+    map.insert(
+        KeyBinding::new(Char('1'), KeyModifiers::NONE),
+        Command::ToggleBranches,
+    );
+    map.insert(
+        KeyBinding::new(Char('2'), KeyModifiers::NONE),
+        Command::ToggleTags,
+    );
+    map.insert(
+        KeyBinding::new(Char('3'), KeyModifiers::NONE),
+        Command::ToggleStashes,
+    );
+    map.insert(
+        KeyBinding::new(Char('4'), KeyModifiers::NONE),
+        Command::ToggleStatus,
+    );
+    map.insert(
+        KeyBinding::new(Char('5'), KeyModifiers::NONE),
+        Command::ToggleInspector,
+    );
+    map.insert(
+        KeyBinding::new(Char('6'), KeyModifiers::NONE),
+        Command::ToggleShas,
+    );
+    map.insert(
+        KeyBinding::new(F(1), KeyModifiers::NONE),
+        Command::ToggleSettings,
+    );
+    map.insert(
+        KeyBinding::new(Char('.'), KeyModifiers::NONE),
+        Command::Minimize,
+    );
 
-    // Git, but dangerous
-    map.insert(KeyBinding::new(Char('y'), KeyModifiers::NONE), Command::Drop);
-    map.insert(KeyBinding::new(Char('t'), KeyModifiers::NONE), Command::Pop);
-    map.insert(KeyBinding::new(Char('e'), KeyModifiers::NONE), Command::Stash);
-    map.insert(KeyBinding::new(Char('c'), KeyModifiers::NONE), Command::Checkout);
-    map.insert(KeyBinding::new(Char('h'), KeyModifiers::NONE), Command::HardReset);
-    map.insert(KeyBinding::new(Char('m'), KeyModifiers::NONE), Command::MixedReset);
-    map.insert(KeyBinding::new(Char('p'), KeyModifiers::NONE), Command::ForcePush);
-    map.insert(KeyBinding::new(Char('d'), KeyModifiers::NONE), Command::DeleteBranch);
-    map.insert(KeyBinding::new(Char('?'), KeyModifiers::NONE), Command::Untag);
-    map.insert(KeyBinding::new(Char(']'), KeyModifiers::NONE), Command::Cherrypick);
-    
+    // Safe git operations (same as normal mode)
+    map.insert(
+        KeyBinding::new(Char('s'), KeyModifiers::NONE),
+        Command::Stage,
+    );
+    map.insert(
+        KeyBinding::new(Char('u'), KeyModifiers::NONE),
+        Command::Unstage,
+    );
+    map.insert(
+        KeyBinding::new(Char('c'), KeyModifiers::NONE),
+        Command::Commit,
+    );
+    map.insert(
+        KeyBinding::new(Char('f'), KeyModifiers::NONE),
+        Command::FetchAll,
+    );
+    map.insert(
+        KeyBinding::new(Char('b'), KeyModifiers::NONE),
+        Command::CreateBranch,
+    );
+    map.insert(KeyBinding::new(Char('t'), KeyModifiers::NONE), Command::Tag);
+
+    // Dangerous/destructive git operations (action mode only)
+    // 'x' for drop (vim uses 'x' to delete character; here delete/drop stash or commit)
+    map.insert(
+        KeyBinding::new(Char('x'), KeyModifiers::NONE),
+        Command::Drop,
+    );
+
+    // 'p' for pop stash (vim uses 'p' for put/paste; contextually pop from stash here)
+    map.insert(KeyBinding::new(Char('p'), KeyModifiers::NONE), Command::Pop);
+
+    // 'S' (Shift-s) for stash (capital to emphasize it's a state-changing operation)
+    map.insert(
+        KeyBinding::new(Char('S'), KeyModifiers::SHIFT),
+        Command::Stash,
+    );
+
+    // 'o' for checkout (vim uses 'o' to open line below; here "open" a different branch)
+    map.insert(
+        KeyBinding::new(Char('o'), KeyModifiers::NONE),
+        Command::Checkout,
+    );
+
+    // 'H' (Shift-h) for hard reset (capital to indicate DANGER - destructive operation)
+    map.insert(
+        KeyBinding::new(Char('H'), KeyModifiers::SHIFT),
+        Command::HardReset,
+    );
+
+    // 'M' (Shift-m) for mixed reset (capital to indicate caution)
+    map.insert(
+        KeyBinding::new(Char('M'), KeyModifiers::SHIFT),
+        Command::MixedReset,
+    );
+
+    // 'P' (Shift-p) for force push (capital P to indicate DANGER)
+    map.insert(
+        KeyBinding::new(Char('P'), KeyModifiers::SHIFT),
+        Command::ForcePush,
+    );
+
+    // 'D' (Shift-d) for delete branch (vim uses 'D' to delete to end of line)
+    map.insert(
+        KeyBinding::new(Char('D'), KeyModifiers::SHIFT),
+        Command::DeleteBranch,
+    );
+
+    // 'U' (Shift-u) for untag (capital U to match vim's "undo whole line" conceptually)
+    map.insert(
+        KeyBinding::new(Char('U'), KeyModifiers::SHIFT),
+        Command::Untag,
+    );
+
+    // 'y' for cherrypick (vim uses 'y' for yank; here yank/copy a commit to current branch)
+    map.insert(
+        KeyBinding::new(Char('y'), KeyModifiers::NONE),
+        Command::Cherrypick,
+    );
+
+    map.insert(
+        KeyBinding::new(Char('r'), KeyModifiers::NONE),
+        Command::Reload,
+    );
+
+    map.insert(
+        KeyBinding::new(Char('q'), KeyModifiers::NONE),
+        Command::Exit,
+    );
+
     map
 }
 
@@ -358,7 +511,7 @@ fn default_keymaps() -> Keymaps {
     maps
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, )]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct KeyBinding {
     pub code: KeyCode,
     pub modifiers: KeyModifiers,
@@ -455,7 +608,7 @@ pub fn modifiers_to_vec(mods: KeyModifiers) -> Vec<String> {
         vec.push("Alt".to_string());
     }
     if mods.contains(KeyModifiers::SUPER) {
-        vec.push("Command".to_string()); // SUPER maps to Command/Meta
+        vec.push("Command".to_string());
     }
 
     vec
@@ -485,8 +638,9 @@ pub fn parse_key(s: &str) -> Result<KeyCode, String> {
         "PrintScreen" => Ok(KeyCode::PrintScreen),
         "Pause" => Ok(KeyCode::Pause),
         s if s.starts_with("F(") && s.ends_with(")") => {
-            let inner = &s[2..s.chars().count()-1];
-            inner.parse::<u8>()
+            let inner = &s[2..s.chars().count() - 1];
+            inner
+                .parse::<u8>()
                 .map(KeyCode::F)
                 .map_err(|_| format!("Invalid F-key string: {}", s))
         }
@@ -496,9 +650,9 @@ pub fn parse_key(s: &str) -> Result<KeyCode, String> {
                 .chars()
                 .next()
                 .ok_or_else(|| format!("Empty Char key: {}", s))?;
-        
+
             Ok(KeyCode::Char(ch))
-        }      
+        }
         _ => Err(format!("Unsupported key string: {}", s)),
     }
 }
@@ -511,8 +665,8 @@ pub fn parse_modifiers(mods: &[String]) -> Result<KeyModifiers, String> {
             "Shift" => km |= KeyModifiers::SHIFT,
             "Control" | "Ctrl" => km |= KeyModifiers::CONTROL,
             "Alt" => km |= KeyModifiers::ALT,
-            "Command" | "Meta" => km |= KeyModifiers::SUPER, // SUPER is used for Command on macOS
-            "" => (), // ignore empty strings
+            "Command" | "Meta" => km |= KeyModifiers::SUPER,
+            "" => (),
             other => return Err(format!("Unknown modifier: {}", other)),
         }
     }
@@ -565,18 +719,13 @@ fn config_to_keymaps(cfg: KeymapConfig) -> Result<Keymaps, String> {
     Ok(maps)
 }
 
-fn load_keymaps_from_disk(
-    path: &Path,
-) -> Result<Keymaps, Box<dyn std::error::Error>> {
+fn load_keymaps_from_disk(path: &Path) -> Result<Keymaps, Box<dyn std::error::Error>> {
     let text = fs::read_to_string(path)?;
     let cfg: KeymapConfig = serde_json::from_str(&text)?;
     Ok(config_to_keymaps(cfg)?)
 }
 
-fn save_keymaps_to_disk(
-    path: &Path,
-    maps: &Keymaps,
-) -> Result<(), Box<dyn std::error::Error>> {
+fn save_keymaps_to_disk(path: &Path, maps: &Keymaps) -> Result<(), Box<dyn std::error::Error>> {
     let cfg = keymaps_to_config(maps);
     let json = serde_json::to_string_pretty(&cfg)?;
     fs::create_dir_all(path.parent().unwrap())?;
