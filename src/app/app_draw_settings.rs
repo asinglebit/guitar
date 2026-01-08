@@ -1,6 +1,7 @@
 use crate::helpers::heatmap::heat_cell;
 use crate::helpers::keymap::InputMode;
 use crate::helpers::palette::*;
+use crate::helpers::version::VERSION;
 use crate::{
     app::app::{App, Direction, Focus},
     core::renderers::render_keybindings,
@@ -56,7 +57,7 @@ impl App {
 
         // Info
         lines.push(Line::default());
-        lines.push(Line::from(Span::styled(fill_width(" version:", "0.1.23 ", heatmap_width), Style::default().fg(self.theme.COLOR_TEXT).bg(self.theme.COLOR_GREY_900))).centered());
+        lines.push(Line::from(Span::styled(fill_width(" version:", format!("{} ", VERSION).as_str(), heatmap_width), Style::default().fg(self.theme.COLOR_TEXT).bg(self.theme.COLOR_GREY_900))).centered());
         self.settings_selections.push(lines.len() - 1);
 
         // Heatmap

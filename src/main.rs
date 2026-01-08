@@ -59,6 +59,7 @@ pub mod helpers {
     pub mod symbols;
     pub mod text;
     pub mod time;
+    pub mod version;
 }
 
 use crate::app::app::App;
