@@ -214,7 +214,9 @@ Or alternatively, alias the executable and then call it from a repo folder direc
 Running it from a non repo folder will crash the process. I will fix it sometime later...
 
 ### Screenshots
+
 ![1](https://github.com/user-attachments/assets/37df457b-bbf4-4d51-a965-c300b426cb62)
+![1](https://github.com/user-attachments/assets/b09f73e7-5bda-4ecd-ba7c-3bba85395e37)
 ![6](https://github.com/user-attachments/assets/2ed8f14e-193b-4815-b37e-283bd129787f)
 ![5](https://github.com/user-attachments/assets/15e4630f-a141-4724-9d35-1b8601006598)
 ![4](https://github.com/user-attachments/assets/10389ec5-6780-4bcb-85dc-67f9e012ed63)
