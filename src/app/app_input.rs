@@ -67,7 +67,7 @@ impl App {
 
     pub fn handle_key_event(&mut self, key_event: KeyEvent) {
         let key_binding = KeyBinding::new(key_event.code, key_event.modifiers);
-        let current_mode = self.mode.clone();
+        let current_mode = self.mode;
 
         // Handle text editing within modals
         match self.focus {
@@ -209,8 +209,8 @@ impl App {
             _ => {}
         }
 
-        if let Some(mode_map) = self.keymaps.get(&self.mode) {
-            if let Some(cmd) = mode_map.get(&key_binding) {
+        if let Some(mode_map) = self.keymaps.get(&self.mode)
+            && let Some(cmd) = mode_map.get(&key_binding) {
                 match cmd {
                     // User Interface
                     Command::WidenScope => self.on_widen_scope(),
@@ -271,7 +271,6 @@ impl App {
                     Command::Reload => self.on_reload(),
                 }
             }
-        }
 
         // Reset mode to normal
         if current_mode == InputMode::Action {
@@ -462,24 +461,21 @@ impl App {
 
     pub fn on_narrow_scope(&mut self) {
         match self.focus {
-            Focus::Viewport => match self.viewport {
-                Viewport::Graph => {
-                    if self.graph_selected != 0 {
-                        self.is_inspector = true;
-                        self.focus = Focus::Inspector;
+            Focus::Viewport => if self.viewport == Viewport::Graph {
+                if self.graph_selected != 0 {
+                    self.is_inspector = true;
+                    self.focus = Focus::Inspector;
+                } else {
+                    if self.uncommitted.is_clean {
+                        return;
+                    }
+                    self.is_status = true;
+                    if self.uncommitted.is_staged {
+                        self.focus = Focus::StatusTop;
                     } else {
-                        if self.uncommitted.is_clean {
-                            return;
-                        }
-                        self.is_status = true;
-                        if self.uncommitted.is_staged {
-                            self.focus = Focus::StatusTop;
-                        } else {
-                            self.focus = Focus::StatusBottom;
-                        }
+                        self.focus = Focus::StatusBottom;
                     }
                 }
-                _ => {}
             },
             Focus::Inspector => {
                 self.is_status = true;
@@ -1158,39 +1154,36 @@ impl App {
     }
 
     pub fn on_toggle_branch(&mut self) {
-        match self.focus {
-            Focus::Branches => {
-                let (oid, branch) = self.branches.sorted.get(self.branches_selected).unwrap();
+        if self.focus == Focus::Branches {
+            let (oid, branch) = self.branches.sorted.get(self.branches_selected).unwrap();
 
-                let branch = branch.clone(); // clone because we may insert/remove it
+            let branch = branch.clone(); // clone because we may insert/remove it
 
-                self.branches
-                    .visible
-                    .entry(*oid)
-                    .and_modify(|branches| {
-                        if let Some(pos) = branches.iter().position(|b| b == &branch) {
-                            branches.remove(pos);
-                        } else {
-                            branches.push(branch.clone());
-                        }
+            self.branches
+                .visible
+                .entry(*oid)
+                .and_modify(|branches| {
+                    if let Some(pos) = branches.iter().position(|b| b == &branch) {
+                        branches.remove(pos);
+                    } else {
+                        branches.push(branch.clone());
+                    }
 
-                        // remove oid entirely if empty
-                        if branches.is_empty() {
-                            // can't remove while borrowing, so mark later
-                        }
-                    })
-                    .or_insert_with(|| vec![branch]);
+                    // remove oid entirely if empty
+                    if branches.is_empty() {
+                        // can't remove while borrowing, so mark later
+                    }
+                })
+                .or_insert_with(|| vec![branch]);
 
-                // cleanup pass (safe because we can't mutate while borrowed above)
-                if let Some(branches) = self.branches.visible.get(oid)
-                    && branches.is_empty()
-                {
-                    self.branches.visible.remove(oid);
-                }
-
-                self.reload();
+            // cleanup pass (safe because we can't mutate while borrowed above)
+            if let Some(branches) = self.branches.visible.get(oid)
+                && branches.is_empty()
+            {
+                self.branches.visible.remove(oid);
             }
-            _ => {}
+
+            self.reload();
         }
     }
 

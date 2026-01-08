@@ -621,12 +621,12 @@ fn keymap_entries(map: &ModeKeymap) -> Vec<KeyBindingEntry> {
 fn keymaps_to_config(maps: &Keymaps) -> KeymapConfig {
     let normal = maps
         .get(&InputMode::Normal)
-        .map(|m| keymap_entries(m))
+        .map(keymap_entries)
         .unwrap_or_default();
 
     let action = maps
         .get(&InputMode::Action)
-        .map(|m| keymap_entries(m))
+        .map(keymap_entries)
         .unwrap_or_default();
 
     KeymapConfig { normal, action }

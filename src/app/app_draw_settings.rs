@@ -266,7 +266,7 @@ impl App {
         );
         lines.push(Line::default());
         if let Some(mode_keymap) = self.keymaps.get(&InputMode::Normal) {
-            render_keybindings(&self.theme, &mode_keymap, heatmap_width)
+            render_keybindings(&self.theme, mode_keymap, heatmap_width)
                 .iter()
                 .enumerate()
                 .for_each(|(idx, kb_line)| {
@@ -298,7 +298,7 @@ impl App {
         );
         lines.push(Line::default());
         if let Some(mode_keymap) = self.keymaps.get(&InputMode::Action) {
-            render_keybindings(&self.theme, &mode_keymap, heatmap_width)
+            render_keybindings(&self.theme, mode_keymap, heatmap_width)
                 .iter()
                 .enumerate()
                 .for_each(|(idx, kb_line)| {

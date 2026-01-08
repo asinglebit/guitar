@@ -450,6 +450,6 @@ pub fn unstage_file(repo: &Repository, path: &std::path::Path) -> Result<(), git
     };
 
     // Reset only this path in the index
-    repo.reset_default(Some(&head.into_object()), &[path])?;
+    repo.reset_default(Some(&head.into_object()), [path])?;
     Ok(())
 }
