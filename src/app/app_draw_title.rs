@@ -1,30 +1,27 @@
-#[rustfmt::skip]
+use crate::app::app::App;
+use crate::helpers::{keymap::InputMode, symbols::SYM_FOLDER};
 use ratatui::{
     Frame,
     style::Style,
-    text::{
-        Line,
-        Span
-    },
-    widgets::{
-        Block,
-    },
+    text::{Line, Span},
+    widgets::Block,
 };
-#[rustfmt::skip]
-use crate::app::{
-    app::App,
-};
-use crate::helpers::{keymap::InputMode, symbols::SYM_FOLDER};
 
 impl App {
-
     pub fn draw_title(&mut self, frame: &mut Frame) {
         // Logo and path
-        let path = if let Some(file_name) = self.file_name.clone() { format!("{}/{}", self.path.clone(), file_name) } else { self.path.clone() };
+        let path = if let Some(file_name) = self.file_name.clone() {
+            format!("{}/{}", self.path.clone(), file_name)
+        } else {
+            self.path.clone()
+        };
         let logo = self.logo.clone();
         let separator = Span::styled(" |", Style::default().fg(self.theme.COLOR_TEXT));
-        let folder = Span::styled(format!(" {SYM_FOLDER}  {}", path), Style::default().fg(self.theme.COLOR_TEXT));
-        let line = Line::from([logo, vec![ separator, folder ]].concat());
+        let folder = Span::styled(
+            format!(" {SYM_FOLDER}  {}", path),
+            Style::default().fg(self.theme.COLOR_TEXT),
+        );
+        let line = Line::from([logo, vec![separator, folder]].concat());
         let paragraph = ratatui::widgets::Paragraph::new(line)
             .left_aligned()
             .block(Block::default());

@@ -8,18 +8,19 @@ use ratatui::{
 };
 
 impl App {
-
     pub fn draw_modal_delete_branch(&mut self, frame: &mut Frame) {
-        
         let mut length = 30;
         let mut height = 8;
         let alias = self.oids.get_alias_by_idx(self.graph_selected);
         let mut lines = Vec::new();
         let line_text = "select a branch to delete";
         lines.push(Line::default());
-        lines.push(Line::from(vec![Span::styled(line_text, Style::default().fg(self.theme.COLOR_TEXT))]));
+        lines.push(Line::from(vec![Span::styled(
+            line_text,
+            Style::default().fg(self.theme.COLOR_TEXT),
+        )]));
         lines.push(Line::default());
-        
+
         // Render list
         let current = get_current_branch(&self.repo);
         let color = self.branches.colors.get(&alias).unwrap();
@@ -30,7 +31,9 @@ impl App {
             .enumerate()
             .for_each(|(idx, branch)| {
                 height += 1;
-                let is_local = self.branches.local
+                let is_local = self
+                    .branches
+                    .local
                     .values()
                     .any(|branches| branches.iter().any(|b| b.as_str() == branch));
 
@@ -72,7 +75,10 @@ impl App {
         let modal_block = Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(self.theme.COLOR_GREY_600))
-            .title(Span::styled(" (esc) ", Style::default().fg(self.theme.COLOR_GREY_500)))
+            .title(Span::styled(
+                " (esc) ",
+                Style::default().fg(self.theme.COLOR_GREY_500),
+            ))
             .title_alignment(Alignment::Right)
             .padding(padding)
             .border_type(ratatui::widgets::BorderType::Rounded);

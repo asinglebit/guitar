@@ -18,7 +18,7 @@ impl Default for Oids {
             oids: Vec::new(),
             aliases: HashMap::new(),
             sorted_aliases: vec![NONE],
-            stashes: vec![]
+            stashes: vec![],
         }
     }
 }

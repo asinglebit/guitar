@@ -15,7 +15,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 pub struct Walker {
     // General
     pub repo: Rc<RefCell<Repository>>,
-    
+
     // Batcher
     pub batcher: Batcher,
 
@@ -35,12 +35,11 @@ pub struct Walker {
     pub stashes_lanes: HashMap<u32, usize>,
 
     // Batching
-    pub amount: usize
+    pub amount: usize,
 }
 
 // Output structure for walk results
 pub struct WalkerOutput {
-
     // Walker utilities
     pub buffer: RefCell<Buffer>,
 
@@ -58,7 +57,7 @@ pub struct WalkerOutput {
 
     // Batching
     pub is_again: bool,
-    pub is_first: bool
+    pub is_first: bool,
 }
 
 impl Walker {
@@ -69,8 +68,10 @@ impl Walker {
         visible: HashMap<u32, Vec<String>>,
     ) -> Result<Self, git2::Error> {
         let path = path.clone();
-        let repo = Rc::new(RefCell::new(Repository::open(path).expect("Failed to open repo")));
-        
+        let repo = Rc::new(RefCell::new(
+            Repository::open(path).expect("Failed to open repo"),
+        ));
+
         // Walker utilities
         let buffer = RefCell::new(Buffer::default());
 
@@ -83,7 +84,7 @@ impl Walker {
         let tags_local = get_tag_oids(&repo.borrow(), &mut oids);
 
         let stashes_lanes = HashMap::new();
-        
+
         // Get stashed commits and store them in oids
         {
             let mut repo_mut = repo.borrow_mut();
@@ -95,10 +96,10 @@ impl Walker {
 
         Ok(Self {
             repo,
-            
+
             // Batcher
             batcher,
-            
+
             // Walker utilities
             buffer,
 
@@ -112,13 +113,12 @@ impl Walker {
             stashes_lanes,
 
             // Pagination
-            amount
+            amount,
         })
     }
 
     // Walk through "amount" commits, update buffers and render lines
     pub fn walk(&mut self) -> bool {
-
         // Determine current HEAD oid
         let head_oid = self.repo.borrow().head().unwrap().target().unwrap();
 
@@ -140,14 +140,14 @@ impl Walker {
                 .borrow_mut()
                 .update(Chunk::uncommitted(head_alias, NONE));
         }
-        
+
         // Get all the stashed commits here
         let stashes: Vec<u32> = self.oids.stashes.clone();
 
         // Insert stashes into sorted_batch right after their parent commit
         for &stash_alias in &stashes {
             let stash_oid = self.oids.get_oid_by_alias(stash_alias);
-            let repo =  self.repo.borrow();
+            let repo = self.repo.borrow();
             let stash_commit = repo.find_commit(*stash_oid).unwrap();
 
             if let Some(parent_oid) = stash_commit.parent_ids().next() {
@@ -163,7 +163,6 @@ impl Walker {
 
         // Go through the commits, inferring the graph
         for &alias in sorted_batch.iter() {
-
             let mut merger_alias: u32 = NONE;
             let oid = self.oids.get_oid_by_alias(alias);
             let repo = self.repo.borrow();
@@ -171,15 +170,28 @@ impl Walker {
             let parents: Vec<Oid> = commit.parent_ids().collect();
 
             // Get parent aliases
-            let (parent_a, parent_b) = if stashes.contains(&alias) {(
-                // For stash commits, only the first parent is used
-                parents.first().map(|p| self.oids.get_alias_by_oid(*p)).unwrap_or(NONE),
-                NONE,
-            )} else {(
-                // For normal commits, use both parents if they exist
-                parents.first().map(|p| self.oids.get_alias_by_oid(*p)).unwrap_or(NONE),
-                parents.get(1).map(|p| self.oids.get_alias_by_oid(*p)).unwrap_or(NONE),
-            )};
+            let (parent_a, parent_b) = if stashes.contains(&alias) {
+                (
+                    // For stash commits, only the first parent is used
+                    parents
+                        .first()
+                        .map(|p| self.oids.get_alias_by_oid(*p))
+                        .unwrap_or(NONE),
+                    NONE,
+                )
+            } else {
+                (
+                    // For normal commits, use both parents if they exist
+                    parents
+                        .first()
+                        .map(|p| self.oids.get_alias_by_oid(*p))
+                        .unwrap_or(NONE),
+                    parents
+                        .get(1)
+                        .map(|p| self.oids.get_alias_by_oid(*p))
+                        .unwrap_or(NONE),
+                )
+            };
 
             // Create commit chunk for the current commit with its parents
             let chunk = Chunk::commit(alias, parent_a, parent_b);
@@ -189,8 +201,9 @@ impl Walker {
 
             for (lane_idx, chunk) in (&self.buffer.borrow().curr).into_iter().enumerate() {
                 if !chunk.is_dummy() && alias == chunk.alias {
-
-                    if self.branches_local.contains_key(&alias) || self.branches_remote.contains_key(&alias) {
+                    if self.branches_local.contains_key(&alias)
+                        || self.branches_remote.contains_key(&alias)
+                    {
                         self.branches_lanes.insert(alias, lane_idx);
                     }
 
@@ -205,7 +218,8 @@ impl Walker {
                     if chunk.parent_a != NONE && chunk.parent_b != NONE {
                         let mut is_merger_found = false;
                         for chunk_nested in &self.buffer.borrow().curr {
-                            if chunk_nested.parent_a != NONE && chunk_nested.parent_b == NONE
+                            if chunk_nested.parent_a != NONE
+                                && chunk_nested.parent_b == NONE
                                 && chunk.parent_b == chunk_nested.parent_a
                             {
                                 is_merger_found = true;

@@ -50,9 +50,7 @@ impl App {
                     + self.uncommitted.unstaged.added.len()
                     + self.uncommitted.unstaged.deleted.len()
             }
-            Focus::Branches => {
-                self.branches.sorted.len()
-            }
+            Focus::Branches => self.branches.sorted.len(),
             _ => 0,
         };
 
@@ -67,14 +65,21 @@ impl App {
                 },
                 Focus::StatusTop => self.status_top_selected + 1,
                 Focus::StatusBottom => self.status_bottom_selected + 1,
-                Focus::Branches => {
-                    self.branches.visible.values().map(|branches| branches.len()).sum()
-                }
+                Focus::Branches => self
+                    .branches
+                    .visible
+                    .values()
+                    .map(|branches| branches.len())
+                    .sum(),
                 _ => 0,
             }
         };
-        
-        let icon_spinner = if self.spinner.is_running() { format!(" {}", self.spinner.get_char()) } else { "".to_string() };
+
+        let icon_spinner = if self.spinner.is_running() {
+            format!(" {}", self.spinner.get_char())
+        } else {
+            "".to_string()
+        };
         let title_paragraph =
             ratatui::widgets::Paragraph::new(Text::from(Line::from(Span::styled(
                 if total == 0 {

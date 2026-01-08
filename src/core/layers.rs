@@ -33,10 +33,10 @@ impl LayerBuilder {
         lane_idx: usize,
         custom: Option<Color>,
     ) {
-        self.layers
-            .entry(layer)
-            .or_default()
-            .push((symbol, custom.unwrap_or(self.color.borrow().get_lane(lane_idx))));
+        self.layers.entry(layer).or_default().push((
+            symbol,
+            custom.unwrap_or(self.color.borrow().get_lane(lane_idx)),
+        ));
     }
 }
 
@@ -70,10 +70,7 @@ impl LayersContext {
         // Trim trailing empty symbols for each layer
         for layer in [LayerTypes::Commits, LayerTypes::Merges, LayerTypes::Pipes] {
             if let Some(tokens) = self.builder.layers.get_mut(&layer) {
-                while tokens
-                    .last()
-                    .is_some_and(|(sym, _)| sym.trim().is_empty())
-                {
+                while tokens.last().is_some_and(|(sym, _)| sym.trim().is_empty()) {
                     tokens.pop();
                 }
             }

@@ -21,7 +21,7 @@ impl Default for Chunk {
             alias: NONE,
             parent_a: NONE,
             parent_b: NONE,
-            marker: Markers::Dummy
+            marker: Markers::Dummy,
         }
     }
 }

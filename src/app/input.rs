@@ -5,7 +5,7 @@ pub struct TextInput {
     value: String,
     cursor: usize,
     scroll: usize,
-    max_width: usize
+    max_width: usize,
 }
 
 impl TextInput {
@@ -63,7 +63,6 @@ impl TextInput {
     }
 
     pub fn update_scroll(&mut self, max_width: usize) {
-        
         // Ensure cursor is visible
         if self.cursor < self.scroll {
             self.scroll = self.cursor;

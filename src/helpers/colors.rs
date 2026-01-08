@@ -1,5 +1,5 @@
-use ratatui::style::Color;
 use crate::helpers::palette::*;
+use ratatui::style::Color;
 
 #[derive(Clone)]
 pub struct ColorPicker {
@@ -13,7 +13,6 @@ impl Default for ColorPicker {
 }
 
 impl ColorPicker {
-    
     pub fn from_theme(theme: &Theme) -> Self {
         Self {
             palette_a: [

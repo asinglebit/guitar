@@ -1,6 +1,4 @@
-use ratatui::crossterm::event::{
-    KeyModifiers
-};
+use ratatui::crossterm::event::KeyModifiers;
 
 // Truncate a string to a maximum width and appends "..." if it was cut off
 pub fn truncate_with_ellipsis(text: &str, max_width: usize) -> String {
@@ -183,9 +181,15 @@ pub fn sanitize(string: String) -> String {
 // A helper to convert KeyModifiers to string
 pub fn modifiers_to_string(mods: KeyModifiers) -> String {
     let mut parts = Vec::new();
-    if mods.contains(KeyModifiers::CONTROL) { parts.push("Ctrl"); }
-    if mods.contains(KeyModifiers::SHIFT) { parts.push("Shift"); }
-    if mods.contains(KeyModifiers::ALT) { parts.push("Alt"); }
+    if mods.contains(KeyModifiers::CONTROL) {
+        parts.push("Ctrl");
+    }
+    if mods.contains(KeyModifiers::SHIFT) {
+        parts.push("Shift");
+    }
+    if mods.contains(KeyModifiers::ALT) {
+        parts.push("Alt");
+    }
     parts.join(" + ")
 }
 

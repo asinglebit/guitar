@@ -30,7 +30,9 @@ pub fn checkout_branch(
     fn checkout(repo: &Repository, branch_name: &str) -> Result<(), git2::Error> {
         let branch = repo.find_branch(branch_name, BranchType::Local)?;
         repo.set_head(branch.get().name().unwrap())?;
-        repo.checkout_head(Some(CheckoutBuilder::default().allow_conflicts(true).force()))
+        repo.checkout_head(Some(
+            CheckoutBuilder::default().allow_conflicts(true).force(),
+        ))
     }
 
     // If branch_name already exists as a local branch, checkout directly
@@ -50,13 +52,8 @@ pub fn checkout_branch(
 
             let mut local_branch = repo.branch(branch, &commit, false)?;
             local_branch.set_upstream(Some(branch_name))?;
-            local.entry(alias)
-                .or_default()
-                .push(branch.to_string());
-            visible
-                .entry(alias)
-                .or_default()
-                .push(branch.to_string());
+            local.entry(alias).or_default().push(branch.to_string());
+            visible.entry(alias).or_default().push(branch.to_string());
 
             return checkout(repo, branch);
         }
@@ -215,7 +212,10 @@ pub fn fetch_over_ssh(
         fetch_options.prune(FetchPrune::On);
 
         remote.fetch(
-            &["refs/heads/*:refs/remotes/origin/*", "refs/tags/*:refs/tags/*"],
+            &[
+                "refs/heads/*:refs/remotes/origin/*",
+                "refs/tags/*:refs/tags/*",
+            ],
             Some(&mut fetch_options),
             None,
         )?;
@@ -259,7 +259,7 @@ pub fn push_over_ssh(
 
         // Build refspecs
         let mut refspecs = vec![];
-        
+
         // Branch
         let branch_refspec = if force {
             format!("+refs/heads/{0}:refs/heads/{0}", branch)
@@ -275,7 +275,10 @@ pub fn push_over_ssh(
         }
 
         // Perform the push
-        remote.push(&refspecs.iter().map(|s| s.as_str()).collect::<Vec<_>>(), Some(&mut push_options))?;
+        remote.push(
+            &refspecs.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+            Some(&mut push_options),
+        )?;
 
         // println!("Push complete for branch '{}'", branch);
         Ok(())
@@ -293,14 +296,11 @@ pub fn create_branch(repo: &Repository, branch_name: &str, target_oid: Oid) -> R
 }
 
 pub fn delete_branch(repo: &Repository, branch: &str) -> Result<(), Error> {
-
     // Try deleting as a local branch first
     if let Ok(mut local_branch) = repo.find_branch(branch, BranchType::Local) {
-
         // Delete the local branch
         local_branch.delete()?;
     } else {
-
         // Delete remote-tracking branch (assume "origin" remote for now)
         let ref_name = format!("refs/remotes/origin/{}", branch);
 
@@ -315,10 +315,7 @@ pub fn delete_branch(repo: &Repository, branch: &str) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn stash(
-    repo: &mut Repository,
-) -> Result<Oid, git2::Error> {
-
+pub fn stash(repo: &mut Repository) -> Result<Oid, git2::Error> {
     let flags = StashFlags::DEFAULT | StashFlags::INCLUDE_UNTRACKED;
 
     let message = {
@@ -329,21 +326,12 @@ pub fn stash(
         format!("{} {}", short_id, summary)
     };
 
-    let stash_index = repo.stash_save(
-        &repo.signature()?,
-        message.as_str(),
-        Some(flags),
-    )?;
+    let stash_index = repo.stash_save(&repo.signature()?, message.as_str(), Some(flags))?;
 
     Ok(stash_index)
 }
 
-pub fn pop(
-    repo: &mut Repository,
-    target_oid: &Oid,
-    apply: bool
-) -> Result<(), git2::Error> {
-
+pub fn pop(repo: &mut Repository, target_oid: &Oid, apply: bool) -> Result<(), git2::Error> {
     let mut stash_index: Option<usize> = None;
 
     repo.stash_foreach(|index, _message, oid| {
@@ -366,18 +354,11 @@ pub fn pop(
     Ok(())
 }
 
-pub fn tag(
-    repo: &Repository,
-    oid: git2::Oid,
-    tag: &str,
-) -> Result<Oid, Error> {
+pub fn tag(repo: &Repository, oid: git2::Oid, tag: &str) -> Result<Oid, Error> {
     repo.tag_lightweight(tag, &repo.find_object(oid, None)?, false)
 }
 
-pub fn untag(
-    repo: &Repository,
-    tag: &str
-) -> Result<(), Error> {
+pub fn untag(repo: &Repository, tag: &str) -> Result<(), Error> {
     repo.tag_delete(tag)
 }
 
@@ -405,11 +386,7 @@ pub fn cherry_pick_commit(
     // If conflicts exist
     if index.has_conflicts() {
         if allow_conflicts {
-            let conflicts: Vec<_> = index
-                .conflicts()?
-                .flatten()
-                .filter_map(|e| e.our)
-                .collect();
+            let conflicts: Vec<_> = index.conflicts()?.flatten().filter_map(|e| e.our).collect();
             for conflict in conflicts {
                 index.add(&conflict)?;
             }
@@ -426,23 +403,21 @@ pub fn cherry_pick_commit(
     let sig = repo.signature()?;
 
     // Commit message
-    let commit_message = message.unwrap_or_else(|| commit.message().unwrap_or("Cherry-pick commit"));
+    let commit_message =
+        message.unwrap_or_else(|| commit.message().unwrap_or("Cherry-pick commit"));
 
     // Determine parents: HEAD
     let parents = [&head_commit];
 
     // Create the new commit
-    let new_commit_oid = repo.commit(
-        Some("HEAD"),
-        &sig,
-        &sig,
-        commit_message,
-        &tree,
-        &parents,
-    )?;
+    let new_commit_oid = repo.commit(Some("HEAD"), &sig, &sig, commit_message, &tree, &parents)?;
 
     // Update working directory
-    repo.checkout_head(Some(CheckoutBuilder::default().allow_conflicts(allow_conflicts).force()))?;
+    repo.checkout_head(Some(
+        CheckoutBuilder::default()
+            .allow_conflicts(allow_conflicts)
+            .force(),
+    ))?;
 
     Ok(new_commit_oid)
 }

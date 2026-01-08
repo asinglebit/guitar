@@ -1,7 +1,7 @@
+use crate::helpers::palette::Theme;
 use chrono::{Duration, NaiveDate};
 use im::HashMap;
 use ratatui::{style::Style, text::Span};
-use crate::helpers::palette::Theme;
 
 pub const WEEKS: usize = 53;
 pub const DAYS: usize = 7;

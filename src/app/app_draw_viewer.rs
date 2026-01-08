@@ -14,9 +14,7 @@ use ratatui::{
 };
 
 impl App {
-
     pub fn draw_viewer(&mut self, frame: &mut Frame) {
-        
         // Padding
         let padding = ratatui::widgets::Padding {
             left: 1,
@@ -24,7 +22,7 @@ impl App {
             top: 0,
             bottom: 0,
         };
-        
+
         // Calculate maximum available width for text
         // let available_width = self.layout.graph.width as usize - 1;
         // let max_text_width = available_width.saturating_sub(2);
@@ -39,12 +37,20 @@ impl App {
         } else if self.viewer_selected >= total_lines {
             self.viewer_selected = total_lines - 1;
         }
-        
+
         // Trap selection
-        self.trap_selection(self.viewer_selected, &self.viewer_scroll, total_lines, visible_height);
+        self.trap_selection(
+            self.viewer_selected,
+            &self.viewer_scroll,
+            total_lines,
+            visible_height,
+        );
 
         // Calculate scroll
-        let start = self.viewer_scroll.get().min(total_lines.saturating_sub(visible_height));
+        let start = self
+            .viewer_scroll
+            .get()
+            .min(total_lines.saturating_sub(visible_height));
         let end = (start + visible_height).min(total_lines);
 
         // Setup list items
@@ -62,23 +68,31 @@ impl App {
             .collect();
 
         // Setup the list
-        let list = List::new(list_items)
-            .block(
-                Block::default()
-                    .padding(padding)
-                    .borders(Borders::RIGHT | Borders::LEFT)
-                    .border_style(Style::default().fg(self.theme.COLOR_BORDER))
-                    .border_type(ratatui::widgets::BorderType::Rounded),
-            );
+        let list = List::new(list_items).block(
+            Block::default()
+                .padding(padding)
+                .borders(Borders::RIGHT | Borders::LEFT)
+                .border_style(Style::default().fg(self.theme.COLOR_BORDER))
+                .border_type(ratatui::widgets::BorderType::Rounded),
+        );
 
         // Render the list
         frame.render_widget(list, self.layout.graph);
 
         // Setup the scrollbar
-        let mut scrollbar_state = ScrollbarState::new(total_lines.saturating_sub(visible_height)).position(self.viewer_scroll.get());
+        let mut scrollbar_state = ScrollbarState::new(total_lines.saturating_sub(visible_height))
+            .position(self.viewer_scroll.get());
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(if self.is_inspector || self.is_status { Some("─") } else { Some("╮") })
-            .end_symbol(if self.is_inspector || self.is_status { Some("─") } else { Some("╯") })
+            .begin_symbol(if self.is_inspector || self.is_status {
+                Some("─")
+            } else {
+                Some("╮")
+            })
+            .end_symbol(if self.is_inspector || self.is_status {
+                Some("─")
+            } else {
+                Some("╯")
+            })
             .track_symbol(Some("│"))
             .thumb_symbol("▌")
             .thumb_style(Style::default().fg(if self.focus == Focus::Viewport {
@@ -94,10 +108,8 @@ impl App {
     pub fn open_viewer(&mut self) {
         match self.focus {
             Focus::StatusTop => {
-
                 // If a commit is selected in the top graph view
                 if self.graph_selected != 0 && !self.current_diff.is_empty() {
-
                     // Set the file_name to the currently selected file in the diff
                     self.file_name = Some(
                         self.current_diff
@@ -111,9 +123,7 @@ impl App {
                     let oid = self.oids.get_oid_by_idx(self.graph_selected);
                     self.update_viewer(*oid);
                     self.viewport = Viewport::Viewer;
-
                 } else if self.graph_selected == 0 && self.uncommitted.is_staged {
-                    
                     // If HEAD is selected and staged uncommitted changes exist
                     let modified_len = self.uncommitted.staged.modified.len();
                     let added_len = self.uncommitted.staged.added.len();
@@ -142,7 +152,6 @@ impl App {
                 }
             }
             Focus::StatusBottom => {
-
                 // If uncommitted unstaged changes exist in bottom status view
                 if self.graph_selected == 0 && self.uncommitted.is_unstaged {
                     let modified_len = self.uncommitted.unstaged.modified.len();
@@ -176,18 +185,21 @@ impl App {
     }
 
     pub fn update_viewer(&mut self, oid: Oid) {
-
         // Clone the current file name
         let filename = self.file_name.clone().unwrap();
 
         // Decide whether to use committed version or uncommitted (workdir)
-        let (original_lines, hunks) = if oid == Oid::zero() {(
-            get_file_at_workdir(&self.repo, &filename), // get current file in workdir
-            get_file_diff_at_workdir(&self.repo, &filename).unwrap_or_default(), // get diff for workdir
-        )} else {(
-            get_file_at_oid(&self.repo, oid, &filename), // get file at commit
-            get_file_diff_at_oid(&self.repo, oid, &filename).unwrap_or_default(), // get diff for commit
-        )};
+        let (original_lines, hunks) = if oid == Oid::zero() {
+            (
+                get_file_at_workdir(&self.repo, &filename), // get current file in workdir
+                get_file_diff_at_workdir(&self.repo, &filename).unwrap_or_default(), // get diff for workdir
+            )
+        } else {
+            (
+                get_file_at_oid(&self.repo, oid, &filename), // get file at commit
+                get_file_diff_at_oid(&self.repo, oid, &filename).unwrap_or_default(), // get diff for commit
+            )
+        };
 
         self.viewer_lines.clear(); // Clear current viewer lines
         let mut current_line: usize = 0; // Current line in new file
@@ -216,22 +228,28 @@ impl App {
 
             // Add unchanged lines before this hunk
             while current_line < old_start_idx && current_line < original_lines.len() {
-
                 // Wrap line to fit viewport width
                 let wrapped = wrap_words(
                     original_lines[current_line].clone(),
                     (self.layout.graph.width as usize).saturating_sub(8),
                 );
                 for (idx, line) in wrapped.into_iter().enumerate() {
-
                     // Push each wrapped line into viewer with line numbers
                     self.viewer_lines.push(ListItem::new(
                         Line::from(vec![
                             Span::styled(
-                                (if idx == 0 { format!("{:3}  ", current_line + 1) } else { "     ".to_string() }).to_string(),
+                                (if idx == 0 {
+                                    format!("{:3}  ", current_line + 1)
+                                } else {
+                                    "     ".to_string()
+                                })
+                                .to_string(),
                                 Style::default().fg(self.theme.COLOR_BORDER),
                             ),
-                            Span::styled(line.to_string(), Style::default().fg(self.theme.COLOR_GREY_500)),
+                            Span::styled(
+                                line.to_string(),
+                                Style::default().fg(self.theme.COLOR_GREY_500),
+                            ),
                         ])
                         .style(Style::default()),
                     ));
@@ -239,31 +257,66 @@ impl App {
                 current_line += 1;
                 current_line_old += 1;
             }
-            
+
             // Process lines in the hunk
             for line in hunk.lines.iter().filter(|l| l.origin != 'H') {
                 let text = line.content.trim_end_matches('\n'); // remove trailing newline
 
                 // Determine styling, prefix, color, and line number based on line origin
                 let (style, prefix, side, fg, count) = match line.origin {
-                    '-' => (Style::default().bg(self.theme.COLOR_DARK_RED).fg(self.theme.COLOR_RED), "- ".to_string(), self.theme.COLOR_RED, self.theme.COLOR_RED, current_line_old + 1),
-                    '+' => (Style::default().bg(self.theme.COLOR_LIGHT_GREEN_900).fg(self.theme.COLOR_GREEN), "+ ".to_string(), self.theme.COLOR_GREEN, self.theme.COLOR_GREEN, current_line + 1),
-                    ' ' => (Style::default(), "".to_string(), self.theme.COLOR_BORDER, self.theme.COLOR_GREY_500, current_line + 1),
-                    _ => (Style::default(), "".to_string(), self.theme.COLOR_BORDER, self.theme.COLOR_GREY_500, 0)
+                    '-' => (
+                        Style::default()
+                            .bg(self.theme.COLOR_DARK_RED)
+                            .fg(self.theme.COLOR_RED),
+                        "- ".to_string(),
+                        self.theme.COLOR_RED,
+                        self.theme.COLOR_RED,
+                        current_line_old + 1,
+                    ),
+                    '+' => (
+                        Style::default()
+                            .bg(self.theme.COLOR_LIGHT_GREEN_900)
+                            .fg(self.theme.COLOR_GREEN),
+                        "+ ".to_string(),
+                        self.theme.COLOR_GREEN,
+                        self.theme.COLOR_GREEN,
+                        current_line + 1,
+                    ),
+                    ' ' => (
+                        Style::default(),
+                        "".to_string(),
+                        self.theme.COLOR_BORDER,
+                        self.theme.COLOR_GREY_500,
+                        current_line + 1,
+                    ),
+                    _ => (
+                        Style::default(),
+                        "".to_string(),
+                        self.theme.COLOR_BORDER,
+                        self.theme.COLOR_GREY_500,
+                        0,
+                    ),
                 };
 
                 // Wrap the line to viewport width
-                let wrapped = wrap_words(format!("{}{}", prefix, text), (self.layout.graph.width as usize).saturating_sub(9));
+                let wrapped = wrap_words(
+                    format!("{}{}", prefix, text),
+                    (self.layout.graph.width as usize).saturating_sub(9),
+                );
                 for (idx, line) in wrapped.into_iter().enumerate() {
-                    
                     // Push each wrapped line into the viewer
                     self.viewer_lines.push(
                         ListItem::new(Line::from(vec![
                             Span::styled(
-                                (if idx == 0 {format!("{:3}  ", count)} else {"     ".to_string()}).to_string(),
+                                (if idx == 0 {
+                                    format!("{:3}  ", count)
+                                } else {
+                                    "     ".to_string()
+                                })
+                                .to_string(),
                                 Style::default().fg(side),
                             ),
-                            Span::styled(line.to_string(), Style::default().fg(fg))
+                            Span::styled(line.to_string(), Style::default().fg(fg)),
                         ]))
                         .style(style),
                     );
@@ -296,10 +349,18 @@ impl App {
                 self.viewer_lines.push(
                     ListItem::new(Line::from(vec![
                         Span::styled(
-                            (if idx == 0 {format!("{:3}  ", current_line + 1)} else {"     ".to_string()}).to_string(),
+                            (if idx == 0 {
+                                format!("{:3}  ", current_line + 1)
+                            } else {
+                                "     ".to_string()
+                            })
+                            .to_string(),
                             Style::default().fg(self.theme.COLOR_BORDER),
                         ),
-                        Span::styled(line.to_string(), Style::default().fg(self.theme.COLOR_GREY_500)),
+                        Span::styled(
+                            line.to_string(),
+                            Style::default().fg(self.theme.COLOR_GREY_500),
+                        ),
                     ]))
                     .style(Style::default()),
                 );

@@ -29,9 +29,7 @@ pub struct Layout {
 }
 
 impl App {
-
     pub fn layout(&mut self, frame: &mut Frame) {
-
         let is_settings = self.viewport == Viewport::Splash || self.viewport == Viewport::Settings;
         let is_inspector = !is_settings && self.is_inspector && self.graph_selected != 0;
         let is_status = !is_settings && self.is_status;
@@ -57,7 +55,13 @@ impl App {
         let chunks_horizontal = ratatui::layout::Layout::default()
             .direction(ratatui::layout::Direction::Horizontal)
             .constraints([
-                ratatui::layout::Constraint::Length(if (self.is_branches || self.is_tags || self.is_stashes ) && !is_settings { 45 } else { 0 }),
+                ratatui::layout::Constraint::Length(
+                    if (self.is_branches || self.is_tags || self.is_stashes) && !is_settings {
+                        45
+                    } else {
+                        0
+                    },
+                ),
                 ratatui::layout::Constraint::Max(500),
                 ratatui::layout::Constraint::Length(if is_right_pane { 46 } else { 0 }),
             ])
@@ -66,25 +70,71 @@ impl App {
         let chunks_pane_left = ratatui::layout::Layout::default()
             .direction(ratatui::layout::Direction::Vertical)
             .constraints([
-                ratatui::layout::Constraint::Percentage(if self.is_branches { if !self.is_tags && !self.is_stashes { 100 } else if self.is_tags && self.is_stashes { 33 } else { 50 } } else { 0 }),
-                ratatui::layout::Constraint::Percentage(if self.is_tags { if !self.is_branches && !self.is_stashes { 100 } else if self.is_branches && self.is_stashes { 33 } else { 50 } } else { 0 }),
-                ratatui::layout::Constraint::Percentage(if self.is_stashes { if !self.is_branches && !self.is_tags { 100 } else if self.is_branches && self.is_tags { 33 } else { 50 } } else { 0 }),
+                ratatui::layout::Constraint::Percentage(if self.is_branches {
+                    if !self.is_tags && !self.is_stashes {
+                        100
+                    } else if self.is_tags && self.is_stashes {
+                        33
+                    } else {
+                        50
+                    }
+                } else {
+                    0
+                }),
+                ratatui::layout::Constraint::Percentage(if self.is_tags {
+                    if !self.is_branches && !self.is_stashes {
+                        100
+                    } else if self.is_branches && self.is_stashes {
+                        33
+                    } else {
+                        50
+                    }
+                } else {
+                    0
+                }),
+                ratatui::layout::Constraint::Percentage(if self.is_stashes {
+                    if !self.is_branches && !self.is_tags {
+                        100
+                    } else if self.is_branches && self.is_tags {
+                        33
+                    } else {
+                        50
+                    }
+                } else {
+                    0
+                }),
             ])
             .split(chunks_horizontal[0]);
 
         let chunks_pane_right = ratatui::layout::Layout::default()
             .direction(ratatui::layout::Direction::Vertical)
             .constraints([
-                ratatui::layout::Constraint::Percentage(if is_inspector { if !is_status { 100 } else { 50 } } else { 0 }),
-                ratatui::layout::Constraint::Percentage(if is_status { if !is_inspector { 100 } else { 50 } } else { 0 }),
+                ratatui::layout::Constraint::Percentage(if is_inspector {
+                    if !is_status { 100 } else { 50 }
+                } else {
+                    0
+                }),
+                ratatui::layout::Constraint::Percentage(if is_status {
+                    if !is_inspector { 100 } else { 50 }
+                } else {
+                    0
+                }),
             ])
             .split(chunks_horizontal[2]);
 
         let chunks_status = ratatui::layout::Layout::default()
             .direction(ratatui::layout::Direction::Vertical)
             .constraints([
-                ratatui::layout::Constraint::Percentage(if self.graph_selected == 0 { 50 } else { 100 }),
-                ratatui::layout::Constraint::Percentage(if self.graph_selected == 0 { 50 } else { 0 }),
+                ratatui::layout::Constraint::Percentage(if self.graph_selected == 0 {
+                    50
+                } else {
+                    100
+                }),
+                ratatui::layout::Constraint::Percentage(if self.graph_selected == 0 {
+                    50
+                } else {
+                    0
+                }),
             ])
             .split(chunks_pane_right[1]);
 
@@ -142,8 +192,16 @@ impl App {
             status_top_scrollbar.height += 1;
         }
         let mut status_top = chunks_status[0];
-        status_top.y = if self.is_inspector && self.graph_selected != 0 { status_top.y - 1 } else { status_top.y + 1 };
-        status_top.height = if self.is_inspector && self.graph_selected != 0 { status_top.height + 1 } else { status_top.height };
+        status_top.y = if self.is_inspector && self.graph_selected != 0 {
+            status_top.y - 1
+        } else {
+            status_top.y + 1
+        };
+        status_top.height = if self.is_inspector && self.graph_selected != 0 {
+            status_top.height + 1
+        } else {
+            status_top.height
+        };
         status_top.width = status_top.width.saturating_sub(1);
 
         // Status bottom
@@ -174,11 +232,17 @@ impl App {
             status_bottom,
             status_bottom_scrollbar,
             statusbar_left: chunks_status_bar[0],
-            statusbar_right: chunks_status_bar[1]
+            statusbar_right: chunks_status_bar[1],
         }
     }
 
-    pub fn trap_selection(&self, selected: usize, scroll: &Cell<usize>, total_lines: usize, visible_height: usize) {
+    pub fn trap_selection(
+        &self,
+        selected: usize,
+        scroll: &Cell<usize>,
+        total_lines: usize,
+        visible_height: usize,
+    ) {
         if visible_height == 0 || total_lines == 0 {
             scroll.set(0);
             return;
@@ -232,7 +296,7 @@ impl App {
 
         let _ = fs::write(path, serde_json::to_string_pretty(&value).unwrap());
     }
-    
+
     pub fn load_layout(&mut self) {
         let mut pathbuf = dirs::config_dir().unwrap();
         pathbuf.push("guitar");

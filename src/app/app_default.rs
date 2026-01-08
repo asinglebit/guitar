@@ -22,7 +22,11 @@ use std::{cell::RefCell, env, path::PathBuf, rc::Rc};
 impl Default for App {
     fn default() -> Self {
         let args: Vec<String> = env::args().collect();
-        let path = if args.len() > 1 { &args[1] } else { &".".to_string() };
+        let path = if args.len() > 1 {
+            &args[1]
+        } else {
+            &".".to_string()
+        };
         let theme = Theme::default();
         let color = Rc::new(RefCell::new(ColorPicker::from_theme(&theme)));
         let canonical_path = std::fs::canonicalize(path).expect("Invalid repo path");
@@ -35,7 +39,7 @@ impl Default for App {
             Span::styled("i", Style::default().fg(theme.COLOR_GRASS)),
             Span::styled("t", Style::default().fg(theme.COLOR_GRASS)),
             Span::styled("a", Style::default().fg(theme.COLOR_GRASS)),
-            Span::styled("╭", Style::default().fg(theme.COLOR_GREEN))
+            Span::styled("╭", Style::default().fg(theme.COLOR_GREEN)),
         ];
         let heatmap = {
             let counts = commits_per_day(&repo);
@@ -80,7 +84,7 @@ impl Default for App {
 
             // Interface
             layout: Layout::default(),
-            
+
             // Focus
             is_shas: false,
             is_minimal: false,
@@ -95,7 +99,7 @@ impl Default for App {
             // Branches
             branches_selected: 0,
             branches_scroll: 0.into(),
-            
+
             // Tags
             tags_selected: 0,
             tags_scroll: 0.into(),
@@ -107,23 +111,23 @@ impl Default for App {
             // Graph
             graph_selected: 0,
             graph_scroll: 0.into(),
-            
+
             // Settings
             settings_selected: 0,
             settings_selections: Vec::new(),
-    
+
             // Viewer
             viewer_selected: 0,
             viewer_scroll: 0.into(),
-    
+
             // Inspector
             inspector_selected: 0,
             inspector_scroll: 0.into(),
-            
+
             // Status top
             status_top_selected: 0,
             status_top_scroll: 0.into(),
-            
+
             // Status bottom
             status_bottom_selected: 0,
             status_bottom_scroll: 0.into(),
@@ -144,7 +148,7 @@ impl Default for App {
             modal_delete_tag_selected: 0,
 
             // Exit
-            is_exit: false,   
+            is_exit: false,
         }
     }
 }

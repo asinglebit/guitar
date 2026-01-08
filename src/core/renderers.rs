@@ -1,7 +1,3 @@
-use im::{HashSet, Vector};
-use indexmap::IndexMap;
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
-use git2::Repository;
 use crate::helpers::keymap::{Command, KeyBinding, keycode_to_visual_string};
 use crate::{
     core::{
@@ -17,10 +13,14 @@ use crate::{
     },
     layers,
 };
+use git2::Repository;
+use im::{HashSet, Vector};
+use indexmap::IndexMap;
 use ratatui::{
     style::{Color, Style},
     text::{Line, Span},
 };
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub fn render_graph_range(
     theme: &Theme,
@@ -31,14 +31,12 @@ pub fn render_graph_range(
     start: usize,
     end: usize,
 ) -> Vec<Line<'static>> {
-
     let mut layers = layers!(Rc::new(RefCell::new(ColorPicker::from_theme(theme))));
     let mut lines: Vec<Line> = Vec::new();
 
     // Go through the sorted commits, inferring the graph
     let sorted_aliases = oids.get_sorted_aliases();
     for (global_idx, alias) in sorted_aliases.iter().enumerate().take(end).skip(start) {
-
         // Get commit oid
         let oid = oids.get_oid_by_alias(*alias);
 
@@ -51,13 +49,22 @@ pub fn render_graph_range(
         let mut is_merged_before = false;
         let mut lane_idx = 0;
 
-        if history.is_empty() {return vec![Line::default()];}
+        if history.is_empty() {
+            return vec![Line::default()];
+        }
         let delta = (history.len() + global_idx).saturating_sub(end);
-        let prev = if delta == 0 { None } else { history.get(delta - 1) };
+        let prev = if delta == 0 {
+            None
+        } else {
+            history.get(delta - 1)
+        };
         let last = history.get(delta).unwrap();
 
         if oids.is_zero(oid) {
-            lines.push(Line::from(Span::styled(" ◌", Style::default().fg(theme.COLOR_GREY_400))));
+            lines.push(Line::from(Span::styled(
+                " ◌",
+                Style::default().fg(theme.COLOR_GREY_400),
+            )));
             continue;
         }
 
@@ -68,7 +75,9 @@ pub fn render_graph_range(
             if chunk.is_dummy()
                 && let Some(prev_snapshot) = prev
                 && let Some(prev) = prev_snapshot.get(lane_idx)
-                && ((prev.parent_a != NONE && prev.parent_b == NONE) || (prev.parent_a == NONE && prev.parent_b != NONE)) {
+                && ((prev.parent_a != NONE && prev.parent_b == NONE)
+                    || (prev.parent_a == NONE && prev.parent_b != NONE))
+            {
                 branching_lanes.push(lane_idx);
                 continue;
             }
@@ -83,7 +92,10 @@ pub fn render_graph_range(
         }
 
         for chunk in last.iter() {
-            if is_commit_found && !branching_lanes.is_empty() && let Some(&closest_lane) = branching_lanes.first() {
+            if is_commit_found
+                && !branching_lanes.is_empty()
+                && let Some(&closest_lane) = branching_lanes.first()
+            {
                 if closest_lane == lane_idx {
                     branching_lanes.remove(0);
                 } else if lane_idx < closest_lane {
@@ -103,7 +115,9 @@ pub fn render_graph_range(
                     match prev_snapshot.get(lane_idx) {
                         Some(prev) => {
                             // Dummy in the end, chunk exists ont the same lane in prev
-                            if (prev.parent_a != NONE && prev.parent_b == NONE) || (prev.parent_a == NONE && prev.parent_b != NONE) {
+                            if (prev.parent_a != NONE && prev.parent_b == NONE)
+                                || (prev.parent_a == NONE && prev.parent_b != NONE)
+                            {
                                 layers.commit(SYM_EMPTY, lane_idx);
                                 layers.commit(SYM_EMPTY, lane_idx);
                                 layers.pipe(SYM_BRANCH_UP, lane_idx);
@@ -147,9 +161,9 @@ pub fn render_graph_range(
                     let mut is_merger_found = false;
                     let mut merger_idx: usize = 0;
                     for chunk_nested in last {
-                        if ((chunk_nested.parent_a != NONE && chunk_nested.parent_b == NONE) ||
-                            (chunk_nested.parent_a == NONE && chunk_nested.parent_b != NONE)) &&
-                            chunk.parent_b == chunk_nested.parent_a
+                        if ((chunk_nested.parent_a != NONE && chunk_nested.parent_b == NONE)
+                            || (chunk_nested.parent_a == NONE && chunk_nested.parent_b != NONE))
+                            && chunk.parent_b == chunk_nested.parent_a
                         {
                             is_merger_found = true;
                             break;
@@ -178,14 +192,16 @@ pub fn render_graph_range(
                                 layers.merge(SYM_EMPTY, merger_idx);
                                 layers.merge(SYM_EMPTY, merger_idx);
                             } else {
-
                                 // Before the commit
                                 if !is_merger_found {
                                     layers.merge(SYM_EMPTY, merger_idx);
                                     layers.merge(SYM_EMPTY, merger_idx);
-                                } else if ((chunk_nested.parent_a != NONE && chunk_nested.parent_b == NONE) ||
-                                    (chunk_nested.parent_a == NONE && chunk_nested.parent_b != NONE)) &&
-                                    (chunk.parent_a == chunk_nested.parent_a || chunk.parent_b == chunk_nested.parent_a)
+                                } else if ((chunk_nested.parent_a != NONE
+                                    && chunk_nested.parent_b == NONE)
+                                    || (chunk_nested.parent_a == NONE
+                                        && chunk_nested.parent_b != NONE))
+                                    && (chunk.parent_a == chunk_nested.parent_a
+                                        || chunk.parent_b == chunk_nested.parent_a)
                                 {
                                     // We need to find if the merger is further to the left than on the next lane
                                     if chunk_nested_idx == merger_idx {
@@ -216,9 +232,12 @@ pub fn render_graph_range(
                         } else {
                             // After the commit
                             if is_merger_found && !is_merged_before {
-                                if ((chunk_nested.parent_a != NONE && chunk_nested.parent_b == NONE) ||
-                                    (chunk_nested.parent_a == NONE && chunk_nested.parent_b != NONE)) &&
-                                    (chunk.parent_a == chunk_nested.parent_a || chunk.parent_b == chunk_nested.parent_a)
+                                if ((chunk_nested.parent_a != NONE
+                                    && chunk_nested.parent_b == NONE)
+                                    || (chunk_nested.parent_a == NONE
+                                        && chunk_nested.parent_b != NONE))
+                                    && (chunk.parent_a == chunk_nested.parent_a
+                                        || chunk.parent_b == chunk_nested.parent_a)
                                 {
                                     layers.merge(SYM_MERGE_LEFT_FROM, merger_idx);
                                     layers.merge(SYM_EMPTY, merger_idx);
@@ -236,7 +255,6 @@ pub fn render_graph_range(
                     }
 
                     if !is_merger_found {
-                        
                         // Count how many dummies in the end to get the real last element, append there
                         let mut idx = last.len() - 1;
                         let mut trailing_dummies = 0;
@@ -262,7 +280,7 @@ pub fn render_graph_range(
                             if prev_trailing_dummies < trailing_dummies {
                                 trailing_dummies = prev_trailing_dummies;
                             }
-                        }   
+                        }
 
                         if trailing_dummies > 0
                             && prev.is_some()
@@ -328,7 +346,6 @@ pub fn render_graph_range(
 
     remove_empty_columns(&mut lines);
     lines
-
 }
 
 pub fn remove_empty_columns(lines: &mut Vec<Line<'_>>) {
@@ -382,11 +399,9 @@ pub fn render_buffer_range(
     start: usize,
     end: usize,
 ) -> Vec<Line<'static>> {
-
     let mut lines = Vec::new();
 
     for global_idx in start..end {
-
         if history.is_empty() {
             lines.push(Line::default());
             continue;
@@ -403,12 +418,10 @@ pub fn render_buffer_range(
 
         let oid = oids.get_oid_by_idx(global_idx);
 
-        let mut spans = vec![
-            Span::styled(
-                format!("{:.2} ", oid),
-                Style::default().fg(theme.COLOR_TEXT),
-            )
-        ];
+        let mut spans = vec![Span::styled(
+            format!("{:.2} ", oid),
+            Style::default().fg(theme.COLOR_TEXT),
+        )];
 
         let formatted_snapshot = snapshot
             .iter()
@@ -423,7 +436,11 @@ pub fn render_buffer_range(
                     (NONE, NONE) => "".to_string(),
                     (a, NONE) => format!("{:.2},--", oids.get_oid_by_alias(a)),
                     (NONE, b) => format!("--,{:.2}", oids.get_oid_by_alias(b)),
-                    (a, b) => format!("{:.2},{:.2}", oids.get_oid_by_alias(a), oids.get_oid_by_alias(b)),
+                    (a, b) => format!(
+                        "{:.2},{:.2}",
+                        oids.get_oid_by_alias(a),
+                        oids.get_oid_by_alias(b)
+                    ),
                 };
 
                 format!("{}({})", oid_str, parents_formatted)
@@ -448,7 +465,6 @@ pub fn render_sha_range(
     start: usize,
     end: usize,
 ) -> Vec<Line<'static>> {
-    
     let mut lines = Vec::new();
 
     for global_idx in start..end {
@@ -456,7 +472,7 @@ pub fn render_sha_range(
 
         if alias != NONE {
             let oid = oids.get_oid_by_alias(alias);
-            
+
             lines.push(Line::from(Span::styled(
                 format!("{:.9} ", oid),
                 Style::default().fg(theme.COLOR_GREY_700),
@@ -526,11 +542,7 @@ pub fn render_message_range(
                     // Render tags
                     if tags.iter().any(|b| b == tag) {
                         spans.push(Span::styled(
-                            format!(
-                                "{} {} ",
-                                SYM_TAG,
-                                tag
-                            ),
+                            format!("{} {} ", SYM_TAG, tag),
                             Style::default().fg(if let Some(color) = tag_colors.get(&alias) {
                                 *color
                             } else {
@@ -542,11 +554,14 @@ pub fn render_message_range(
             }
 
             if oids.stashes.contains(&alias) {
-                spans.push(Span::styled(format!("{SYM_COMMIT_STASH} stash "), Style::default().fg(if let Some(color) = stashes_colors.get(&alias) {
-                    *color
-                } else {
-                    theme.COLOR_TEXT
-                })));
+                spans.push(Span::styled(
+                    format!("{SYM_COMMIT_STASH} stash "),
+                    Style::default().fg(if let Some(color) = stashes_colors.get(&alias) {
+                        *color
+                    } else {
+                        theme.COLOR_TEXT
+                    }),
+                ));
             }
 
             spans.push(Span::styled(
@@ -593,34 +608,51 @@ pub fn render_message_range(
     lines
 }
 
-pub fn render_keybindings(theme: &Theme, keymap: &IndexMap<KeyBinding, Command>, width: usize) -> Vec<Line<'static>> {
-    keymap.iter().map(|(kb, cmd)| {
-        // Build key string
-        let mut key_string = modifiers_to_string(kb.modifiers);
-        if !key_string.is_empty() {
-            key_string = format!("{} + ", key_string);
-        }
-        key_string.push_str(&keycode_to_visual_string(kb.code));
+pub fn render_keybindings(
+    theme: &Theme,
+    keymap: &IndexMap<KeyBinding, Command>,
+    width: usize,
+) -> Vec<Line<'static>> {
+    keymap
+        .iter()
+        .map(|(kb, cmd)| {
+            // Build key string
+            let mut key_string = modifiers_to_string(kb.modifiers);
+            if !key_string.is_empty() {
+                key_string = format!("{} + ", key_string);
+            }
+            key_string.push_str(&keycode_to_visual_string(kb.code));
 
-        // Command string
-        let mut cmd_string = format!("{:?}", cmd);
-        cmd_string = pascal_to_spaced(&cmd_string);
+            // Command string
+            let mut cmd_string = format!("{:?}", cmd);
+            cmd_string = pascal_to_spaced(&cmd_string);
 
-        // Calculate available space for filler
-        let key_len = key_string.len();
-        let cmd_len = cmd_string.len();
-        let filler = " ";
-        let mut filler_fill = 0;
-        if width > key_len + cmd_len {
-            filler_fill = (width - key_len - cmd_len).saturating_sub(4); // -2 for spaces
-        }
+            // Calculate available space for filler
+            let key_len = key_string.len();
+            let cmd_len = cmd_string.len();
+            let filler = " ";
+            let mut filler_fill = 0;
+            if width > key_len + cmd_len {
+                filler_fill = (width - key_len - cmd_len).saturating_sub(4); // -2 for spaces
+            }
 
-        let fillers = filler.repeat(filler_fill.max(1)); // at least one
+            let fillers = filler.repeat(filler_fill.max(1)); // at least one
 
-        Line::from(vec![
-            Span::styled(format!(" {}", cmd_string), Style::default().fg(theme.COLOR_TEXT)),
-            Span::styled(format!(" {} ", fillers), Style::default().fg(theme.COLOR_GREY_800)),
-            Span::styled(format!("{} ", key_string), Style::default().fg(theme.COLOR_TEXT)),
-        ]).alignment(ratatui::layout::Alignment::Center)
-    }).collect()
+            Line::from(vec![
+                Span::styled(
+                    format!(" {}", cmd_string),
+                    Style::default().fg(theme.COLOR_TEXT),
+                ),
+                Span::styled(
+                    format!(" {} ", fillers),
+                    Style::default().fg(theme.COLOR_GREY_800),
+                ),
+                Span::styled(
+                    format!("{} ", key_string),
+                    Style::default().fg(theme.COLOR_TEXT),
+                ),
+            ])
+            .alignment(ratatui::layout::Alignment::Center)
+        })
+        .collect()
 }

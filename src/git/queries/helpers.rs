@@ -128,10 +128,7 @@ pub fn commits_per_day(repo: &Repository) -> HashMap<NaiveDate, usize> {
         let time = commit.time();
         let secs = time.seconds();
 
-        let date = Utc.timestamp_opt(secs, 0)
-            .single()
-            .unwrap()
-            .date_naive();
+        let date = Utc.timestamp_opt(secs, 0).single().unwrap().date_naive();
 
         *map.entry(date).or_insert(0) += 1;
     }

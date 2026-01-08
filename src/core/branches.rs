@@ -16,18 +16,15 @@ pub struct Branches {
     pub visible: HashMap<u32, Vec<String>>,
 }
 
-
 impl Branches {
-
     pub fn feed(
         &mut self,
         oids: &Oids,
         color: &Rc<RefCell<ColorPicker>>,
         branches_lanes: &HashMap<u32, usize>,
         branches_local: HashMap<u32, Vec<String>>,
-        branches_remote: HashMap<u32, Vec<String>>
+        branches_remote: HashMap<u32, Vec<String>>,
     ) {
-
         // Initialize
         self.local = branches_local;
         self.remote = branches_remote;
@@ -35,7 +32,7 @@ impl Branches {
         self.colors = HashMap::new();
         self.sorted = Vec::new();
         self.indices = Vec::new();
-        
+
         // Combine local and remote branches
         for (&alias, branches) in self.local.iter() {
             self.all.insert(alias, branches.clone());
@@ -53,14 +50,22 @@ impl Branches {
                 self.visible.insert(alias, branches.clone());
             }
         }
-        
+
         // Branch tuple vectors
-        let mut local: Vec<(u32, String)> = self.local.iter().flat_map(|(&alias, branches)| {
+        let mut local: Vec<(u32, String)> = self
+            .local
+            .iter()
+            .flat_map(|(&alias, branches)| {
                 branches.iter().map(move |branch| (alias, branch.clone()))
-            }).collect();
-        let mut remote: Vec<(u32, String)> = self.remote.iter().flat_map(|(&alias, branches)| {
+            })
+            .collect();
+        let mut remote: Vec<(u32, String)> = self
+            .remote
+            .iter()
+            .flat_map(|(&alias, branches)| {
                 branches.iter().map(move |branch| (alias, branch.clone()))
-            }).collect();
+            })
+            .collect();
 
         // Sorting tuples
         local.sort_by(|a, b| a.1.cmp(&b.1));
@@ -73,16 +78,26 @@ impl Branches {
         for (oidi, &lane_idx) in branches_lanes.iter() {
             self.colors.insert(*oidi, color.borrow().get_lane(lane_idx));
         }
-        
+
         // Build a lookup of branch aliases to positions in sorted aliases
         let mut sorted_time = self.sorted.clone();
-        let index_map: std::collections::HashMap<u32, usize> = oids.get_sorted_aliases().iter().enumerate().map(|(i, &oidi)| (oidi, i)).collect();
+        let index_map: std::collections::HashMap<u32, usize> = oids
+            .get_sorted_aliases()
+            .iter()
+            .enumerate()
+            .map(|(i, &oidi)| (oidi, i))
+            .collect();
 
         // Sort the vector using the index map
         sorted_time.sort_by_key(|(oidi, _)| index_map.get(oidi).copied().unwrap_or(usize::MAX));
         self.indices = Vec::new();
         sorted_time.iter().for_each(|(oidi, _)| {
-            self.indices.push(oids.get_sorted_aliases().iter().position(|o| oidi == o).unwrap_or(usize::MAX));
+            self.indices.push(
+                oids.get_sorted_aliases()
+                    .iter()
+                    .position(|o| oidi == o)
+                    .unwrap_or(usize::MAX),
+            );
         });
     }
 
@@ -95,15 +110,18 @@ impl Branches {
     }
 
     pub fn is_visible(&self, branch_alias: &u32, branch_name: &String) -> bool {
-        self.visible
-            .get(branch_alias)
-            .is_some_and(|branch_names| branch_names.iter().any(|current_branch| current_branch == branch_name))
+        self.visible.get(branch_alias).is_some_and(|branch_names| {
+            branch_names
+                .iter()
+                .any(|current_branch| current_branch == branch_name)
+        })
     }
 
     pub fn is_local(&self, branch_name: &String) -> bool {
-        self.local
-            .values()
-            .any(|branches| branches.iter().any(|current_branch| current_branch.as_str() == branch_name))
+        self.local.values().any(|branches| {
+            branches
+                .iter()
+                .any(|current_branch| current_branch.as_str() == branch_name)
+        })
     }
-
 }

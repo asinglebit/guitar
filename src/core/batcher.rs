@@ -13,7 +13,7 @@ impl Batcher {
     pub fn new(
         repo: Rc<RefCell<Repository>>,
         visible: HashMap<u32, Vec<String>>,
-        oids: &mut Oids
+        oids: &mut Oids,
     ) -> Result<Self, git2::Error> {
         let revwalk = Self::build(&repo.borrow(), visible, oids)?;
         Ok(Self {
@@ -26,7 +26,7 @@ impl Batcher {
         &self,
         repo: Rc<RefCell<Repository>>,
         visible: HashMap<u32, Vec<String>>,
-        oids: &mut Oids
+        oids: &mut Oids,
     ) -> Result<(), git2::Error> {
         let revwalk = Self::build(&repo.borrow(), visible, oids)?;
         let mut guard = self.revwalk.lock().unwrap();
@@ -48,9 +48,8 @@ impl Batcher {
     fn build(
         repo: &Repository,
         visible: HashMap<u32, Vec<String>>,
-        oids: &mut Oids
+        oids: &mut Oids,
     ) -> Result<Revwalk<'static>, git2::Error> {
-
         // Safe: we keep repo alive in Rc, so transmute to 'static is safe
         let repo_ref: &'static Repository =
             unsafe { std::mem::transmute::<&Repository, &'static Repository>(repo) };
@@ -62,7 +61,6 @@ impl Batcher {
             for branch_result in repo.branches(Some(branch_type))? {
                 let (branch, _) = branch_result?;
                 if let Some(oid) = branch.get().target() {
-
                     // Get the oidi
                     let alias = oids.get_alias_by_oid(oid);
 

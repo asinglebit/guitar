@@ -4,8 +4,10 @@ use git2::{Oid, Repository, Time};
 use std::collections::HashMap;
 
 // Returns a map of commit OIDs to the branch names that point to them
-pub fn get_tip_oids(repo: &Repository, oids: &mut Oids) -> (HashMap<u32, Vec<String>>, HashMap<u32, Vec<String>>) {
-    
+pub fn get_tip_oids(
+    repo: &Repository,
+    oids: &mut Oids,
+) -> (HashMap<u32, Vec<String>>, HashMap<u32, Vec<String>>) {
     let mut local: HashMap<u32, Vec<String>> = HashMap::new();
     let mut remote: HashMap<u32, Vec<String>> = HashMap::new();
 
@@ -13,7 +15,6 @@ pub fn get_tip_oids(repo: &Repository, oids: &mut Oids) -> (HashMap<u32, Vec<Str
     for reference in repo.references().unwrap().flatten() {
         // Only handle direct refs (skip symbolic ones like HEAD)
         if let Some(oid) = reference.target() {
-            
             // Get the alias
             let alias = oids.get_alias_by_oid(oid);
             let name = reference.name().unwrap_or("unknown");
@@ -61,12 +62,7 @@ pub fn get_tag_oids(repo: &Repository, oids: &mut Oids) -> HashMap<u32, Vec<Stri
 
 // Outcomes:
 // Update the oids vector
-pub fn get_sorted_oids(
-    batcher: &Batcher,
-    oids: &mut Oids,
-    sorted: &mut Vec<u32>,
-    amount: usize,
-) {
+pub fn get_sorted_oids(batcher: &Batcher, oids: &mut Oids, sorted: &mut Vec<u32>, amount: usize) {
     // Get the next batch of commits
     let chunk = batcher.next(amount);
     if chunk.is_empty() {
@@ -76,7 +72,6 @@ pub fn get_sorted_oids(
 
     // Walk all commits topologically
     for oid in chunk {
-
         // Get the alias
         let alias = oids.get_alias_by_oid(oid);
         sorted.push(alias);
@@ -128,7 +123,8 @@ pub fn get_stashed_commits(repo: &mut Repository, oids: &mut Oids) -> Vec<u32> {
         let alias = oids.get_alias_by_oid(*oid);
         stashes.push(alias);
         true
-    }).unwrap();
+    })
+    .unwrap();
 
     stashes
 }

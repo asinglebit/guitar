@@ -23,19 +23,18 @@ pub fn get_filenames_diff_at_workdir(repo: &Repository) -> Result<UncommittedCha
     for entry in statuses.iter() {
         let rel_path = entry.path().unwrap_or("");
         let full_path = workdir.join(rel_path);
-    
+
         // Expand directories
         let files = if full_path.is_dir() {
             collect_files_for_status(repo, workdir, rel_path)
         } else {
             vec![rel_path.to_string()]
         };
-    
+
         for file in files {
-    
             // Ask git for this file’s individual status
             let file_status = repo.status_file(Path::new(&file))?;
-    
+
             // Now you can safely check staged vs unstaged per file
             if file_status.is_index_modified() {
                 changes.staged.modified.push(file.clone());
@@ -46,7 +45,7 @@ pub fn get_filenames_diff_at_workdir(repo: &Repository) -> Result<UncommittedCha
             if file_status.is_index_deleted() {
                 changes.staged.deleted.push(file.clone());
             }
-    
+
             if file_status.is_wt_modified() {
                 changes.unstaged.modified.push(file.clone());
             }
@@ -79,7 +78,7 @@ pub fn get_filenames_diff_at_workdir(repo: &Repository) -> Result<UncommittedCha
 
 fn collect_files_for_status(repo: &Repository, workdir: &Path, rel_path: &str) -> Vec<String> {
     let full_path = workdir.join(rel_path);
-    
+
     if full_path.exists() {
         if full_path.is_file() {
             return vec![rel_path.to_string()];
@@ -94,7 +93,10 @@ fn collect_files_for_status(repo: &Repository, workdir: &Path, rel_path: &str) -
                     };
 
                     // Skip ignored files
-                    if repo.status_should_ignore(Path::new(&child_rel)).unwrap_or(false) {
+                    if repo
+                        .status_should_ignore(Path::new(&child_rel))
+                        .unwrap_or(false)
+                    {
                         continue;
                     }
 

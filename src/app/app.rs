@@ -52,7 +52,7 @@ pub enum Viewport {
     Graph,
     Viewer,
     Splash,
-    Settings
+    Settings,
 }
 
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -71,7 +71,7 @@ pub enum Focus {
     ModalDeleteBranch,
     ModalGrep,
     ModalTag,
-    ModalDeleteTag
+    ModalDeleteTag,
 }
 
 #[derive(PartialEq, Eq)]
@@ -80,7 +80,6 @@ pub enum Direction {
     Up,
 }
 pub struct App {
-
     // General
     pub logo: Vec<Span<'static>>,
     pub path: String,
@@ -184,13 +183,14 @@ pub struct App {
     pub is_exit: bool,
 }
 
-impl App  {
-    
+impl App {
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
-
         // Enable faster Escape detection in supported terminals
         enable_raw_mode()?;
-        execute!(stdout(), PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES))?;
+        execute!(
+            stdout(),
+            PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)
+        )?;
 
         // Load the app and initialize state
         self.load_layout();
@@ -199,7 +199,6 @@ impl App  {
 
         // Main loop
         while !self.is_exit {
-
             if event::poll(Duration::from_millis(50)).unwrap_or(false) {
                 self.handle_events()?;
             }
@@ -215,25 +214,37 @@ impl App  {
     }
 
     pub fn draw(&mut self, frame: &mut Frame) {
-        
-        let minimal_horizontal_space = if (self.is_branches || self.is_tags || self.is_stashes) && (self.is_inspector || self.is_status) { 100 } else { 50 };
+        let minimal_horizontal_space = if (self.is_branches || self.is_tags || self.is_stashes)
+            && (self.is_inspector || self.is_status)
+        {
+            100
+        } else {
+            50
+        };
         let is_zen = frame.area().width < minimal_horizontal_space;
 
         // Compute the layout
         self.layout(frame);
-        
+
         let is_splash = self.viewport == Viewport::Splash || is_zen;
 
-        frame.render_widget( Block::default()
-            .borders(if is_splash { Borders::NONE } else { Borders::ALL })
-            .border_style(Style::default().fg(self.theme.COLOR_BORDER))
-            .border_type(ratatui::widgets::BorderType::Rounded), self.layout.app);
+        frame.render_widget(
+            Block::default()
+                .borders(if is_splash {
+                    Borders::NONE
+                } else {
+                    Borders::ALL
+                })
+                .border_style(Style::default().fg(self.theme.COLOR_BORDER))
+                .border_type(ratatui::widgets::BorderType::Rounded),
+            self.layout.app,
+        );
 
         if is_zen {
             self.draw_splash(frame);
             return;
         }
-        
+
         // Viewport
         match self.viewport {
             Viewport::Graph => {
@@ -249,7 +260,7 @@ impl App  {
                 self.draw_settings(frame);
             }
         }
-                
+
         // Main layout
         if !is_splash {
             self.draw_title(frame);
@@ -314,8 +325,7 @@ impl App  {
     }
 
     pub fn reload(&mut self) {
-
-        // Update colors        
+        // Update colors
         self.color = Rc::new(RefCell::new(ColorPicker::from_theme(&self.theme)));
 
         // Update logo
@@ -325,7 +335,7 @@ impl App  {
             Span::styled("i", Style::default().fg(self.theme.COLOR_GRASS)),
             Span::styled("t", Style::default().fg(self.theme.COLOR_GRASS)),
             Span::styled("a", Style::default().fg(self.theme.COLOR_GRASS)),
-            Span::styled("╭", Style::default().fg(self.theme.COLOR_GREEN))
+            Span::styled("╭", Style::default().fg(self.theme.COLOR_GREEN)),
         ];
 
         // Cancel any existing walker thread immediately
@@ -369,7 +379,6 @@ impl App  {
 
             // Walker loop
             loop {
-
                 // Breaker
                 if cancel_clone.load(std::sync::atomic::Ordering::SeqCst) {
                     break;
@@ -379,18 +388,21 @@ impl App  {
                 let is_again = walk_ctx.walk();
 
                 // Send the message to the main thread
-                if tx.send(WalkerOutput {
-                    oids: walk_ctx.oids.clone(),
-                    branches_lanes: walk_ctx.branches_lanes.clone(),
-                    branches_local: walk_ctx.branches_local.clone(),
-                    branches_remote: walk_ctx.branches_remote.clone(),
-                    tags_lanes: walk_ctx.tags_lanes.clone(),
-                    tags_local: walk_ctx.tags_local.clone(),
-                    stashes_lanes: walk_ctx.stashes_lanes.clone(),
-                    buffer: walk_ctx.buffer.clone(),
-                    is_first,
-                    is_again,
-                }).is_err() {
+                if tx
+                    .send(WalkerOutput {
+                        oids: walk_ctx.oids.clone(),
+                        branches_lanes: walk_ctx.branches_lanes.clone(),
+                        branches_local: walk_ctx.branches_local.clone(),
+                        branches_remote: walk_ctx.branches_remote.clone(),
+                        tags_lanes: walk_ctx.tags_lanes.clone(),
+                        tags_local: walk_ctx.tags_local.clone(),
+                        stashes_lanes: walk_ctx.stashes_lanes.clone(),
+                        buffer: walk_ctx.buffer.clone(),
+                        is_first,
+                        is_again,
+                    })
+                    .is_err()
+                {
                     // Receiver dropped, stop
                     break;
                 }
@@ -408,11 +420,11 @@ impl App  {
     }
 
     pub fn sync(&mut self) {
-        if let Some(rx) = &self.walker_rx && let Ok(result) = rx.try_recv() {
-
+        if let Some(rx) = &self.walker_rx
+            && let Ok(result) = rx.try_recv()
+        {
             // Crude check to see if this is a first iteration
             if result.is_first {
-
                 // Transition from the splash screen on startup
                 if self.viewport == Viewport::Splash {
                     self.viewport = Viewport::Graph;
@@ -421,8 +433,7 @@ impl App  {
                 // Get uncomitted changes info
                 self.uncommitted = get_filenames_diff_at_workdir(&self.repo).expect("Error");
             }
-            
-            
+
             // Lookup tables
             self.oids = result.oids;
 
@@ -435,7 +446,7 @@ impl App  {
                 &self.color,
                 &result.branches_lanes,
                 result.branches_local,
-                result.branches_remote
+                result.branches_remote,
             );
 
             // Update tags
@@ -443,14 +454,11 @@ impl App  {
                 &self.oids,
                 &self.color,
                 &result.tags_lanes,
-                result.tags_local
+                result.tags_local,
             );
 
             // Update stashes
-            self.stashes.feed(
-                &self.color,
-                &result.stashes_lanes,
-            );
+            self.stashes.feed(&self.color, &result.stashes_lanes);
 
             if !result.is_again {
                 self.spinner.stop();
