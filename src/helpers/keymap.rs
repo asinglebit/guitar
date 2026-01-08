@@ -184,7 +184,10 @@ fn default_navigation_keymap() -> IndexMap<KeyBinding, Command> {
     // Regular page up and page down
 
     // [Page Up] = up
-    map.insert(KeyBinding::new(PageUp, KeyModifiers::NONE), Command::ScrollPageUp);
+    map.insert(
+        KeyBinding::new(PageUp, KeyModifiers::NONE),
+        Command::ScrollPageUp,
+    );
 
     // [Page Down] = down
     map.insert(

@@ -430,22 +430,20 @@ impl App {
 
     pub fn on_widen_scope(&mut self) {
         match self.focus {
-            Focus::Viewport => {
-                match self.viewport {
-                    Viewport::Settings => {
-                        self.viewport = Viewport::Graph;
-                    }
-                    Viewport::Viewer => {
-                        self.is_status = true;
-                        self.focus = Focus::StatusTop;
-                    }
-                    Viewport::Graph => {
-                        self.is_branches = true;
-                        self.focus = Focus::Branches;
-                    }
-                    _ => {}
+            Focus::Viewport => match self.viewport {
+                Viewport::Settings => {
+                    self.viewport = Viewport::Graph;
                 }
-            }
+                Viewport::Viewer => {
+                    self.is_status = true;
+                    self.focus = Focus::StatusTop;
+                }
+                Viewport::Graph => {
+                    self.is_branches = true;
+                    self.focus = Focus::Branches;
+                }
+                _ => {}
+            },
             Focus::Inspector => {
                 self.focus = Focus::Viewport;
                 self.viewport = Viewport::Graph;
@@ -461,30 +459,28 @@ impl App {
             _ => {}
         }
     }
-    
+
     pub fn on_narrow_scope(&mut self) {
         match self.focus {
-            Focus::Viewport => {
-                match self.viewport {
-                    Viewport::Graph => {
-                        if self.graph_selected != 0 {
-                            self.is_inspector = true;
-                            self.focus = Focus::Inspector;
+            Focus::Viewport => match self.viewport {
+                Viewport::Graph => {
+                    if self.graph_selected != 0 {
+                        self.is_inspector = true;
+                        self.focus = Focus::Inspector;
+                    } else {
+                        if self.uncommitted.is_clean {
+                            return;
+                        }
+                        self.is_status = true;
+                        if self.uncommitted.is_staged {
+                            self.focus = Focus::StatusTop;
                         } else {
-                            if self.uncommitted.is_clean {
-                                return;
-                            }
-                            self.is_status = true;
-                            if self.uncommitted.is_staged {
-                                self.focus = Focus::StatusTop;
-                            } else {
-                                self.focus = Focus::StatusBottom;
-                            }
+                            self.focus = Focus::StatusBottom;
                         }
                     }
-                    _ => {}
                 }
-            }
+                _ => {}
+            },
             Focus::Inspector => {
                 self.is_status = true;
                 self.focus = Focus::StatusTop;
@@ -566,11 +562,7 @@ impl App {
                 let page = self.layout.graph.height as usize - 1;
                 match self.viewport {
                     Viewport::Graph => {
-                        if self.graph_selected >= page {
-                            self.graph_selected -= page;
-                        } else {
-                            self.graph_selected = 0;
-                        }
+                        self.graph_selected = self.graph_selected.saturating_sub(page);
                         if self.graph_selected != 0
                             && self.graph_selected < self.oids.get_commit_count()
                         {
@@ -579,11 +571,7 @@ impl App {
                         }
                     }
                     Viewport::Viewer => {
-                        if self.viewer_selected >= page {
-                            self.viewer_selected -= page;
-                        } else {
-                            self.viewer_selected = 0;
-                        }
+                        self.viewer_selected = self.viewer_selected.saturating_sub(page);
                     }
                     Viewport::Settings => {
                         self.settings_selected = self.settings_selected.saturating_sub(page);
@@ -923,11 +911,7 @@ impl App {
                 let half = (self.layout.graph.height as usize - 1) / 2;
                 match self.viewport {
                     Viewport::Graph => {
-                        if self.graph_selected >= half {
-                            self.graph_selected -= half;
-                        } else {
-                            self.graph_selected = 0;
-                        }
+                        self.graph_selected = self.graph_selected.saturating_sub(half);
                         if self.graph_selected != 0
                             && self.graph_selected < self.oids.get_commit_count()
                         {
