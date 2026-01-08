@@ -233,8 +233,8 @@ impl App {
                     // Lists
                     Command::ScrollPageUp => self.on_scroll_page_up(),
                     Command::ScrollPageDown => self.on_scroll_page_down(),
-                    Command::ScrollHalfPageDown => self.on_scroll_half_page_down(),
                     Command::ScrollHalfPageUp => self.on_scroll_half_page_up(),
+                    Command::ScrollHalfPageDown => self.on_scroll_half_page_down(),
                     Command::ScrollUp => self.on_scroll_up(),
                     Command::ScrollDown => self.on_scroll_down(),
                     Command::ScrollUpHalf => self.on_scroll_up_half(),
@@ -606,11 +606,6 @@ impl App {
             }
             _ => {}
         };
-
-        if self.graph_selected != 0 && self.graph_selected < self.oids.get_commit_count() {
-            let oid = self.oids.get_oid_by_idx(self.graph_selected);
-            self.current_diff = get_filenames_diff_at_oid(&self.repo, *oid);
-        }
     }
 
     pub fn on_scroll_page_down(&mut self) {
@@ -671,10 +666,6 @@ impl App {
             }
             _ => {}
         };
-        if self.graph_selected != 0 && self.graph_selected < self.oids.get_commit_count() {
-            let oid = self.oids.get_oid_by_idx(self.graph_selected);
-            self.current_diff = get_filenames_diff_at_oid(&self.repo, *oid);
-        }
     }
 
     pub fn on_scroll_up(&mut self) {
@@ -932,9 +923,14 @@ impl App {
                 let half = (self.layout.graph.height as usize - 1) / 2;
                 match self.viewport {
                     Viewport::Graph => {
-                        self.graph_selected = self.graph_selected.saturating_sub(half);
-
-                        if self.graph_selected < self.oids.get_commit_count() {
+                        if self.graph_selected >= half {
+                            self.graph_selected -= half;
+                        } else {
+                            self.graph_selected = 0;
+                        }
+                        if self.graph_selected != 0
+                            && self.graph_selected < self.oids.get_commit_count()
+                        {
                             let oid = self.oids.get_oid_by_idx(self.graph_selected);
                             self.current_diff = get_filenames_diff_at_oid(&self.repo, *oid);
                         }
@@ -962,11 +958,6 @@ impl App {
                 self.status_bottom_selected = self.status_bottom_selected.saturating_sub(half);
             }
             _ => {}
-        }
-
-        if self.graph_selected < self.oids.get_commit_count() {
-            let oid = self.oids.get_oid_by_idx(self.graph_selected);
-            self.current_diff = get_filenames_diff_at_oid(&self.repo, *oid);
         }
     }
 
@@ -1020,11 +1011,6 @@ impl App {
                 self.status_bottom_selected += half;
             }
             _ => {}
-        }
-
-        if self.graph_selected < self.oids.get_commit_count() {
-            let oid = self.oids.get_oid_by_idx(self.graph_selected);
-            self.current_diff = get_filenames_diff_at_oid(&self.repo, *oid);
         }
     }
 
