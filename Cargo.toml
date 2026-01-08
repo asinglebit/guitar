@@ -21,3 +21,14 @@ toml = "0.9.10"
 serde = { version = "1.0.228", features = ["derive"] }
 walkdir = "2.5.0"
 serde_json = "1.0.149"
+
+# Enable more optimization in the release profile at the cost of compile time.
+[profile.release]
+# Compile the entire crate as one unit.
+# Slows compile times, marginal improvements.
+codegen-units = 1
+# Do a second optimization pass over the entire program, including dependencies.
+# Slows compile times, marginal improvements.
+lto = "fat"
+# Strip all debugging information from the binary to slightly reduce file size.
+strip = "debuginfo"
