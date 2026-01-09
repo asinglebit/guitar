@@ -12,7 +12,7 @@ use crate::{
         diffs::get_filenames_diff_at_workdir,
         helpers::{FileChange, UncommittedChanges},
     },
-    helpers::{colors::ColorPicker, keymap::InputMode, palette::*, spinner::Spinner},
+    helpers::{colors::ColorPicker, heatmap::build_heatmap, keymap::InputMode, palette::*, spinner::Spinner},
 };
 use crate::{
     app::input::TextInput,
@@ -460,8 +460,14 @@ impl App {
             // Update stashes
             self.stashes.feed(&self.color, &result.stashes_lanes);
 
+            // We parsed the entire repository
             if !result.is_again {
+
+                // Stop the spinner
                 self.spinner.stop();
+
+                // Build the heatmap
+                self.heatmap = build_heatmap(&self.repo, &self.oids.oids);
             }
         }
     }

@@ -81,15 +81,27 @@ fn default_navigation_keymap() -> IndexMap<KeyBinding, Command> {
     // Scope navigation (Vim-style)
     // This creates a horizontal mental model where h goes "out" and l goes "in"
 
-    // 'h' = go back / widen scope
+    // 'h' = widen scope
     map.insert(
         KeyBinding::new(Char('h'), KeyModifiers::NONE),
         Command::WidenScope,
     );
 
-    // 'l' = select / narrow scope
+    // 'l' = narrow scope
     map.insert(
         KeyBinding::new(Char('l'), KeyModifiers::NONE),
+        Command::NarrowScope,
+    );
+
+    // [Left] = widen scope
+    map.insert(
+        KeyBinding::new(Left, KeyModifiers::NONE),
+        Command::WidenScope,
+    );
+
+    // [Right] = narrow scope
+    map.insert(
+        KeyBinding::new(Right, KeyModifiers::NONE),
         Command::NarrowScope,
     );
 

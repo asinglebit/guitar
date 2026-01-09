@@ -1,7 +1,7 @@
+use crate::helpers::heatmap::empty_heatmap;
 use crate::helpers::keymap::InputMode;
 use crate::{
-    app::input::TextInput, core::stashes::Stashes, git::queries::helpers::commits_per_day,
-    helpers::heatmap::build_heatmap,
+    app::input::TextInput, core::stashes::Stashes,
 };
 use crate::{
     app::{
@@ -13,7 +13,6 @@ use crate::{
     git::queries::helpers::UncommittedChanges,
     helpers::{colors::ColorPicker, palette::*, spinner::Spinner},
 };
-use chrono::Utc;
 use git2::Repository;
 use indexmap::IndexMap;
 use ratatui::{style::Style, text::Span};
@@ -30,22 +29,13 @@ impl Default for App {
         let theme = Theme::default();
         let color = Rc::new(RefCell::new(ColorPicker::from_theme(&theme)));
         let canonical_path = std::fs::canonicalize(path).expect("Invalid repo path");
-        let absolute_path: PathBuf =
-            try_into_git_repo_root(canonical_path).unwrap_or_else(|| PathBuf::from(path));
+        let absolute_path: PathBuf = try_into_git_repo_root(&canonical_path).unwrap_or(canonical_path);
         let repo = Rc::new(Repository::open(absolute_path.clone()).expect("Could not open repo"));
+        let heatmap = empty_heatmap();
         let logo = vec![
-            Span::styled("  g", Style::default().fg(theme.COLOR_GRASS)),
-            Span::styled("u", Style::default().fg(theme.COLOR_GRASS)),
-            Span::styled("i", Style::default().fg(theme.COLOR_GRASS)),
-            Span::styled("t", Style::default().fg(theme.COLOR_GRASS)),
-            Span::styled("a", Style::default().fg(theme.COLOR_GRASS)),
+            Span::styled("  guita", Style::default().fg(theme.COLOR_GRASS)),
             Span::styled("╭", Style::default().fg(theme.COLOR_GREEN)),
         ];
-        let heatmap = {
-            let counts = commits_per_day(&repo);
-            let today = Utc::now().date_naive();
-            build_heatmap(&counts, today)
-        };
 
         App {
             // General

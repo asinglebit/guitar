@@ -75,14 +75,18 @@ impl Walker {
         // Walker utilities
         let buffer = RefCell::new(Buffer::default());
 
-        // Walker data
+        // Oids data
         let mut oids = Oids::default();
+
+        // Branches data
         let branches_lanes = HashMap::new();
         let (branches_local, branches_remote) = get_tip_oids(&repo.borrow(), &mut oids);
 
+        // Tags data
         let tags_lanes = HashMap::new();
         let tags_local = get_tag_oids(&repo.borrow(), &mut oids);
 
+        // Stashes data
         let stashes_lanes = HashMap::new();
 
         // Get stashed commits and store them in oids

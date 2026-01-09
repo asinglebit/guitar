@@ -18,7 +18,7 @@ impl App {
         let logo = self.logo.clone();
         let separator = Span::styled(" |", Style::default().fg(self.theme.COLOR_TEXT));
         let folder = Span::styled(
-            format!(" {SYM_FOLDER}  {}", path),
+            format!(" {SYM_FOLDER} {}", path),
             Style::default().fg(self.theme.COLOR_TEXT),
         );
         let line = Line::from([logo, vec![separator, folder]].concat());

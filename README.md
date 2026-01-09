@@ -56,7 +56,7 @@ Follow the link to get an idea of the roadmap and see what currently is being wo
 
 https://github.com/users/asinglebit/projects/1/views/1
 
-### Default keyboard mappings (to be done: better MacOS defaults)
+### Default keyboard mappings
 
 You will probably need to change the configs to your taste, for optimal experience, especially on MacOS due to Option/Command keys. I will version configs properly in the future. Dangerous actions, like resetting and force pushing are now behind `Action Mode` key. You need to enter the `Action Mode` first, and then next shortcut you commit will be picked from the `Action Mode` key pool.
 
@@ -76,6 +76,8 @@ shortcuts / normal mode:
 
 Widen Scope                                                           h
 Narrow Scope                                                          l
+Widen Scope                                                        Left
+Narrow Scope                                                      Right
 Select                                                            Enter
 Back                                                                Esc
 Focus Previous Pane                                            Ctrl + p
@@ -121,54 +123,8 @@ Tag                                                                   t
 Toggle Branch                                                 Shift + T
 Solo Branch                                                       Space
                                                                        
-shortcuts / action mode:                                               
+additional shortcuts / action mode (prefix: Ctrl + a):                                    
                                                                        
-Widen Scope                                                           h
-Narrow Scope                                                          l
-Select                                                            Enter
-Back                                                                Esc
-Focus Previous Pane                                            Ctrl + p
-Focus Next Pane                                                Ctrl + n
-Focus Next Pane                                                     Tab
-Focus Previous Pane                                     Shift + BackTab
-Scroll Down                                                           j
-Scroll Up                                                             k
-Scroll Down                                                        Down
-Scroll Up                                                            Up
-Scroll Down Half                                         Ctrl + Alt + d
-Scroll Up Half                                           Ctrl + Alt + u
-Scroll Half Page Down                                          Ctrl + d
-Scroll Half Page Up                                            Ctrl + u
-Scroll Page Up                                                   PageUp
-Scroll Page Down                                               PageDown
-Go To Beginning                                                       g
-Go To End                                                     Shift + G
-Go To Beginning                                                    Home
-Go To End                                                           End
-Find                                                                  /
-Scroll Up Branch                                              Shift + {
-Scroll Down Branch                                            Shift + }
-Scroll Up Commit                                                      [
-Scroll Down Commit                                                    ]
-Toggle Branches                                                       1
-Toggle Tags                                                           2
-Toggle Stashes                                                        3
-Toggle Status                                                         4
-Toggle Inspector                                                      5
-Toggle Shas                                                           6
-Toggle Help                                                           ?
-Action Mode                                                    Ctrl + a
-Minimize                                                              .
-Reload                                                                r
-Exit                                                                  q
-Stage                                                                 s
-Unstage                                                               u
-Commit                                                                c
-Fetch All                                                             f
-Create Branch                                                         b
-Tag                                                                   t
-Toggle Branch                                                 Shift + T
-Solo Branch                                                       Space
 Drop                                                                  x
 Pop                                                                   p
 Stash                                                         Shift + S

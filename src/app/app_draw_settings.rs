@@ -1,6 +1,7 @@
 use crate::helpers::heatmap::heat_cell;
 use crate::helpers::keymap::InputMode;
 use crate::helpers::palette::*;
+use crate::helpers::symbols::WEEKDAY_LABELS;
 use crate::helpers::version::VERSION;
 use crate::{
     app::app::{App, Direction, Focus},
@@ -44,16 +45,18 @@ impl App {
         let border_width = 8;
 
         // Available width
-        let usable_width = available_width.saturating_sub(border_width);
+        let weekday_label_width = 2;
+        let usable_width = available_width
+            .saturating_sub(border_width)
+            .saturating_sub(weekday_label_width);
 
         // How many weeks fit horizontally
         let max_weeks_fit = (usable_width / cell_width).max(1);
-
         let total_weeks = self.heatmap[0].len();
         let visible_weeks = max_weeks_fit.min(total_weeks);
 
         // Right align and keep most recent weeks
-        let week_start = total_weeks.saturating_sub(visible_weeks);
+        let week_start = total_weeks.saturating_sub(visible_weeks) + 2;
 
         // Width used by the heatmap body excluding borders
         let heatmap_width = visible_weeks * cell_width;
@@ -75,11 +78,20 @@ impl App {
         lines.push(Line::default());
         for day in 0..7 {
             let mut spans = Vec::new();
+            
+            // Day label
+            spans.push(Span::styled(
+                format!("{}  ", WEEKDAY_LABELS[day]),
+                Style::default().fg(self.theme.COLOR_TEXT),
+            ));
+        
+            // Heatmap cells
             spans.extend(
                 self.heatmap[day][week_start..]
                     .iter()
                     .map(|&count| heat_cell(count, &self.theme)),
             );
+        
             lines.push(Line::from(spans).centered());
         }
 

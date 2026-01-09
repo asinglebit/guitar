@@ -1,32 +1,64 @@
-use crate::helpers::palette::Theme;
-use chrono::{Duration, NaiveDate};
+use crate::{helpers::palette::Theme};
+use chrono::{TimeZone, Utc};
+use git2::{Oid, Repository};
 use im::HashMap;
 use ratatui::{style::Style, text::Span};
 
 pub const WEEKS: usize = 53;
 pub const DAYS: usize = 7;
 
-pub fn build_heatmap(
-    counts: &HashMap<NaiveDate, usize>,
-    today: NaiveDate,
-) -> [[usize; WEEKS]; DAYS] {
-    let mut grid = [[0usize; WEEKS]; DAYS];
+pub fn commits_per_day(repo: &Repository, oids: &Vec<Oid>) -> HashMap<usize, usize> {
 
-    let start = today - Duration::days((WEEKS * 7) as i64);
+    let today = Utc::now().date_naive();
+    let mut counts: HashMap<usize, usize> = HashMap::new();
 
-    for week in 0..WEEKS {
-        for (day, row) in grid.iter_mut().enumerate() {
-            let date = start + Duration::days((week * 7 + day) as i64);
-            row[week] = *counts.get(&date).unwrap_or(&0);
+    for oid in oids {
+
+        let commit = match repo.find_commit(*oid) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+
+        // Convert commit time to DATE (UTC)
+        let commit_date = Utc
+            .timestamp_opt(commit.time().seconds(), 0)
+            .single()
+            .unwrap()
+            .date_naive();
+
+        let days_ago = (today - commit_date).num_days();
+
+        // Ignore anything outside the 53×7 window
+        if days_ago < 0 || days_ago >= 371 {
+            continue;
         }
+
+        *counts.entry(days_ago as usize).or_insert(0) += 1;
     }
 
+    counts
+}
+
+pub fn empty_heatmap() -> [[usize; WEEKS]; DAYS] {
+    [[0usize; WEEKS]; DAYS]
+}
+
+pub fn build_heatmap(repo: &Repository, oids: &Vec<Oid>) -> [[usize; WEEKS]; DAYS] {
+    let mut grid = [[0usize; WEEKS]; DAYS];
+    let counts = commits_per_day(repo, oids);
+    for week in 0..WEEKS {
+        for day in 0..DAYS {
+            let day_index = week * DAYS + day;
+            let days_ago = (WEEKS * DAYS) - 1 - day_index;
+            grid[day][week] = *counts.get(&days_ago).unwrap_or(&0);
+        }
+    }
     grid
 }
 
 pub fn heat_cell(count: usize, theme: &Theme) -> Span<'_> {
-    let (ch, color) = match count {
-        0 => ("⋅ ", Some(theme.COLOR_GREY_800)),
+    let (character, color) = match count {
+        0 => ("⠁ ", Some(theme.COLOR_GREY_800)),
         1 => ("⠁ ", Some(theme.COLOR_GRASS)),
         2 => ("⠃ ", Some(theme.COLOR_GRASS)),
         3 => ("⠇ ", Some(theme.COLOR_GRASS)),
@@ -36,11 +68,6 @@ pub fn heat_cell(count: usize, theme: &Theme) -> Span<'_> {
         7 => ("⡿ ", Some(theme.COLOR_GRASS)),
         _ => ("⣿ ", Some(theme.COLOR_GRASS)),
     };
-
-    let mut style = Style::default();
-    if let Some(c) = color {
-        style = style.fg(c);
-    }
-
-    Span::styled(ch, style)
+    let style = if let Some(c) = color { Style::default().fg(c) } else { Style::default() };
+    Span::styled(character, style)
 }

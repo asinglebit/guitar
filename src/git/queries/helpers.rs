@@ -1,6 +1,7 @@
 use crate::helpers::text::{decode, sanitize};
-use chrono::TimeZone;
+use chrono::{Duration, TimeZone};
 use chrono::{NaiveDate, Utc};
+use git2::{BranchType, Oid, Sort};
 use git2::{Diff, DiffFormat::Patch, ObjectType, Repository};
 use im::HashMap;
 use std::collections::HashSet;
@@ -115,23 +116,4 @@ pub fn diff_to_hunks(diff: Diff) -> Result<Vec<Hunk>, git2::Error> {
     })?;
 
     Ok(hunks)
-}
-
-pub fn commits_per_day(repo: &Repository) -> HashMap<NaiveDate, usize> {
-    let mut revwalk = repo.revwalk().unwrap();
-    revwalk.push_head().unwrap();
-
-    let mut map = HashMap::new();
-
-    for oid in revwalk.flatten() {
-        let commit = repo.find_commit(oid).unwrap();
-        let time = commit.time();
-        let secs = time.seconds();
-
-        let date = Utc.timestamp_opt(secs, 0).single().unwrap().date_naive();
-
-        *map.entry(date).or_insert(0) += 1;
-    }
-
-    map
 }
