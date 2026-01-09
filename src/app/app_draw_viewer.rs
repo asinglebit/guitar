@@ -187,11 +187,10 @@ impl App {
                 let text = line.content.trim_end_matches('\n');
 
                 // Detect transition: push hunk navigation if origin changed
-                if let Some(prev) = last_origin {
-                    if prev != line.origin {
+                if let Some(prev) = last_origin
+                    && prev != line.origin {
                         self.viewer_hunks.push(self.viewer_lines.len());
                     }
-                }
                 last_origin = Some(line.origin);
 
                 // Determine styling, prefix, color, and line number based on line origin
