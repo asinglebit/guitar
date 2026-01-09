@@ -63,14 +63,14 @@ impl App {
 
         // Heatmap
         lines.push(Line::default());
-        for day in 0..7 {
+        for (day_idx, &label) in WEEKDAY_LABELS.iter().enumerate() {
             let mut spans = Vec::new();
 
             // Day label
-            spans.push(Span::styled(format!("{}  ", WEEKDAY_LABELS[day]), Style::default().fg(self.theme.COLOR_TEXT)));
+            spans.push(Span::styled(format!("{}  ", label), Style::default().fg(self.theme.COLOR_TEXT)));
 
             // Heatmap cells
-            spans.extend(self.heatmap[day][week_start..].iter().map(|&count| heat_cell(count, &self.theme)));
+            spans.extend(self.heatmap[day_idx][week_start..].iter().map(|&count| heat_cell(count, &self.theme)));
 
             lines.push(Line::from(spans).centered());
         }

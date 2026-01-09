@@ -148,10 +148,15 @@ impl App {
         };
 
         self.viewer_lines.clear(); // Clear current viewer lines
+        self.viewer_hunks.clear(); // Clear current viewer hunks
         let mut current_line: usize = 0; // Current line in new file
         let mut current_line_old: usize = 0; // Current line in old file
 
+        // Check last origin to detect change in hunks
+        let mut last_origin: Option<char> = None;
+
         for hunk in hunks.iter() {
+            // Proceed with hunk processing
             let header = &hunk.header;
             let old_start_idx: usize = header.old_start.saturating_sub(1) as usize; // Convert to 0-based index
 
@@ -175,7 +180,16 @@ impl App {
 
             // Process lines in the hunk
             for line in hunk.lines.iter().filter(|l| l.origin != 'H') {
-                let text = line.content.trim_end_matches('\n'); // remove trailing newline
+                // Remove trailing newline
+                let text = line.content.trim_end_matches('\n');
+
+                // Detect transition: push hunk navigation if origin changed
+                if let Some(prev) = last_origin
+                    && prev != line.origin
+                {
+                    self.viewer_hunks.push(self.viewer_lines.len());
+                }
+                last_origin = Some(line.origin);
 
                 // Determine styling, prefix, color, and line number based on line origin
                 let (style, prefix, side, fg, count) = match line.origin {
@@ -229,5 +243,7 @@ impl App {
             }
             current_line += 1;
         }
+
+        self.viewer_selected = self.viewer_hunks.first().copied().unwrap_or(0);
     }
 }

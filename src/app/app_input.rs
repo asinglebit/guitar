@@ -345,7 +345,11 @@ impl App {
                 },
                 Viewport::Viewer => {
                     self.layout_config.is_status = true;
-                    self.focus = Focus::StatusTop;
+                    if self.graph_selected == 0 && self.uncommitted.is_unstaged {
+                        self.focus = Focus::StatusBottom;
+                    } else {
+                        self.focus = Focus::StatusTop;
+                    }
                 },
                 Viewport::Graph => {
                     self.layout_config.is_branches = true;
@@ -357,12 +361,21 @@ impl App {
                 self.focus = Focus::Viewport;
                 self.viewport = Viewport::Graph;
             },
-            Focus::StatusTop | Focus::StatusBottom => {
+            Focus::StatusTop => {
                 if self.graph_selected != 0 {
                     self.layout_config.is_inspector = true;
                     self.focus = Focus::Inspector;
                 } else {
                     self.focus = Focus::Viewport;
+                    self.viewport = Viewport::Graph;
+                }
+            },
+            Focus::StatusBottom => {
+                if self.uncommitted.is_staged {
+                    self.focus = Focus::StatusTop;
+                } else {
+                    self.focus = Focus::Viewport;
+                    self.viewport = Viewport::Graph;
                 }
             },
             _ => {},
@@ -761,7 +774,9 @@ impl App {
                         }
                     },
                     Viewport::Viewer => {
-                        self.viewer_selected = self.viewer_selected.saturating_sub(half);
+                        if let Some(&prev) = self.viewer_hunks.iter().rev().find(|&&h| h < self.viewer_selected) {
+                            self.viewer_selected = prev;
+                        }
                     },
                     Viewport::Settings => {
                         self.settings_selected = self.settings_selected.saturating_sub(half);
@@ -813,8 +828,9 @@ impl App {
                         }
                     },
                     Viewport::Viewer => {
-                        let max = self.viewer_lines.len().saturating_sub(1);
-                        self.viewer_selected = (self.viewer_selected + half).min(max);
+                        if let Some(&next) = self.viewer_hunks.iter().find(|&&h| h > self.viewer_selected) {
+                            self.viewer_selected = next;
+                        }
                     },
                     Viewport::Settings => {
                         self.settings_selected += half;

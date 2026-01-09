@@ -41,10 +41,10 @@ pub fn build_heatmap(repo: &Repository, oids: &Vec<Oid>) -> [[usize; WEEKS]; DAY
     let mut grid = [[0usize; WEEKS]; DAYS];
     let counts = commits_per_day(repo, oids);
     for week in 0..WEEKS {
-        for day in 0..DAYS {
+        for (day, week_row) in grid.iter_mut().enumerate() {
             let day_index = week * DAYS + day;
             let days_ago = (WEEKS * DAYS) - 1 - day_index;
-            grid[day][week] = *counts.get(&days_ago).unwrap_or(&0);
+            week_row[week] = *counts.get(&days_ago).unwrap_or(&0);
         }
     }
     grid
