@@ -760,8 +760,10 @@ impl App {
                             self.current_diff = get_filenames_diff_at_oid(&self.repo, *oid);
                         }
                     },
-                    Viewport::Viewer => {
-                        self.viewer_selected = self.viewer_selected.saturating_sub(half);
+                    Viewport::Viewer => {                        
+                        if let Some(&prev) = self.viewer_hunks.iter().rev().find(|&&h| h < self.viewer_selected) {
+                            self.viewer_selected = prev;
+                        }
                     },
                     Viewport::Settings => {
                         self.settings_selected = self.settings_selected.saturating_sub(half);
@@ -813,8 +815,9 @@ impl App {
                         }
                     },
                     Viewport::Viewer => {
-                        let max = self.viewer_lines.len().saturating_sub(1);
-                        self.viewer_selected = (self.viewer_selected + half).min(max);
+                        if let Some(&next) = self.viewer_hunks.iter().find(|&&h| h > self.viewer_selected) {
+                            self.viewer_selected = next;
+                        }
                     },
                     Viewport::Settings => {
                         self.settings_selected += half;

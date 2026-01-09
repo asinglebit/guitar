@@ -63,6 +63,7 @@ impl Default for App {
             current_diff: Vec::new(),
             file_name: None,
             viewer_lines: Vec::new(),
+            viewer_hunks: Vec::new(),
 
             // Interface
             layout: Layout::default(),

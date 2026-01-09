@@ -114,6 +114,7 @@ pub struct App {
     pub current_diff: Vec<FileChange>,
     pub file_name: Option<String>,
     pub viewer_lines: Vec<ListItem<'static>>,
+    pub viewer_hunks: Vec<usize>,
 
     // Interface
     pub layout: Layout,
