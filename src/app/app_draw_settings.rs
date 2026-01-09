@@ -78,20 +78,20 @@ impl App {
         lines.push(Line::default());
         for day in 0..7 {
             let mut spans = Vec::new();
-            
+
             // Day label
             spans.push(Span::styled(
                 format!("{}  ", WEEKDAY_LABELS[day]),
                 Style::default().fg(self.theme.COLOR_TEXT),
             ));
-        
+
             // Heatmap cells
             spans.extend(
                 self.heatmap[day][week_start..]
                     .iter()
                     .map(|&count| heat_cell(count, &self.theme)),
             );
-        
+
             lines.push(Line::from(spans).centered());
         }
 

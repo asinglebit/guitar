@@ -210,67 +210,68 @@ impl App {
         }
 
         if let Some(mode_map) = self.keymaps.get(&self.mode)
-            && let Some(cmd) = mode_map.get(&key_binding) {
-                match cmd {
-                    // User Interface
-                    Command::WidenScope => self.on_widen_scope(),
-                    Command::NarrowScope => self.on_narrow_scope(),
-                    Command::FocusNextPane => self.on_focus_next_pane(),
-                    Command::FocusPreviousPane => self.on_focus_prev_pane(),
-                    Command::Select => self.on_select(),
-                    Command::Back => self.on_back(),
-                    Command::Minimize => self.on_minimize(),
-                    Command::ToggleBranches => self.on_toggle_branches(),
-                    Command::ToggleTags => self.on_toggle_tags(),
-                    Command::ToggleStashes => self.on_toggle_stashes(),
-                    Command::ToggleStatus => self.on_toggle_status(),
-                    Command::ToggleInspector => self.on_toggle_inspector(),
-                    Command::ToggleShas => self.on_toggle_shas(),
-                    Command::ToggleHelp => self.on_toggle_help(),
-                    Command::ActionMode => self.on_action_mode(),
-                    Command::Exit => self.on_exit(),
+            && let Some(cmd) = mode_map.get(&key_binding)
+        {
+            match cmd {
+                // User Interface
+                Command::WidenScope => self.on_widen_scope(),
+                Command::NarrowScope => self.on_narrow_scope(),
+                Command::FocusNextPane => self.on_focus_next_pane(),
+                Command::FocusPreviousPane => self.on_focus_prev_pane(),
+                Command::Select => self.on_select(),
+                Command::Back => self.on_back(),
+                Command::Minimize => self.on_minimize(),
+                Command::ToggleBranches => self.on_toggle_branches(),
+                Command::ToggleTags => self.on_toggle_tags(),
+                Command::ToggleStashes => self.on_toggle_stashes(),
+                Command::ToggleStatus => self.on_toggle_status(),
+                Command::ToggleInspector => self.on_toggle_inspector(),
+                Command::ToggleShas => self.on_toggle_shas(),
+                Command::ToggleHelp => self.on_toggle_help(),
+                Command::ActionMode => self.on_action_mode(),
+                Command::Exit => self.on_exit(),
 
-                    // Lists
-                    Command::ScrollPageUp => self.on_scroll_page_up(),
-                    Command::ScrollPageDown => self.on_scroll_page_down(),
-                    Command::ScrollHalfPageUp => self.on_scroll_half_page_up(),
-                    Command::ScrollHalfPageDown => self.on_scroll_half_page_down(),
-                    Command::ScrollUp => self.on_scroll_up(),
-                    Command::ScrollDown => self.on_scroll_down(),
-                    Command::ScrollUpHalf => self.on_scroll_up_half(),
-                    Command::ScrollDownHalf => self.on_scroll_down_half(),
-                    Command::GoToBeginning => self.on_scroll_to_beginning(),
-                    Command::GoToEnd => self.on_scroll_to_end(),
+                // Lists
+                Command::ScrollPageUp => self.on_scroll_page_up(),
+                Command::ScrollPageDown => self.on_scroll_page_down(),
+                Command::ScrollHalfPageUp => self.on_scroll_half_page_up(),
+                Command::ScrollHalfPageDown => self.on_scroll_half_page_down(),
+                Command::ScrollUp => self.on_scroll_up(),
+                Command::ScrollDown => self.on_scroll_down(),
+                Command::ScrollUpHalf => self.on_scroll_up_half(),
+                Command::ScrollDownHalf => self.on_scroll_down_half(),
+                Command::GoToBeginning => self.on_scroll_to_beginning(),
+                Command::GoToEnd => self.on_scroll_to_end(),
 
-                    // Graph
-                    Command::ScrollUpBranch => self.on_scroll_up_branch(),
-                    Command::ScrollDownBranch => self.on_scroll_down_branch(),
-                    Command::ScrollUpCommit => self.on_scroll_up_commit(),
-                    Command::ScrollDownCommit => self.on_scroll_down_commit(),
-                    Command::Find => self.on_find(),
-                    Command::SoloBranch => self.on_solo_branch(),
-                    Command::ToggleBranch => self.on_toggle_branch(),
+                // Graph
+                Command::ScrollUpBranch => self.on_scroll_up_branch(),
+                Command::ScrollDownBranch => self.on_scroll_down_branch(),
+                Command::ScrollUpCommit => self.on_scroll_up_commit(),
+                Command::ScrollDownCommit => self.on_scroll_down_commit(),
+                Command::Find => self.on_find(),
+                Command::SoloBranch => self.on_solo_branch(),
+                Command::ToggleBranch => self.on_toggle_branch(),
 
-                    // Git
-                    Command::Drop => self.on_drop(),
-                    Command::Pop => self.on_pop(),
-                    Command::Stash => self.on_stash(),
-                    Command::FetchAll => self.on_fetch_all(),
-                    Command::Checkout => self.on_checkout(),
-                    Command::HardReset => self.on_hard_reset(),
-                    Command::MixedReset => self.on_mixed_reset(),
-                    Command::Unstage => self.on_unstage(),
-                    Command::Stage => self.on_stage(),
-                    Command::Commit => self.on_commit(),
-                    Command::ForcePush => self.on_force_push(),
-                    Command::CreateBranch => self.on_create_branch(),
-                    Command::DeleteBranch => self.on_delete_branch(),
-                    Command::Tag => self.on_tag(),
-                    Command::Untag => self.on_untag(),
-                    Command::Cherrypick => self.on_cherrypick(),
-                    Command::Reload => self.on_reload(),
-                }
+                // Git
+                Command::Drop => self.on_drop(),
+                Command::Pop => self.on_pop(),
+                Command::Stash => self.on_stash(),
+                Command::FetchAll => self.on_fetch_all(),
+                Command::Checkout => self.on_checkout(),
+                Command::HardReset => self.on_hard_reset(),
+                Command::MixedReset => self.on_mixed_reset(),
+                Command::Unstage => self.on_unstage(),
+                Command::Stage => self.on_stage(),
+                Command::Commit => self.on_commit(),
+                Command::ForcePush => self.on_force_push(),
+                Command::CreateBranch => self.on_create_branch(),
+                Command::DeleteBranch => self.on_delete_branch(),
+                Command::Tag => self.on_tag(),
+                Command::Untag => self.on_untag(),
+                Command::Cherrypick => self.on_cherrypick(),
+                Command::Reload => self.on_reload(),
             }
+        }
 
         // Reset mode to normal
         if current_mode == InputMode::Action {
@@ -461,22 +462,24 @@ impl App {
 
     pub fn on_narrow_scope(&mut self) {
         match self.focus {
-            Focus::Viewport => if self.viewport == Viewport::Graph {
-                if self.graph_selected != 0 {
-                    self.is_inspector = true;
-                    self.focus = Focus::Inspector;
-                } else {
-                    if self.uncommitted.is_clean {
-                        return;
-                    }
-                    self.is_status = true;
-                    if self.uncommitted.is_staged {
-                        self.focus = Focus::StatusTop;
+            Focus::Viewport => {
+                if self.viewport == Viewport::Graph {
+                    if self.graph_selected != 0 {
+                        self.is_inspector = true;
+                        self.focus = Focus::Inspector;
                     } else {
-                        self.focus = Focus::StatusBottom;
+                        if self.uncommitted.is_clean {
+                            return;
+                        }
+                        self.is_status = true;
+                        if self.uncommitted.is_staged {
+                            self.focus = Focus::StatusTop;
+                        } else {
+                            self.focus = Focus::StatusBottom;
+                        }
                     }
                 }
-            },
+            }
             Focus::Inspector => {
                 self.is_status = true;
                 self.focus = Focus::StatusTop;

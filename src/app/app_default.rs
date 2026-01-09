@@ -1,8 +1,6 @@
 use crate::helpers::heatmap::empty_heatmap;
 use crate::helpers::keymap::InputMode;
-use crate::{
-    app::input::TextInput, core::stashes::Stashes,
-};
+use crate::{app::input::TextInput, core::stashes::Stashes};
 use crate::{
     app::{
         app::{App, Focus, Viewport},
@@ -29,7 +27,8 @@ impl Default for App {
         let theme = Theme::default();
         let color = Rc::new(RefCell::new(ColorPicker::from_theme(&theme)));
         let canonical_path = std::fs::canonicalize(path).expect("Invalid repo path");
-        let absolute_path: PathBuf = try_into_git_repo_root(&canonical_path).unwrap_or(canonical_path);
+        let absolute_path: PathBuf =
+            try_into_git_repo_root(&canonical_path).unwrap_or(canonical_path);
         let repo = Rc::new(Repository::open(absolute_path.clone()).expect("Could not open repo"));
         let heatmap = empty_heatmap();
         let logo = vec![

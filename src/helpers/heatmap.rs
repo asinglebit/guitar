@@ -1,4 +1,4 @@
-use crate::{helpers::palette::Theme};
+use crate::helpers::palette::Theme;
 use chrono::{TimeZone, Utc};
 use git2::{Oid, Repository};
 use im::HashMap;
@@ -8,12 +8,10 @@ pub const WEEKS: usize = 53;
 pub const DAYS: usize = 7;
 
 pub fn commits_per_day(repo: &Repository, oids: &Vec<Oid>) -> HashMap<usize, usize> {
-
     let today = Utc::now().date_naive();
     let mut counts: HashMap<usize, usize> = HashMap::new();
 
     for oid in oids {
-
         let commit = match repo.find_commit(*oid) {
             Ok(c) => c,
             Err(_) => continue,
@@ -29,7 +27,7 @@ pub fn commits_per_day(repo: &Repository, oids: &Vec<Oid>) -> HashMap<usize, usi
         let days_ago = (today - commit_date).num_days();
 
         // Ignore anything outside the 53×7 window
-        if days_ago < 0 || days_ago >= 371 {
+        if !(0..371).contains(&days_ago) {
             continue;
         }
 
@@ -68,6 +66,10 @@ pub fn heat_cell(count: usize, theme: &Theme) -> Span<'_> {
         7 => ("⡿ ", Some(theme.COLOR_GRASS)),
         _ => ("⣿ ", Some(theme.COLOR_GRASS)),
     };
-    let style = if let Some(c) = color { Style::default().fg(c) } else { Style::default() };
+    let style = if let Some(c) = color {
+        Style::default().fg(c)
+    } else {
+        Style::default()
+    };
     Span::styled(character, style)
 }

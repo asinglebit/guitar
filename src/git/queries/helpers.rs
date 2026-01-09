@@ -1,9 +1,5 @@
 use crate::helpers::text::{decode, sanitize};
-use chrono::{Duration, TimeZone};
-use chrono::{NaiveDate, Utc};
-use git2::{BranchType, Oid, Sort};
 use git2::{Diff, DiffFormat::Patch, ObjectType, Repository};
-use im::HashMap;
 use std::collections::HashSet;
 // Structure representing all uncommitted changes in the repository
 #[derive(Debug, Default, Clone)]
