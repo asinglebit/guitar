@@ -17,41 +17,21 @@ pub struct Chunk {
 
 impl Default for Chunk {
     fn default() -> Self {
-        Chunk {
-            alias: NONE,
-            parent_a: NONE,
-            parent_b: NONE,
-            marker: Markers::Dummy,
-        }
+        Chunk { alias: NONE, parent_a: NONE, parent_b: NONE, marker: Markers::Dummy }
     }
 }
 
 impl Chunk {
     pub fn uncommitted(parent_a: u32, parent_b: u32) -> Self {
-        Chunk {
-            alias: NONE,
-            parent_a,
-            parent_b,
-            marker: Markers::Uncommitted,
-        }
+        Chunk { alias: NONE, parent_a, parent_b, marker: Markers::Uncommitted }
     }
 
     pub fn commit(alias: u32, parent_a: u32, parent_b: u32) -> Self {
-        Chunk {
-            alias,
-            parent_a,
-            parent_b,
-            marker: Markers::Commit,
-        }
+        Chunk { alias, parent_a, parent_b, marker: Markers::Commit }
     }
 
     pub fn dummy() -> Self {
-        Chunk {
-            alias: NONE,
-            parent_a: NONE,
-            parent_b: NONE,
-            marker: Markers::Dummy,
-        }
+        Chunk { alias: NONE, parent_a: NONE, parent_b: NONE, marker: Markers::Dummy }
     }
 
     pub fn is_dummy(&self) -> bool {

@@ -138,24 +138,15 @@ pub fn center_line(line: &str, width: usize) -> String {
 pub fn decode(bytes: &[u8]) -> String {
     if bytes.starts_with(&[0xFF, 0xFE]) {
         // UTF-16 Little Endian with BOM
-        let utf16: Vec<u16> = bytes[2..]
-            .chunks(2)
-            .map(|c| u16::from_le_bytes([c[0], *c.get(1).unwrap_or(&0)]))
-            .collect();
+        let utf16: Vec<u16> = bytes[2..].chunks(2).map(|c| u16::from_le_bytes([c[0], *c.get(1).unwrap_or(&0)])).collect();
         String::from_utf16(&utf16).unwrap_or_default()
     } else if bytes.starts_with(&[0xFE, 0xFF]) {
         // UTF-16 Big Endian with BOM
-        let utf16: Vec<u16> = bytes[2..]
-            .chunks(2)
-            .map(|c| u16::from_be_bytes([c[0], *c.get(1).unwrap_or(&0)]))
-            .collect();
+        let utf16: Vec<u16> = bytes[2..].chunks(2).map(|c| u16::from_be_bytes([c[0], *c.get(1).unwrap_or(&0)])).collect();
         String::from_utf16(&utf16).unwrap_or_default()
     } else if bytes.len() > 1 && bytes[1] == 0 {
         // Likely UTF-16 LE without BOM
-        let utf16: Vec<u16> = bytes
-            .chunks(2)
-            .map(|c| u16::from_le_bytes([c[0], *c.get(1).unwrap_or(&0)]))
-            .collect();
+        let utf16: Vec<u16> = bytes.chunks(2).map(|c| u16::from_le_bytes([c[0], *c.get(1).unwrap_or(&0)])).collect();
         String::from_utf16(&utf16).unwrap_or_default()
     } else {
         // Default: UTF-8 or fallback to lossy decode
@@ -170,10 +161,10 @@ pub fn sanitize(string: String) -> String {
         .replace("\r", "\n") // Convert Windows/Mac newlines to '\n'
         .chars()
         .flat_map(|character| match character {
-            '\t' => "    ".chars().collect::<Vec<_>>(), // Expand tabs
-            '\n' => vec!['\n'],                         // keep newlines
+            '\t' => "    ".chars().collect::<Vec<_>>(),    // Expand tabs
+            '\n' => vec!['\n'],                            // keep newlines
             character if character.is_control() => vec![], // remove other control chars
-            _ => vec![character],                       // Keep the rest of the characters
+            _ => vec![character],                          // Keep the rest of the characters
         })
         .collect()
 }

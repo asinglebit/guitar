@@ -21,11 +21,7 @@ impl Default for Spinner {
 
 impl Spinner {
     pub fn new() -> Self {
-        Self {
-            char_state: Arc::new(Mutex::new('|')),
-            running: Arc::new(AtomicBool::new(false)),
-            handle: None,
-        }
+        Self { char_state: Arc::new(Mutex::new('|')), running: Arc::new(AtomicBool::new(false)), handle: None }
     }
 
     pub fn start(&mut self) {

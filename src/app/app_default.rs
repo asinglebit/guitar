@@ -20,22 +20,14 @@ use std::{cell::RefCell, env, path::PathBuf, rc::Rc};
 impl Default for App {
     fn default() -> Self {
         let args: Vec<String> = env::args().collect();
-        let path = if args.len() > 1 {
-            &args[1]
-        } else {
-            &".".to_string()
-        };
+        let path = if args.len() > 1 { &args[1] } else { &".".to_string() };
         let theme = Theme::default();
         let color = Rc::new(RefCell::new(ColorPicker::from_theme(&theme)));
         let canonical_path = std::fs::canonicalize(path).expect("Invalid repo path");
-        let absolute_path: PathBuf =
-            try_into_git_repo_root(&canonical_path).unwrap_or(canonical_path);
+        let absolute_path: PathBuf = try_into_git_repo_root(&canonical_path).unwrap_or(canonical_path);
         let repo = Rc::new(Repository::open(absolute_path.clone()).expect("Could not open repo"));
         let heatmap = empty_heatmap();
-        let logo = vec![
-            Span::styled("  guita", Style::default().fg(theme.COLOR_GRASS)),
-            Span::styled("╭", Style::default().fg(theme.COLOR_GREEN)),
-        ];
+        let logo = vec![Span::styled("  guita", Style::default().fg(theme.COLOR_GRASS)), Span::styled("╭", Style::default().fg(theme.COLOR_GREEN))];
 
         App {
             // General

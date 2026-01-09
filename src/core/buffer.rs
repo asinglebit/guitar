@@ -37,22 +37,12 @@ impl Buffer {
                 break;
             }
             self.curr.pop_back();
-            self.delta
-                .ops
-                .push_back(DeltaOp::Remove { index: last_idx });
+            self.delta.ops.push_back(DeltaOp::Remove { index: last_idx });
         }
 
         // If we have a planned merge later on
-        if let Some(merger_idx) = self
-            .curr
-            .iter()
-            .position(|inner| self.mergers.iter().any(|alias| *alias == inner.alias))
-        {
-            if let Some(merger_pos) = self
-                .mergers
-                .iter()
-                .position(|alias| *alias == self.curr[merger_idx].alias)
-            {
+        if let Some(merger_idx) = self.curr.iter().position(|inner| self.mergers.iter().any(|alias| *alias == inner.alias)) {
+            if let Some(merger_pos) = self.mergers.iter().position(|alias| *alias == self.curr[merger_idx].alias) {
                 self.mergers.remove(merger_pos);
             }
 
@@ -62,31 +52,18 @@ impl Buffer {
             self.curr[merger_idx].parent_b = NONE;
             self.curr.push_back(clone.clone());
 
-            self.delta.ops.push_back(DeltaOp::Replace {
-                index: merger_idx,
-                new: self.curr[merger_idx].clone(),
-            });
+            self.delta.ops.push_back(DeltaOp::Replace { index: merger_idx, new: self.curr[merger_idx].clone() });
 
-            self.delta.ops.push_back(DeltaOp::Insert {
-                index: self.curr.len() - 1,
-                item: clone,
-            });
+            self.delta.ops.push_back(DeltaOp::Insert { index: self.curr.len() - 1, item: clone });
         }
 
         // Replace or append buffer chunk
-        if let Some(first_idx) = self
-            .curr
-            .iter()
-            .position(|inner| inner.parent_a == chunk.alias)
-        {
+        if let Some(first_idx) = self.curr.iter().position(|inner| inner.parent_a == chunk.alias) {
             let old_alias = chunk.alias;
 
             // Replace chunk
             self.curr[first_idx] = chunk.clone();
-            self.delta.ops.push_back(DeltaOp::Replace {
-                index: first_idx,
-                new: chunk,
-            });
+            self.delta.ops.push_back(DeltaOp::Replace { index: first_idx, new: chunk });
 
             // Place dummies in case of branching
             for (i, inner) in self.curr.iter_mut().enumerate() {
@@ -110,17 +87,11 @@ impl Buffer {
                     *inner = Chunk::dummy();
                 }
 
-                self.delta.ops.push_back(DeltaOp::Replace {
-                    index: i,
-                    new: inner.clone(),
-                });
+                self.delta.ops.push_back(DeltaOp::Replace { index: i, new: inner.clone() });
             }
         } else {
             self.curr.push_back(chunk.clone());
-            self.delta.ops.push_back(DeltaOp::Insert {
-                index: self.curr.len() - 1,
-                item: chunk,
-            });
+            self.delta.ops.push_back(DeltaOp::Insert { index: self.curr.len() - 1, item: chunk });
         }
     }
 
@@ -137,18 +108,10 @@ impl Buffer {
         self.history.clear();
 
         // Find the nearest checkpoint, rewrite this later to binary search
-        let checkpoint_idx = self
-            .checkpoints
-            .keys()
-            .rev()
-            .find(|&&idx| idx <= start)
-            .copied();
+        let checkpoint_idx = self.checkpoints.keys().rev().find(|&&idx| idx <= start).copied();
 
         // Start from the checkpoint snapshot, or empty
-        let mut curr = checkpoint_idx
-            .and_then(|idx| self.checkpoints.get(&idx))
-            .cloned()
-            .unwrap_or_default();
+        let mut curr = checkpoint_idx.and_then(|idx| self.checkpoints.get(&idx)).cloned().unwrap_or_default();
 
         // Determine the first delta to apply
         let begin = checkpoint_idx.map_or(0, |idx| idx + 1);

@@ -4,10 +4,7 @@ use git2::{Oid, Repository, Time};
 use std::collections::HashMap;
 
 // Returns a map of commit OIDs to the branch names that point to them
-pub fn get_tip_oids(
-    repo: &Repository,
-    oids: &mut Oids,
-) -> (HashMap<u32, Vec<String>>, HashMap<u32, Vec<String>>) {
+pub fn get_tip_oids(repo: &Repository, oids: &mut Oids) -> (HashMap<u32, Vec<String>>, HashMap<u32, Vec<String>>) {
     let mut local: HashMap<u32, Vec<String>> = HashMap::new();
     let mut remote: HashMap<u32, Vec<String>> = HashMap::new();
 
@@ -81,19 +78,12 @@ pub fn get_sorted_oids(batcher: &Batcher, oids: &mut Oids, sorted: &mut Vec<u32>
 // Returns the name of the currently checked-out branch, or None if detached HEAD
 pub fn get_current_branch(repo: &Repository) -> Option<String> {
     let head = repo.head().unwrap();
-    if head.is_branch() {
-        head.shorthand().map(|s| s.to_string())
-    } else {
-        None
-    }
+    if head.is_branch() { head.shorthand().map(|s| s.to_string()) } else { None }
 }
 
 // Returns a map of commit OIDs to their timestamps:
 // (commit time, committer time, author time)
-pub fn get_timestamps(
-    repo: &Repository,
-    _branches: &HashMap<Oid, Vec<String>>,
-) -> HashMap<Oid, (Time, Time, Time)> {
+pub fn get_timestamps(repo: &Repository, _branches: &HashMap<Oid, Vec<String>>) -> HashMap<Oid, (Time, Time, Time)> {
     _branches
         .keys()
         .map(|&sha| {
@@ -107,9 +97,7 @@ pub fn get_timestamps(
         .collect()
 }
 
-pub fn get_git_user_info(
-    repo: &Repository,
-) -> Result<(Option<String>, Option<String>), git2::Error> {
+pub fn get_git_user_info(repo: &Repository) -> Result<(Option<String>, Option<String>), git2::Error> {
     let config = repo.config()?;
     let name = config.get_string("user.name").ok();
     let email = config.get_string("user.email").ok();

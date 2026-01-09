@@ -13,10 +13,7 @@ use crate::{
         diffs::get_filenames_diff_at_workdir,
         helpers::{FileChange, UncommittedChanges},
     },
-    helpers::{
-        colors::ColorPicker, heatmap::build_heatmap, keymap::InputMode, palette::*,
-        spinner::Spinner,
-    },
+    helpers::{colors::ColorPicker, heatmap::build_heatmap, keymap::InputMode, palette::*, spinner::Spinner},
 };
 use crate::{
     app::input::TextInput,
@@ -185,10 +182,7 @@ impl App {
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
         // Enable faster Escape detection in supported terminals
         enable_raw_mode()?;
-        execute!(
-            stdout(),
-            PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)
-        )?;
+        execute!(stdout(), PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES))?;
 
         // Load the app and initialize state
         self.load_layout();
@@ -212,15 +206,8 @@ impl App {
     }
 
     pub fn draw(&mut self, frame: &mut Frame) {
-        let minimal_horizontal_space = if (self.layout_config.is_branches
-            || self.layout_config.is_tags
-            || self.layout_config.is_stashes)
-            && (self.layout_config.is_inspector || self.layout_config.is_status)
-        {
-            100
-        } else {
-            50
-        };
+        let minimal_horizontal_space =
+            if (self.layout_config.is_branches || self.layout_config.is_tags || self.layout_config.is_stashes) && (self.layout_config.is_inspector || self.layout_config.is_status) { 100 } else { 50 };
         let is_zen = frame.area().width < minimal_horizontal_space;
 
         // Compute the layout
@@ -230,11 +217,7 @@ impl App {
 
         frame.render_widget(
             Block::default()
-                .borders(if is_splash {
-                    Borders::NONE
-                } else {
-                    Borders::ALL
-                })
+                .borders(if is_splash { Borders::NONE } else { Borders::ALL })
                 .border_style(Style::default().fg(self.theme.COLOR_BORDER))
                 .border_type(ratatui::widgets::BorderType::Rounded),
             self.layout.app,
@@ -441,21 +424,10 @@ impl App {
             self.buffer = result.buffer;
 
             // Update branches
-            self.branches.feed(
-                &self.oids,
-                &self.color,
-                &result.branches_lanes,
-                result.branches_local,
-                result.branches_remote,
-            );
+            self.branches.feed(&self.oids, &self.color, &result.branches_lanes, result.branches_local, result.branches_remote);
 
             // Update tags
-            self.tags.feed(
-                &self.oids,
-                &self.color,
-                &result.tags_lanes,
-                result.tags_local,
-            );
+            self.tags.feed(&self.oids, &self.color, &result.tags_lanes, result.tags_local);
 
             // Update stashes
             self.stashes.feed(&self.color, &result.stashes_lanes);

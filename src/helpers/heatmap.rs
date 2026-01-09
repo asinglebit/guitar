@@ -18,11 +18,7 @@ pub fn commits_per_day(repo: &Repository, oids: &Vec<Oid>) -> HashMap<usize, usi
         };
 
         // Convert commit time to DATE (UTC)
-        let commit_date = Utc
-            .timestamp_opt(commit.time().seconds(), 0)
-            .single()
-            .unwrap()
-            .date_naive();
+        let commit_date = Utc.timestamp_opt(commit.time().seconds(), 0).single().unwrap().date_naive();
 
         let days_ago = (today - commit_date).num_days();
 
@@ -66,10 +62,6 @@ pub fn heat_cell(count: usize, theme: &Theme) -> Span<'_> {
         7 => ("⡿ ", Some(theme.COLOR_GRASS)),
         _ => ("⣿ ", Some(theme.COLOR_GRASS)),
     };
-    let style = if let Some(c) = color {
-        Style::default().fg(c)
-    } else {
-        Style::default()
-    };
+    let style = if let Some(c) = color { Style::default().fg(c) } else { Style::default() };
     Span::styled(character, style)
 }

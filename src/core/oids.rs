@@ -13,13 +13,7 @@ pub struct Oids {
 
 impl Default for Oids {
     fn default() -> Self {
-        Oids {
-            zero: Oid::zero(),
-            oids: Vec::new(),
-            aliases: HashMap::new(),
-            sorted_aliases: vec![NONE],
-            stashes: vec![],
-        }
+        Oids { zero: Oid::zero(), oids: Vec::new(), aliases: HashMap::new(), sorted_aliases: vec![NONE], stashes: vec![] }
     }
 }
 

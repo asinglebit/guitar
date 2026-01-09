@@ -12,12 +12,7 @@ use ratatui::{
 impl App {
     pub fn draw_branches(&mut self, frame: &mut Frame) {
         // Padding
-        let padding = ratatui::widgets::Padding {
-            left: 2,
-            right: 0,
-            top: 0,
-            bottom: 0,
-        };
+        let padding = ratatui::widgets::Padding { left: 2, right: 0, top: 0, bottom: 0 };
 
         // Calculate maximum available width for text
         let available_width = self.layout.branches.width as usize - 1;
@@ -39,17 +34,10 @@ impl App {
             } else {
                 "◇"
             };
-            let color = if is_visible {
-                self.branches.get_color(&self.theme, branch_alias)
-            } else {
-                self.theme.COLOR_TEXT
-            };
+            let color = if is_visible { self.branches.get_color(&self.theme, branch_alias) } else { self.theme.COLOR_TEXT };
 
             // Render a branch
-            lines.push(Line::from(Span::styled(
-                format!("{icon} {truncated}"),
-                Style::default().fg(color),
-            )));
+            lines.push(Line::from(Span::styled(format!("{icon} {truncated}"), Style::default().fg(color))));
         }
 
         // Get vertical dimensions
@@ -64,18 +52,10 @@ impl App {
         }
 
         // Trap selection
-        self.trap_selection(
-            self.branches_selected,
-            &self.branches_scroll,
-            total_lines,
-            visible_height,
-        );
+        self.trap_selection(self.branches_selected, &self.branches_scroll, total_lines, visible_height);
 
         // Calculate scroll
-        let start = self
-            .branches_scroll
-            .get()
-            .min(total_lines.saturating_sub(visible_height));
+        let start = self.branches_scroll.get().min(total_lines.saturating_sub(visible_height));
         let end = (start + visible_height).min(total_lines);
 
         // Setup list items
@@ -84,15 +64,10 @@ impl App {
             .enumerate()
             .map(|(idx, line)| {
                 if start + idx == self.branches_selected && self.focus == Focus::Branches {
-                    let spans: Vec<Span> = line
-                        .iter()
-                        .map(|span| Span::styled(span.content.clone(), span.style))
-                        .collect();
-                    ListItem::new(Line::from(spans))
-                        .style(Style::default().bg(self.theme.COLOR_GREY_800))
+                    let spans: Vec<Span> = line.iter().map(|span| Span::styled(span.content.clone(), span.style)).collect();
+                    ListItem::new(Line::from(spans)).style(Style::default().bg(self.theme.COLOR_GREY_800))
                 } else if (idx + start).is_multiple_of(2) {
-                    ListItem::new(Line::from(line.clone().spans))
-                        .style(Style::default().bg(self.theme.COLOR_GREY_900))
+                    ListItem::new(Line::from(line.clone().spans)).style(Style::default().bg(self.theme.COLOR_GREY_900))
                 } else {
                     ListItem::new(line.clone())
                 }
@@ -105,36 +80,15 @@ impl App {
         frame.render_widget(list, self.layout.branches);
 
         // Setup the scrollbar
-        let mut scrollbar_state = ScrollbarState::new(total_lines.saturating_sub(visible_height))
-            .position(self.branches_scroll.get());
+        let mut scrollbar_state = ScrollbarState::new(total_lines.saturating_sub(visible_height)).position(self.branches_scroll.get());
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
             .begin_symbol(Some("─"))
-            .end_symbol(Some(
-                if self.layout_config.is_tags || self.layout_config.is_stashes {
-                    "│"
-                } else {
-                    "─"
-                },
-            ))
+            .end_symbol(Some(if self.layout_config.is_tags || self.layout_config.is_stashes { "│" } else { "─" }))
             .track_symbol(Some("│"))
-            .thumb_symbol(if total_lines > visible_height {
-                "▌"
-            } else {
-                "│"
-            })
-            .thumb_style(Style::default().fg(
-                if total_lines > visible_height && self.focus == Focus::Branches {
-                    self.theme.COLOR_GREY_600
-                } else {
-                    self.theme.COLOR_BORDER
-                },
-            ));
+            .thumb_symbol(if total_lines > visible_height { "▌" } else { "│" })
+            .thumb_style(Style::default().fg(if total_lines > visible_height && self.focus == Focus::Branches { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 
         // Render the scrollbar
-        frame.render_stateful_widget(
-            scrollbar,
-            self.layout.branches_scrollbar,
-            &mut scrollbar_state,
-        );
+        frame.render_stateful_widget(scrollbar, self.layout.branches_scrollbar, &mut scrollbar_state);
     }
 }

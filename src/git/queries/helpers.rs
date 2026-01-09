@@ -75,18 +75,11 @@ pub fn deduplicate(a: &[String], b: &[String]) -> usize {
 pub fn walk_tree(repo: &Repository, tree: &git2::Tree, base: &str, changes: &mut Vec<FileChange>) {
     for entry in tree.iter() {
         if let Some(name) = entry.name() {
-            let path = if base.is_empty() {
-                name.to_string()
-            } else {
-                format!("{}/{}", base, name)
-            };
+            let path = if base.is_empty() { name.to_string() } else { format!("{}/{}", base, name) };
 
             match entry.kind() {
                 Some(ObjectType::Blob) => {
-                    changes.push(FileChange {
-                        filename: path,
-                        status: FileStatus::Added,
-                    });
+                    changes.push(FileChange { filename: path, status: FileStatus::Added });
                 }
                 Some(ObjectType::Tree) => {
                     if let Ok(subtree) = entry.to_object(repo).and_then(|o| o.peel_to_tree()) {
@@ -121,10 +114,7 @@ pub fn diff_to_hunks(diff: Diff) -> Result<Vec<Hunk>, git2::Error> {
 
         // Add line to the most recent hunk
         if let Some(last) = hunks.last_mut() {
-            last.lines.push(LineChange {
-                origin: line.origin(),
-                content: sanitize(decode(line.content())).to_string(),
-            });
+            last.lines.push(LineChange { origin: line.origin(), content: sanitize(decode(line.content())).to_string() });
         }
 
         true

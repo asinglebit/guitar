@@ -62,15 +62,9 @@ pub struct WalkerOutput {
 
 impl Walker {
     // Creates a new walker
-    pub fn new(
-        path: String,
-        amount: usize,
-        visible: HashMap<u32, Vec<String>>,
-    ) -> Result<Self, git2::Error> {
+    pub fn new(path: String, amount: usize, visible: HashMap<u32, Vec<String>>) -> Result<Self, git2::Error> {
         let path = path.clone();
-        let repo = Rc::new(RefCell::new(
-            Repository::open(path).expect("Failed to open repo"),
-        ));
+        let repo = Rc::new(RefCell::new(Repository::open(path).expect("Failed to open repo")));
 
         // Walker utilities
         let buffer = RefCell::new(Buffer::default());
@@ -131,18 +125,11 @@ impl Walker {
 
         // Sort commits
         let mut sorted_batch: Vec<u32> = Vec::new();
-        get_sorted_oids(
-            &self.batcher,
-            &mut self.oids,
-            &mut sorted_batch,
-            self.amount,
-        );
+        get_sorted_oids(&self.batcher, &mut self.oids, &mut sorted_batch, self.amount);
 
         // Make a fake commit for unstaged changes
         if self.oids.get_commit_count() == 1 {
-            self.buffer
-                .borrow_mut()
-                .update(Chunk::uncommitted(head_alias, NONE));
+            self.buffer.borrow_mut().update(Chunk::uncommitted(head_alias, NONE));
         }
 
         // Get all the stashed commits here
@@ -177,23 +164,14 @@ impl Walker {
             let (parent_a, parent_b) = if stashes.contains(&alias) {
                 (
                     // For stash commits, only the first parent is used
-                    parents
-                        .first()
-                        .map(|p| self.oids.get_alias_by_oid(*p))
-                        .unwrap_or(NONE),
+                    parents.first().map(|p| self.oids.get_alias_by_oid(*p)).unwrap_or(NONE),
                     NONE,
                 )
             } else {
                 (
                     // For normal commits, use both parents if they exist
-                    parents
-                        .first()
-                        .map(|p| self.oids.get_alias_by_oid(*p))
-                        .unwrap_or(NONE),
-                    parents
-                        .get(1)
-                        .map(|p| self.oids.get_alias_by_oid(*p))
-                        .unwrap_or(NONE),
+                    parents.first().map(|p| self.oids.get_alias_by_oid(*p)).unwrap_or(NONE),
+                    parents.get(1).map(|p| self.oids.get_alias_by_oid(*p)).unwrap_or(NONE),
                 )
             };
 
@@ -205,9 +183,7 @@ impl Walker {
 
             for (lane_idx, chunk) in (&self.buffer.borrow().curr).into_iter().enumerate() {
                 if !chunk.is_dummy() && alias == chunk.alias {
-                    if self.branches_local.contains_key(&alias)
-                        || self.branches_remote.contains_key(&alias)
-                    {
+                    if self.branches_local.contains_key(&alias) || self.branches_remote.contains_key(&alias) {
                         self.branches_lanes.insert(alias, lane_idx);
                     }
 
@@ -222,10 +198,7 @@ impl Walker {
                     if chunk.parent_a != NONE && chunk.parent_b != NONE {
                         let mut is_merger_found = false;
                         for chunk_nested in &self.buffer.borrow().curr {
-                            if chunk_nested.parent_a != NONE
-                                && chunk_nested.parent_b == NONE
-                                && chunk.parent_b == chunk_nested.parent_a
-                            {
+                            if chunk_nested.parent_a != NONE && chunk_nested.parent_b == NONE && chunk.parent_b == chunk_nested.parent_a {
                                 is_merger_found = true;
                                 break;
                             }

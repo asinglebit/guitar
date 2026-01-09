@@ -20,23 +20,11 @@ pub struct LayerBuilder {
 
 impl LayerBuilder {
     pub fn new(color: Rc<RefCell<ColorPicker>>) -> Self {
-        Self {
-            layers: HashMap::new(),
-            color,
-        }
+        Self { layers: HashMap::new(), color }
     }
 
-    pub fn add(
-        &mut self,
-        layer: LayerTypes,
-        symbol: String,
-        lane_idx: usize,
-        custom: Option<Color>,
-    ) {
-        self.layers.entry(layer).or_default().push((
-            symbol,
-            custom.unwrap_or(self.color.borrow().get_lane(lane_idx)),
-        ));
+    pub fn add(&mut self, layer: LayerTypes, symbol: String, lane_idx: usize, custom: Option<Color>) {
+        self.layers.entry(layer).or_default().push((symbol, custom.unwrap_or(self.color.borrow().get_lane(lane_idx))));
     }
 }
 
@@ -51,20 +39,16 @@ impl LayersContext {
         self.builder.layers.clear();
     }
     pub fn commit(&mut self, sym: &str, lane: usize) {
-        self.builder
-            .add(LayerTypes::Commits, sym.to_string(), lane, None);
+        self.builder.add(LayerTypes::Commits, sym.to_string(), lane, None);
     }
     pub fn pipe(&mut self, sym: &str, lane: usize) {
-        self.builder
-            .add(LayerTypes::Pipes, sym.to_string(), lane, None);
+        self.builder.add(LayerTypes::Pipes, sym.to_string(), lane, None);
     }
     pub fn merge(&mut self, sym: &str, lane: usize) {
-        self.builder
-            .add(LayerTypes::Merges, sym.to_string(), lane, None);
+        self.builder.add(LayerTypes::Merges, sym.to_string(), lane, None);
     }
     pub fn pipe_custom(&mut self, sym: &str, lane: usize, color: Color) {
-        self.builder
-            .add(LayerTypes::Pipes, sym.to_string(), lane, Some(color));
+        self.builder.add(LayerTypes::Pipes, sym.to_string(), lane, Some(color));
     }
     pub fn bake(&mut self, spans: &mut Vec<Span>) {
         // Trim trailing empty symbols for each layer
@@ -77,12 +61,7 @@ impl LayersContext {
         }
 
         // Determine max length across all layers
-        let max_len = [LayerTypes::Commits, LayerTypes::Merges, LayerTypes::Pipes]
-            .iter()
-            .filter_map(|layer| self.builder.layers.get(layer))
-            .map(|tokens| tokens.len())
-            .max()
-            .unwrap_or(0);
+        let max_len = [LayerTypes::Commits, LayerTypes::Merges, LayerTypes::Pipes].iter().filter_map(|layer| self.builder.layers.get(layer)).map(|tokens| tokens.len()).max().unwrap_or(0);
 
         // For each token
         for token_index in 0..max_len {
