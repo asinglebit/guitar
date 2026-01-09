@@ -31,27 +31,27 @@ impl TextInput {
             KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.value.insert(self.cursor, c);
                 self.cursor += 1;
-            }
+            },
             KeyCode::Backspace => {
                 if self.cursor > 0 {
                     self.cursor -= 1;
                     self.value.remove(self.cursor);
                 }
-            }
+            },
             KeyCode::Delete => {
                 if self.cursor < self.value.len() {
                     self.value.remove(self.cursor);
                 }
-            }
+            },
             KeyCode::Left => {
                 self.cursor = self.cursor.saturating_sub(1);
-            }
+            },
             KeyCode::Right => {
                 self.cursor = (self.cursor + 1).min(self.value.len());
-            }
+            },
             KeyCode::Home => self.cursor = 0,
             KeyCode::End => self.cursor = self.value.len(),
-            _ => {}
+            _ => {},
         }
 
         // Always update scroll after any key event

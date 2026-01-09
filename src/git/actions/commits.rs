@@ -1,7 +1,4 @@
-use git2::{
-    BranchType, Cred, Error, ErrorCode, FetchOptions, Oid, PushOptions, RemoteCallbacks,
-    Repository, ResetType, Signature, StatusOptions, build::CheckoutBuilder,
-};
+use git2::{BranchType, Cred, Error, ErrorCode, FetchOptions, Oid, PushOptions, RemoteCallbacks, Repository, ResetType, Signature, StatusOptions, build::CheckoutBuilder};
 use git2::{CherrypickOptions, FetchPrune, StashApplyOptions, StashFlags};
 use std::{collections::HashMap, thread};
 
@@ -19,20 +16,12 @@ pub fn checkout_head(repo: &Repository, oid: Oid) {
     .expect("Error checking out");
 }
 
-pub fn checkout_branch(
-    repo: &Repository,
-    visible: &mut HashMap<u32, Vec<String>>,
-    local: &mut HashMap<u32, Vec<String>>,
-    alias: u32,
-    branch_name: &str,
-) -> Result<(), git2::Error> {
+pub fn checkout_branch(repo: &Repository, visible: &mut HashMap<u32, Vec<String>>, local: &mut HashMap<u32, Vec<String>>, alias: u32, branch_name: &str) -> Result<(), git2::Error> {
     // Helper to checkout a local branch
     fn checkout(repo: &Repository, branch_name: &str) -> Result<(), git2::Error> {
         let branch = repo.find_branch(branch_name, BranchType::Local)?;
         repo.set_head(branch.get().name().unwrap())?;
-        repo.checkout_head(Some(
-            CheckoutBuilder::default().allow_conflicts(true).force(),
-        ))
+        repo.checkout_head(Some(CheckoutBuilder::default().allow_conflicts(true).force()))
     }
 
     // If branch_name already exists as a local branch, checkout directly
@@ -59,19 +48,14 @@ pub fn checkout_branch(
         }
     }
 
-    Err(git2::Error::from_str(
-        "No matching local or remote branch found for the given Oid",
-    ))
+    Err(git2::Error::from_str("No matching local or remote branch found for the given Oid"))
 }
 
 pub fn git_add_all(repo: &Repository) -> Result<(), Error> {
     let mut index = repo.index()?;
 
     let mut opts = StatusOptions::new();
-    opts.include_untracked(true)
-        .recurse_untracked_dirs(true)
-        .include_ignored(false)
-        .include_unmodified(false);
+    opts.include_untracked(true).recurse_untracked_dirs(true).include_ignored(false).include_unmodified(false);
 
     let statuses = repo.statuses(Some(&mut opts))?;
 
@@ -85,11 +69,11 @@ pub fn git_add_all(repo: &Repository) -> Result<(), Error> {
                     if index.get_path(path, 0).is_some() {
                         index.remove_path(path)?;
                     }
-                }
+                },
                 _ => {
                     // Stage new or modified files
                     index.add_path(path)?;
-                }
+                },
             }
         }
     }
@@ -98,12 +82,7 @@ pub fn git_add_all(repo: &Repository) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn commit_staged(
-    repo: &Repository,
-    message: &str,
-    name: &str,
-    email: &str,
-) -> Result<Oid, Error> {
+pub fn commit_staged(repo: &Repository, message: &str, name: &str, email: &str) -> Result<Oid, Error> {
     let mut index = repo.index()?;
     let tree_oid = index.write_tree()?;
     let tree = repo.find_tree(tree_oid)?;
@@ -113,27 +92,20 @@ pub fn commit_staged(
         Ok(head_ref) => {
             // Try to peel to commit
             head_ref.peel_to_commit().ok()
-        }
+        },
         Err(e) => {
             if e.code() == ErrorCode::UnbornBranch {
                 None // empty repo, initial commit
             } else {
                 return Err(e);
             }
-        }
+        },
     };
 
     let signature = Signature::now(name, email)?;
 
     let commit_oid = if let Some(parent) = parent_commit {
-        repo.commit(
-            Some("HEAD"),
-            &signature,
-            &signature,
-            message,
-            &tree,
-            &[&parent],
-        )?
+        repo.commit(Some("HEAD"), &signature, &signature, message, &tree, &[&parent])?
     } else {
         // Initial commit
         repo.commit(Some("HEAD"), &signature, &signature, message, &tree, &[])?
@@ -151,9 +123,7 @@ pub fn reset_to_commit(repo: &Repository, target: Oid, reset_type: ResetType) ->
 
     if head.is_branch() {
         // Normal branch: move branch reference
-        let branch_ref_name = head
-            .name()
-            .ok_or_else(|| Error::from_str("Invalid branch reference name"))?;
+        let branch_ref_name = head.name().ok_or_else(|| Error::from_str("Invalid branch reference name"))?;
         let mut branch_ref = repo.find_reference(branch_ref_name)?;
         branch_ref.set_target(target, "reset branch to commit")?;
     } else {
@@ -176,7 +146,7 @@ pub fn unstage_all(repo: &Repository) -> Result<(), git2::Error> {
         Err(_) => {
             // If no HEAD exists (fresh repo), there's nothing to unstage
             return Ok(());
-        }
+        },
     };
 
     // Perform mixed reset - keeps working directory changes but resets index to HEAD
@@ -185,10 +155,7 @@ pub fn unstage_all(repo: &Repository) -> Result<(), git2::Error> {
     Ok(())
 }
 
-pub fn fetch_over_ssh(
-    repo_path: &str,
-    remote_name: &str,
-) -> thread::JoinHandle<Result<(), git2::Error>> {
+pub fn fetch_over_ssh(repo_path: &str, remote_name: &str) -> thread::JoinHandle<Result<(), git2::Error>> {
     // Clone the strings so the thread owns them
     let repo_path = repo_path.to_string();
     let remote_name = remote_name.to_string();
@@ -198,9 +165,7 @@ pub fn fetch_over_ssh(
         let mut remote = repo.find_remote(&remote_name)?;
 
         let mut callbacks = RemoteCallbacks::new();
-        callbacks.credentials(|_url, username_from_url, _| {
-            Cred::ssh_key_from_agent(username_from_url.unwrap())
-        });
+        callbacks.credentials(|_url, username_from_url, _| Cred::ssh_key_from_agent(username_from_url.unwrap()));
 
         callbacks.transfer_progress(|_stats| {
             // println!("Received {}/{} objects", stats.received_objects(), stats.total_objects());
@@ -211,24 +176,12 @@ pub fn fetch_over_ssh(
         fetch_options.remote_callbacks(callbacks);
         fetch_options.prune(FetchPrune::On);
 
-        remote.fetch(
-            &[
-                "refs/heads/*:refs/remotes/origin/*",
-                "refs/tags/*:refs/tags/*",
-            ],
-            Some(&mut fetch_options),
-            None,
-        )?;
+        remote.fetch(&["refs/heads/*:refs/remotes/origin/*", "refs/tags/*:refs/tags/*"], Some(&mut fetch_options), None)?;
         Ok(())
     })
 }
 
-pub fn push_over_ssh(
-    repo_path: &str,
-    remote_name: &str,
-    branch: &str,
-    force: bool,
-) -> thread::JoinHandle<Result<(), git2::Error>> {
+pub fn push_over_ssh(repo_path: &str, remote_name: &str, branch: &str, force: bool) -> thread::JoinHandle<Result<(), git2::Error>> {
     // Clone inputs so they can move into the thread safely
     let repo_path = repo_path.to_string();
     let remote_name = remote_name.to_string();
@@ -261,11 +214,7 @@ pub fn push_over_ssh(
         let mut refspecs = vec![];
 
         // Branch
-        let branch_refspec = if force {
-            format!("+refs/heads/{0}:refs/heads/{0}", branch)
-        } else {
-            format!("refs/heads/{0}:refs/heads/{0}", branch)
-        };
+        let branch_refspec = if force { format!("+refs/heads/{0}:refs/heads/{0}", branch) } else { format!("refs/heads/{0}:refs/heads/{0}", branch) };
         refspecs.push(branch_refspec);
 
         // Local tags
@@ -275,10 +224,7 @@ pub fn push_over_ssh(
         }
 
         // Perform the push
-        remote.push(
-            &refspecs.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
-            Some(&mut push_options),
-        )?;
+        remote.push(&refspecs.iter().map(|s| s.as_str()).collect::<Vec<_>>(), Some(&mut push_options))?;
 
         // println!("Push complete for branch '{}'", branch);
         Ok(())
@@ -403,8 +349,7 @@ pub fn cherry_pick_commit(
     let sig = repo.signature()?;
 
     // Commit message
-    let commit_message =
-        message.unwrap_or_else(|| commit.message().unwrap_or("Cherry-pick commit"));
+    let commit_message = message.unwrap_or_else(|| commit.message().unwrap_or("Cherry-pick commit"));
 
     // Determine parents: HEAD
     let parents = [&head_commit];
@@ -413,11 +358,7 @@ pub fn cherry_pick_commit(
     let new_commit_oid = repo.commit(Some("HEAD"), &sig, &sig, commit_message, &tree, &parents)?;
 
     // Update working directory
-    repo.checkout_head(Some(
-        CheckoutBuilder::default()
-            .allow_conflicts(allow_conflicts)
-            .force(),
-    ))?;
+    repo.checkout_head(Some(CheckoutBuilder::default().allow_conflicts(allow_conflicts).force()))?;
 
     Ok(new_commit_oid)
 }
@@ -446,7 +387,7 @@ pub fn unstage_file(repo: &Repository, path: &std::path::Path) -> Result<(), git
             index.remove_path(path)?;
             index.write()?;
             return Ok(());
-        }
+        },
     };
 
     // Reset only this path in the index

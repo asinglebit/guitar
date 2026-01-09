@@ -16,10 +16,7 @@ impl App {
         let mut lines = Vec::new();
         let line_text = "select a tag to delete";
         lines.push(Line::default());
-        lines.push(Line::from(vec![Span::styled(
-            line_text,
-            Style::default().fg(self.theme.COLOR_TEXT),
-        )]));
+        lines.push(Line::from(vec![Span::styled(line_text, Style::default().fg(self.theme.COLOR_TEXT))]));
         lines.push(Line::default());
 
         // Render list
@@ -30,14 +27,7 @@ impl App {
             let line_text = format!("{} {} ", SYM_TAG, tag);
             length = length.max(line_text.len());
 
-            lines.push(Line::from(Span::styled(
-                line_text,
-                Style::default().fg(if idx == self.modal_delete_tag_selected as usize {
-                    *color
-                } else {
-                    self.theme.COLOR_TEXT
-                }),
-            )));
+            lines.push(Line::from(Span::styled(line_text, Style::default().fg(if idx == self.modal_delete_tag_selected as usize { *color } else { self.theme.COLOR_TEXT }))));
         });
 
         // Background
@@ -54,29 +44,19 @@ impl App {
         frame.render_widget(Clear, modal_area);
 
         // Padding
-        let padding = ratatui::widgets::Padding {
-            left: 3,
-            right: 3,
-            top: 1,
-            bottom: 1,
-        };
+        let padding = ratatui::widgets::Padding { left: 3, right: 3, top: 1, bottom: 1 };
 
         // Modal block
         let modal_block = Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(self.theme.COLOR_GREY_600))
-            .title(Span::styled(
-                " (esc) ",
-                Style::default().fg(self.theme.COLOR_GREY_500),
-            ))
+            .title(Span::styled(" (esc) ", Style::default().fg(self.theme.COLOR_GREY_500)))
             .title_alignment(Alignment::Right)
             .padding(padding)
             .border_type(ratatui::widgets::BorderType::Rounded);
 
         // Modal content
-        let paragraph = Paragraph::new(Text::from(lines))
-            .block(modal_block)
-            .alignment(Alignment::Center);
+        let paragraph = Paragraph::new(Text::from(lines)).block(modal_block).alignment(Alignment::Center);
 
         paragraph.render(modal_area, frame.buffer_mut());
     }

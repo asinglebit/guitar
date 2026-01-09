@@ -30,50 +30,28 @@ pub struct Layout {
 impl App {
     pub fn layout(&mut self, frame: &mut Frame) {
         let is_settings = self.viewport == Viewport::Splash || self.viewport == Viewport::Settings;
-        let is_inspector =
-            !is_settings && self.layout_config.is_inspector && self.graph_selected != 0;
+        let is_inspector = !is_settings && self.layout_config.is_inspector && self.graph_selected != 0;
         let is_status = !is_settings && self.layout_config.is_status;
         let is_right_pane = is_inspector || is_status;
 
         let chunks_vertical = ratatui::layout::Layout::default()
             .direction(ratatui::layout::Direction::Vertical)
             .constraints([
-                ratatui::layout::Constraint::Length(if self.layout_config.is_minimal {
-                    0
-                } else {
-                    1
-                }),
+                ratatui::layout::Constraint::Length(if self.layout_config.is_minimal { 0 } else { 1 }),
                 ratatui::layout::Constraint::Percentage(100),
-                ratatui::layout::Constraint::Length(if self.layout_config.is_minimal {
-                    0
-                } else {
-                    1
-                }),
+                ratatui::layout::Constraint::Length(if self.layout_config.is_minimal { 0 } else { 1 }),
             ])
             .split(frame.area());
 
         let chunks_title_bar = ratatui::layout::Layout::default()
             .direction(ratatui::layout::Direction::Horizontal)
-            .constraints([
-                ratatui::layout::Constraint::Percentage(80),
-                ratatui::layout::Constraint::Percentage(20),
-            ])
+            .constraints([ratatui::layout::Constraint::Percentage(80), ratatui::layout::Constraint::Percentage(20)])
             .split(chunks_vertical[0]);
 
         let chunks_horizontal = ratatui::layout::Layout::default()
             .direction(ratatui::layout::Direction::Horizontal)
             .constraints([
-                ratatui::layout::Constraint::Length(
-                    if (self.layout_config.is_branches
-                        || self.layout_config.is_tags
-                        || self.layout_config.is_stashes)
-                        && !is_settings
-                    {
-                        45
-                    } else {
-                        0
-                    },
-                ),
+                ratatui::layout::Constraint::Length(if (self.layout_config.is_branches || self.layout_config.is_tags || self.layout_config.is_stashes) && !is_settings { 45 } else { 0 }),
                 ratatui::layout::Constraint::Max(500),
                 ratatui::layout::Constraint::Length(if is_right_pane { 46 } else { 0 }),
             ])
@@ -121,41 +99,22 @@ impl App {
         let chunks_pane_right = ratatui::layout::Layout::default()
             .direction(ratatui::layout::Direction::Vertical)
             .constraints([
-                ratatui::layout::Constraint::Percentage(if is_inspector {
-                    if !is_status { 100 } else { 50 }
-                } else {
-                    0
-                }),
-                ratatui::layout::Constraint::Percentage(if is_status {
-                    if !is_inspector { 100 } else { 50 }
-                } else {
-                    0
-                }),
+                ratatui::layout::Constraint::Percentage(if is_inspector { if !is_status { 100 } else { 50 } } else { 0 }),
+                ratatui::layout::Constraint::Percentage(if is_status { if !is_inspector { 100 } else { 50 } } else { 0 }),
             ])
             .split(chunks_horizontal[2]);
 
         let chunks_status = ratatui::layout::Layout::default()
             .direction(ratatui::layout::Direction::Vertical)
             .constraints([
-                ratatui::layout::Constraint::Percentage(if self.graph_selected == 0 {
-                    50
-                } else {
-                    100
-                }),
-                ratatui::layout::Constraint::Percentage(if self.graph_selected == 0 {
-                    50
-                } else {
-                    0
-                }),
+                ratatui::layout::Constraint::Percentage(if self.graph_selected == 0 { 50 } else { 100 }),
+                ratatui::layout::Constraint::Percentage(if self.graph_selected == 0 { 50 } else { 0 }),
             ])
             .split(chunks_pane_right[1]);
 
         let chunks_status_bar = ratatui::layout::Layout::default()
             .direction(ratatui::layout::Direction::Horizontal)
-            .constraints([
-                ratatui::layout::Constraint::Percentage(80),
-                ratatui::layout::Constraint::Percentage(20),
-            ])
+            .constraints([ratatui::layout::Constraint::Percentage(80), ratatui::layout::Constraint::Percentage(20)])
             .split(chunks_vertical[2]);
 
         // Branches
@@ -204,16 +163,8 @@ impl App {
             status_top_scrollbar.height += 1;
         }
         let mut status_top = chunks_status[0];
-        status_top.y = if self.layout_config.is_inspector && self.graph_selected != 0 {
-            status_top.y - 1
-        } else {
-            status_top.y + 1
-        };
-        status_top.height = if self.layout_config.is_inspector && self.graph_selected != 0 {
-            status_top.height + 1
-        } else {
-            status_top.height
-        };
+        status_top.y = if self.layout_config.is_inspector && self.graph_selected != 0 { status_top.y - 1 } else { status_top.y + 1 };
+        status_top.height = if self.layout_config.is_inspector && self.graph_selected != 0 { status_top.height + 1 } else { status_top.height };
         status_top.width = status_top.width.saturating_sub(1);
 
         // Status bottom
@@ -248,13 +199,7 @@ impl App {
         }
     }
 
-    pub fn trap_selection(
-        &self,
-        selected: usize,
-        scroll: &Cell<usize>,
-        total_lines: usize,
-        visible_height: usize,
-    ) {
+    pub fn trap_selection(&self, selected: usize, scroll: &Cell<usize>, total_lines: usize, visible_height: usize) {
         if visible_height == 0 || total_lines == 0 {
             scroll.set(0);
             return;

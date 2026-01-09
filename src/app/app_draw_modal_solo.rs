@@ -15,10 +15,7 @@ impl App {
         let mut lines = Vec::new();
         let line_text = "select a branch to solo";
         lines.push(Line::default());
-        lines.push(Line::from(vec![Span::styled(
-            line_text,
-            Style::default().fg(self.theme.COLOR_TEXT),
-        )]));
+        lines.push(Line::from(vec![Span::styled(line_text, Style::default().fg(self.theme.COLOR_TEXT))]));
         lines.push(Line::default());
 
         // Render list
@@ -26,19 +23,11 @@ impl App {
         let branches = self.branches.visible.get(&alias).unwrap();
         branches.iter().enumerate().for_each(|(idx, branch)| {
             height += 1;
-            let is_local = self
-                .branches
-                .local
-                .values()
-                .any(|branches| branches.iter().any(|b| b.as_str() == branch));
+            let is_local = self.branches.local.values().any(|branches| branches.iter().any(|b| b.as_str() == branch));
             length = (10 + branch.len()).max(length);
             lines.push(Line::from(Span::styled(
                 format!("{} {} ", if is_local { "●" } else { "◆" }, branch),
-                Style::default().fg(if idx == self.modal_solo_selected as usize {
-                    *color
-                } else {
-                    self.theme.COLOR_TEXT
-                }),
+                Style::default().fg(if idx == self.modal_solo_selected as usize { *color } else { self.theme.COLOR_TEXT }),
             )));
         });
 
@@ -55,29 +44,19 @@ impl App {
         frame.render_widget(Clear, modal_area);
 
         // Padding
-        let padding = ratatui::widgets::Padding {
-            left: 3,
-            right: 3,
-            top: 1,
-            bottom: 1,
-        };
+        let padding = ratatui::widgets::Padding { left: 3, right: 3, top: 1, bottom: 1 };
 
         // Modal block
         let modal_block = Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(self.theme.COLOR_GREY_600))
-            .title(Span::styled(
-                " (esc) ",
-                Style::default().fg(self.theme.COLOR_GREY_500),
-            ))
+            .title(Span::styled(" (esc) ", Style::default().fg(self.theme.COLOR_GREY_500)))
             .title_alignment(Alignment::Right)
             .padding(padding)
             .border_type(ratatui::widgets::BorderType::Rounded);
 
         // Modal content
-        let paragraph = Paragraph::new(Text::from(lines))
-            .block(modal_block)
-            .alignment(Alignment::Center);
+        let paragraph = Paragraph::new(Text::from(lines)).block(modal_block).alignment(Alignment::Center);
 
         paragraph.render(modal_area, frame.buffer_mut());
     }

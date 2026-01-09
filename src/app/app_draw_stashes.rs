@@ -14,12 +14,7 @@ use ratatui::{layout::Rect, widgets::Paragraph};
 impl App {
     pub fn draw_stashes(&mut self, frame: &mut Frame) {
         // Padding
-        let padding = ratatui::widgets::Padding {
-            left: 2,
-            right: 0,
-            top: 0,
-            bottom: 0,
-        };
+        let padding = ratatui::widgets::Padding { left: 2, right: 0, top: 0, bottom: 0 };
 
         // Calculate maximum available width for text
         let available_width = self.layout.stashes.width as usize - 1;
@@ -34,27 +29,15 @@ impl App {
 
             // Text
             let truncated = truncate_with_ellipsis(message.as_str(), max_text_width - 1);
-            let color = if let Some(color) = self.stashes.colors.get(stash_alias) {
-                *color
-            } else {
-                self.theme.COLOR_TEXT
-            };
+            let color = if let Some(color) = self.stashes.colors.get(stash_alias) { *color } else { self.theme.COLOR_TEXT };
 
             // Render a stash
-            lines.push(Line::from(Span::styled(
-                format!("{SYM_COMMIT_STASH} {truncated}"),
-                Style::default().fg(color),
-            )));
+            lines.push(Line::from(Span::styled(format!("{SYM_COMMIT_STASH} {truncated}"), Style::default().fg(color))));
         }
 
         // Get vertical dimensions
         let total_lines = lines.len();
-        let visible_height = self.layout.stashes.height as usize
-            - if self.layout_config.is_branches || self.layout_config.is_tags {
-                1
-            } else {
-                2
-            };
+        let visible_height = self.layout.stashes.height as usize - if self.layout_config.is_branches || self.layout_config.is_tags { 1 } else { 2 };
 
         // Clamp selection
         if total_lines == 0 {
@@ -64,18 +47,10 @@ impl App {
         }
 
         // Trap selection
-        self.trap_selection(
-            self.stashes_selected,
-            &self.stashes_scroll,
-            total_lines,
-            visible_height,
-        );
+        self.trap_selection(self.stashes_selected, &self.stashes_scroll, total_lines, visible_height);
 
         // Calculate scroll
-        let start = self
-            .stashes_scroll
-            .get()
-            .min(total_lines.saturating_sub(visible_height));
+        let start = self.stashes_scroll.get().min(total_lines.saturating_sub(visible_height));
         let end = (start + visible_height).min(total_lines);
 
         // Setup list items
@@ -84,15 +59,10 @@ impl App {
             .enumerate()
             .map(|(idx, line)| {
                 if start + idx == self.stashes_selected && self.focus == Focus::Stashes {
-                    let spans: Vec<Span> = line
-                        .iter()
-                        .map(|span| Span::styled(span.content.clone(), span.style))
-                        .collect();
-                    ListItem::new(Line::from(spans))
-                        .style(Style::default().bg(self.theme.COLOR_GREY_800))
+                    let spans: Vec<Span> = line.iter().map(|span| Span::styled(span.content.clone(), span.style)).collect();
+                    ListItem::new(Line::from(spans)).style(Style::default().bg(self.theme.COLOR_GREY_800))
                 } else if (idx + start).is_multiple_of(2) {
-                    ListItem::new(Line::from(line.clone().spans))
-                        .style(Style::default().bg(self.theme.COLOR_GREY_900))
+                    ListItem::new(Line::from(line.clone().spans)).style(Style::default().bg(self.theme.COLOR_GREY_900))
                 } else {
                     ListItem::new(line.clone())
                 }
@@ -101,54 +71,23 @@ impl App {
 
         // Setup the list
         if self.layout_config.is_branches || self.layout_config.is_tags {
-            let top_border =
-                Paragraph::new("─".repeat(self.layout.stashes.width as usize - 1_usize))
-                    .style(Style::default().fg(self.theme.COLOR_BORDER));
-            frame.render_widget(
-                top_border,
-                Rect {
-                    x: self.layout.stashes.x + 1,
-                    y: self.layout.stashes.y - 1,
-                    width: self.layout.stashes.width,
-                    height: 1,
-                },
-            );
+            let top_border = Paragraph::new("─".repeat(self.layout.stashes.width as usize - 1_usize)).style(Style::default().fg(self.theme.COLOR_BORDER));
+            frame.render_widget(top_border, Rect { x: self.layout.stashes.x + 1, y: self.layout.stashes.y - 1, width: self.layout.stashes.width, height: 1 });
         }
         let list = List::new(list_items).block(Block::default().padding(padding));
 
         frame.render_widget(list, self.layout.stashes);
 
         // Setup the scrollbar
-        let mut scrollbar_state = ScrollbarState::new(total_lines.saturating_sub(visible_height))
-            .position(self.stashes_scroll.get());
+        let mut scrollbar_state = ScrollbarState::new(total_lines.saturating_sub(visible_height)).position(self.stashes_scroll.get());
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(Some(
-                if self.layout_config.is_branches || self.layout_config.is_tags {
-                    "│"
-                } else {
-                    "─"
-                },
-            ))
+            .begin_symbol(Some(if self.layout_config.is_branches || self.layout_config.is_tags { "│" } else { "─" }))
             .end_symbol(Some("─"))
             .track_symbol(Some("│"))
-            .thumb_symbol(if total_lines > visible_height {
-                "▌"
-            } else {
-                "│"
-            })
-            .thumb_style(Style::default().fg(
-                if total_lines > visible_height && self.focus == Focus::Stashes {
-                    self.theme.COLOR_GREY_600
-                } else {
-                    self.theme.COLOR_BORDER
-                },
-            ));
+            .thumb_symbol(if total_lines > visible_height { "▌" } else { "│" })
+            .thumb_style(Style::default().fg(if total_lines > visible_height && self.focus == Focus::Stashes { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 
         // Render the scrollbar
-        frame.render_stateful_widget(
-            scrollbar,
-            self.layout.stashes_scrollbar,
-            &mut scrollbar_state,
-        );
+        frame.render_stateful_widget(scrollbar, self.layout.stashes_scrollbar, &mut scrollbar_state);
     }
 }

@@ -15,40 +15,22 @@ impl App {
         let mut lines = Vec::new();
         let line_text = "select a branch to delete";
         lines.push(Line::default());
-        lines.push(Line::from(vec![Span::styled(
-            line_text,
-            Style::default().fg(self.theme.COLOR_TEXT),
-        )]));
+        lines.push(Line::from(vec![Span::styled(line_text, Style::default().fg(self.theme.COLOR_TEXT))]));
         lines.push(Line::default());
 
         // Render list
         let current = get_current_branch(&self.repo);
         let color = self.branches.colors.get(&alias).unwrap();
         let branches = self.branches.visible.get(&alias).unwrap();
-        branches
-            .iter()
-            .filter(|branch| current.as_ref() != Some(*branch))
-            .enumerate()
-            .for_each(|(idx, branch)| {
-                height += 1;
-                let is_local = self
-                    .branches
-                    .local
-                    .values()
-                    .any(|branches| branches.iter().any(|b| b.as_str() == branch));
+        branches.iter().filter(|branch| current.as_ref() != Some(*branch)).enumerate().for_each(|(idx, branch)| {
+            height += 1;
+            let is_local = self.branches.local.values().any(|branches| branches.iter().any(|b| b.as_str() == branch));
 
-                let line_text = format!("{} {} ", if is_local { "●" } else { "◆" }, branch);
-                length = length.max(line_text.len());
+            let line_text = format!("{} {} ", if is_local { "●" } else { "◆" }, branch);
+            length = length.max(line_text.len());
 
-                lines.push(Line::from(Span::styled(
-                    line_text,
-                    Style::default().fg(if idx == self.modal_delete_branch_selected as usize {
-                        *color
-                    } else {
-                        self.theme.COLOR_TEXT
-                    }),
-                )));
-            });
+            lines.push(Line::from(Span::styled(line_text, Style::default().fg(if idx == self.modal_delete_branch_selected as usize { *color } else { self.theme.COLOR_TEXT }))));
+        });
 
         // Background
         let bg_block = Block::default().style(Style::default().fg(self.theme.COLOR_BORDER));
@@ -64,29 +46,19 @@ impl App {
         frame.render_widget(Clear, modal_area);
 
         // Padding
-        let padding = ratatui::widgets::Padding {
-            left: 3,
-            right: 3,
-            top: 1,
-            bottom: 1,
-        };
+        let padding = ratatui::widgets::Padding { left: 3, right: 3, top: 1, bottom: 1 };
 
         // Modal block
         let modal_block = Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(self.theme.COLOR_GREY_600))
-            .title(Span::styled(
-                " (esc) ",
-                Style::default().fg(self.theme.COLOR_GREY_500),
-            ))
+            .title(Span::styled(" (esc) ", Style::default().fg(self.theme.COLOR_GREY_500)))
             .title_alignment(Alignment::Right)
             .padding(padding)
             .border_type(ratatui::widgets::BorderType::Rounded);
 
         // Modal content
-        let paragraph = Paragraph::new(Text::from(lines))
-            .block(modal_block)
-            .alignment(Alignment::Center);
+        let paragraph = Paragraph::new(Text::from(lines)).block(modal_block).alignment(Alignment::Center);
 
         paragraph.render(modal_area, frame.buffer_mut());
     }
