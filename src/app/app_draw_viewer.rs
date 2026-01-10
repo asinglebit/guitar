@@ -1,5 +1,5 @@
 use crate::{
-    app::app::{App, Focus, Viewport},
+    app::{app::{App, Focus, Viewport}, app_default::ViewerMode},
     git::queries::diffs::{get_file_at_oid, get_file_at_workdir, get_file_diff_at_oid, get_file_diff_at_workdir},
     helpers::text::wrap_words,
 };
@@ -21,7 +21,16 @@ impl App {
         // let max_text_width = available_width.saturating_sub(2);
 
         // Get vertical dimensions
-        let total_lines = self.viewer_lines.len();
+        let active_lines: Vec<&ListItem> = match self.viewer_mode {
+            ViewerMode::Full => self.viewer_lines.iter().collect(),
+            ViewerMode::Hunks => self
+                .viewer_hunks
+                .iter()
+                .filter_map(|&i| self.viewer_lines.get(i))
+                .collect(),
+        };
+
+        let total_lines = active_lines.len();
         let visible_height = self.layout.graph.height as usize;
 
         // Clamp selection
@@ -39,12 +48,12 @@ impl App {
         let end = (start + visible_height).min(total_lines);
 
         // Setup list items
-        let list_items: Vec<ListItem> = self.viewer_lines[start..end]
+        let list_items: Vec<ListItem> = active_lines[start..end]
             .iter()
             .enumerate()
             .map(|(i, line)| {
                 let absolute_idx = start + i;
-                let mut item = line.clone();
+                let mut item = (*line).clone();
                 if absolute_idx == self.viewer_selected && self.focus == Focus::Viewport {
                     item = item.style(Style::default().bg(self.theme.COLOR_GREY_800));
                 }
@@ -148,6 +157,7 @@ impl App {
         };
 
         self.viewer_lines.clear(); // Clear current viewer lines
+        self.viewer_edges.clear(); // Clear current viewer edges
         self.viewer_hunks.clear(); // Clear current viewer hunks
         let mut current_line: usize = 0; // Current line in new file
         let mut current_line_old: usize = 0; // Current line in old file
@@ -184,10 +194,8 @@ impl App {
                 let text = line.content.trim_end_matches('\n');
 
                 // Detect transition: push hunk navigation if origin changed
-                if let Some(prev) = last_origin
-                    && prev != line.origin
-                {
-                    self.viewer_hunks.push(self.viewer_lines.len());
+                if let Some(prev) = last_origin && prev != line.origin {
+                    self.viewer_edges.push(self.viewer_lines.len() - 1);
                 }
                 last_origin = Some(line.origin);
 
@@ -201,12 +209,18 @@ impl App {
 
                 // Wrap the line to viewport width
                 let wrapped = wrap_words(format!("{}{}", prefix, text), (self.layout.graph.width as usize).saturating_sub(9));
-                for (idx, line) in wrapped.into_iter().enumerate() {
+                for (idx, line_wrapped) in wrapped.into_iter().enumerate() {
+                    
+                    // If line is changed, record its index in viewer_hunks
+                    if line.origin != ' ' {
+                        self.viewer_hunks.push(self.viewer_lines.len());
+                    }
+
                     // Push each wrapped line into the viewer
                     self.viewer_lines.push(
                         ListItem::new(Line::from(vec![
                             Span::styled((if idx == 0 { format!("{:3}  ", count) } else { "     ".to_string() }).to_string(), Style::default().fg(side)),
-                            Span::styled(line.to_string(), Style::default().fg(fg)),
+                            Span::styled(line_wrapped.to_string(), Style::default().fg(fg)),
                         ]))
                         .style(style),
                     );
@@ -244,6 +258,6 @@ impl App {
             current_line += 1;
         }
 
-        self.viewer_selected = self.viewer_hunks.first().copied().unwrap_or(0);
+        self.viewer_selected = self.viewer_edges.first().copied().unwrap_or(0);
     }
 }

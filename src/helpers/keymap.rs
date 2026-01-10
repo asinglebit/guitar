@@ -51,6 +51,9 @@ pub enum Command {
     ScrollDownCommit,
     Find,
 
+    // Viewer
+    ToggleHunkMode,
+
     // Git
     Drop,
     Pop,
@@ -192,6 +195,11 @@ fn default_navigation_keymap() -> IndexMap<KeyBinding, Command> {
 
     // ']' for commit navigation, smaller jumps to an older commit in the topology
     map.insert(KeyBinding::new(Char(']'), KeyModifiers::NONE), Command::ScrollDownCommit);
+
+    // Viewer specific navigation
+
+    // 'm' to toggle viewer mode, between full and hunks only view
+    map.insert(KeyBinding::new(Char('m'), KeyModifiers::NONE), Command::ToggleHunkMode);
 
     // UI toggles: numbered 1-6
     map.insert(KeyBinding::new(Char('1'), KeyModifiers::NONE), Command::ToggleBranches);

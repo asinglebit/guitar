@@ -1,5 +1,5 @@
 use crate::{
-    app::app_layout::Layout,
+    app::{app_default::ViewerMode, app_layout::Layout},
     config::layout::LayoutConfig,
     core::{
         branches::Branches,
@@ -114,7 +114,9 @@ pub struct App {
     pub current_diff: Vec<FileChange>,
     pub file_name: Option<String>,
     pub viewer_lines: Vec<ListItem<'static>>,
+    pub viewer_edges: Vec<usize>,
     pub viewer_hunks: Vec<usize>,
+    pub viewer_mode: ViewerMode,
 
     // Interface
     pub layout: Layout,
