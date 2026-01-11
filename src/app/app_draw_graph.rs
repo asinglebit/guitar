@@ -16,7 +16,7 @@ impl App {
         if total_lines == 0 {
             self.graph_selected = 0;
         } else if self.graph_selected >= total_lines {
-            self.graph_selected = total_lines - 1;
+            self.graph_selected = total_lines.saturating_sub(1);
         }
 
         // Trap selection

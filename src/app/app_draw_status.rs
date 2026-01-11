@@ -139,7 +139,7 @@ impl App {
             if total_lines == 0 {
                 self.status_top_selected = 0;
             } else if self.status_top_selected >= total_lines {
-                self.status_top_selected = total_lines - 1;
+                self.status_top_selected = total_lines.saturating_sub(1);
             }
 
             // Trap selection
@@ -199,7 +199,7 @@ impl App {
                 if total_lines == 0 {
                     self.status_bottom_selected = 0;
                 } else if self.status_bottom_selected >= total_lines {
-                    self.status_bottom_selected = total_lines - 1;
+                    self.status_bottom_selected = total_lines.saturating_sub(1);
                 }
 
                 // Trap selection

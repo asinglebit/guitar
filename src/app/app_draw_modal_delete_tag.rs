@@ -38,8 +38,8 @@ impl App {
         length += 10;
         let modal_width = length.min((frame.area().width as f32 * 0.8) as usize) as u16;
         let modal_height = height.min((frame.area().height as f32 * 0.6) as usize) as u16;
-        let x = frame.area().x + (frame.area().width - modal_width) / 2;
-        let y = frame.area().y + (frame.area().height - modal_height) / 2;
+        let x = frame.area().x + (frame.area().width.saturating_sub(modal_width)) / 2;
+        let y = frame.area().y + (frame.area().height.saturating_sub(modal_height)) / 2;
         let modal_area = Rect::new(x, y, modal_width, modal_height);
         frame.render_widget(Clear, modal_area);
 

@@ -36,7 +36,7 @@ impl App {
         if total_lines == 0 {
             self.viewer_selected = 0;
         } else if self.viewer_selected >= total_lines {
-            self.viewer_selected = total_lines - 1;
+            self.viewer_selected = total_lines.saturating_sub(1);
         }
 
         // Trap selection
@@ -196,7 +196,7 @@ impl App {
                 if let Some(prev) = last_origin
                     && prev != line.origin
                 {
-                    self.viewer_edges.push(self.viewer_lines.len() - 1);
+                    self.viewer_edges.push(self.viewer_lines.len().saturating_sub(1));
                 }
                 last_origin = Some(line.origin);
 

@@ -49,7 +49,10 @@ impl App {
         let visible_weeks = max_weeks_fit.min(total_weeks);
 
         // Right align and keep most recent weeks
-        let week_start = total_weeks.saturating_sub(visible_weeks) + 2;
+        let week_start = (total_weeks
+            .saturating_sub(visible_weeks)
+            .saturating_add(2))
+            .min(total_weeks);
 
         // Width used by the heatmap body excluding borders
         let heatmap_width = visible_weeks * cell_width;
@@ -59,7 +62,7 @@ impl App {
         lines.push(
             Line::from(Span::styled(fill_width(" version:", format!("{} ", VERSION).as_str(), heatmap_width), Style::default().fg(self.theme.COLOR_TEXT).bg(self.theme.COLOR_GREY_900))).centered(),
         );
-        self.settings_selections.push(lines.len() - 1);
+        self.settings_selections.push(lines.len().saturating_sub(1));
 
         // Heatmap
         lines.push(Line::default());
@@ -86,9 +89,9 @@ impl App {
             Line::from(Span::styled(fill_width(" keymap:", format!(" {}/keymap.json ", path).as_str(), heatmap_width), Style::default().fg(self.theme.COLOR_TEXT).bg(self.theme.COLOR_GREY_900)))
                 .centered(),
         );
-        self.settings_selections.push(lines.len() - 1);
+        self.settings_selections.push(lines.len().saturating_sub(1));
         lines.push(Line::from(Span::styled(fill_width(" layout:", format!(" {}/layout.json ", path).as_str(), heatmap_width), Style::default().fg(self.theme.COLOR_TEXT))).centered());
-        self.settings_selections.push(lines.len() - 1);
+        self.settings_selections.push(lines.len().saturating_sub(1));
 
         // Credentials
         lines.push(Line::default());
@@ -99,15 +102,15 @@ impl App {
         );
 
         // Record the line index as selectable
-        self.settings_selections.push(lines.len() - 1);
+        self.settings_selections.push(lines.len().saturating_sub(1));
         lines.push(Line::from(Span::styled(fill_width(" email:", format!("{} ", email.unwrap()).as_str(), heatmap_width), Style::default().fg(self.theme.COLOR_TEXT))).centered());
 
         // Record the line index as selectable
-        self.settings_selections.push(lines.len() - 1);
+        self.settings_selections.push(lines.len().saturating_sub(1));
         lines.push(Line::from(Span::styled(fill_width(" authorization:", "external ssh agent ", heatmap_width), Style::default().fg(self.theme.COLOR_TEXT).bg(self.theme.COLOR_GREY_900))).centered());
 
         // Record the line index as selectable
-        self.settings_selections.push(lines.len() - 1);
+        self.settings_selections.push(lines.len().saturating_sub(1));
         lines.push(Line::default());
         lines.push(Line::from(Span::styled(fill_width(" themes:", "", heatmap_width), Style::default().fg(self.theme.COLOR_TEXT))).centered());
         lines.push(Line::default());
@@ -130,7 +133,7 @@ impl App {
         );
 
         // Record the line index as selectable
-        self.settings_selections.push(lines.len() - 1);
+        self.settings_selections.push(lines.len().saturating_sub(1));
         lines.push(
             Line::from(Span::styled(
                 fill_width(" monochrome", format!("({}) ", if self.theme.name == ThemeNames::Monochrome { "*" } else { " " }).as_str(), heatmap_width),
@@ -140,7 +143,7 @@ impl App {
         );
 
         // Record the line index as selectable
-        self.settings_selections.push(lines.len() - 1);
+        self.settings_selections.push(lines.len().saturating_sub(1));
 
         // Keymap
         lines.push(Line::default());
@@ -163,7 +166,7 @@ impl App {
                 lines.push(Line::from(spans).centered());
 
                 // Record the line index as selectable
-                self.settings_selections.push(lines.len() - 1);
+                self.settings_selections.push(lines.len().saturating_sub(1));
             });
         }
         lines.push(Line::default());
@@ -186,7 +189,7 @@ impl App {
                 lines.push(Line::from(spans).centered());
 
                 // Record the line index as selectable
-                self.settings_selections.push(lines.len() - 1);
+                self.settings_selections.push(lines.len().saturating_sub(1));
             });
         }
 

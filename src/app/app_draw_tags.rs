@@ -17,14 +17,14 @@ impl App {
         let padding = ratatui::widgets::Padding { left: 2, right: 0, top: 0, bottom: 0 };
 
         // Calculate maximum available width for text
-        let available_width = self.layout.tags.width as usize - 1;
+        let available_width = self.layout.tags.width.saturating_sub(1) as usize;
         let max_text_width = available_width.saturating_sub(3);
 
         // Lines
         let mut lines: Vec<Line<'_>> = Vec::new();
         for (tag_alias, tag_name) in self.tags.get_sorted_aliases() {
             // Text
-            let truncated = truncate_with_ellipsis(tag_name, max_text_width - 1);
+            let truncated = truncate_with_ellipsis(tag_name, max_text_width.saturating_sub(1));
             let color = self.tags.get_color(&self.theme, tag_alias);
 
             // Render a tag
@@ -33,13 +33,13 @@ impl App {
 
         // Get vertical dimensions
         let total_lines = lines.len();
-        let visible_height = self.layout.tags.height as usize - if self.layout_config.is_branches { 1 } else { 2 };
+        let visible_height = self.layout.tags.height.saturating_sub(if self.layout_config.is_branches { 1 } else { 2 }) as usize;
 
         // Clamp selection
         if total_lines == 0 {
             self.tags_selected = 0;
         } else if self.tags_selected >= total_lines {
-            self.tags_selected = total_lines - 1;
+            self.tags_selected = total_lines.saturating_sub(1);
         }
 
         // Trap selection
@@ -67,7 +67,7 @@ impl App {
 
         // Setup the list
         if self.layout_config.is_branches || self.layout_config.is_tags {
-            let top_border = Paragraph::new("─".repeat(self.layout.tags.width as usize - 1_usize)).style(Style::default().fg(self.theme.COLOR_BORDER));
+            let top_border = Paragraph::new("─".repeat(self.layout.tags.width.saturating_sub(1) as usize)).style(Style::default().fg(self.theme.COLOR_BORDER));
             frame.render_widget(top_border, Rect { x: self.layout.tags.x + 1, y: self.layout.tags.y - 1, width: self.layout.tags.width, height: 1 });
         }
         let list = List::new(list_items).block(Block::default().padding(padding));

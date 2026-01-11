@@ -18,13 +18,13 @@ impl App {
 
         // Get vertical dimensions
         let total_lines = self.viewer_lines.len();
-        let visible_height = self.layout.graph.height as usize - 2;
+        let visible_height = self.layout.graph.height.saturating_sub(2) as usize;
 
         // Clamp selection
         if total_lines == 0 {
             self.viewer_selected = 0;
         } else if self.viewer_selected >= total_lines {
-            self.viewer_selected = total_lines - 1;
+            self.viewer_selected = total_lines.saturating_sub(1);
         }
 
         // Trap selection

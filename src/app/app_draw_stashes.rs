@@ -17,7 +17,7 @@ impl App {
         let padding = ratatui::widgets::Padding { left: 2, right: 0, top: 0, bottom: 0 };
 
         // Calculate maximum available width for text
-        let available_width = self.layout.stashes.width as usize - 1;
+        let available_width = self.layout.stashes.width.saturating_sub(1) as usize;
         let max_text_width = available_width.saturating_sub(3);
 
         // Lines
@@ -28,7 +28,7 @@ impl App {
             let message = commit.summary().unwrap_or("⊘ no message").to_string();
 
             // Text
-            let truncated = truncate_with_ellipsis(message.as_str(), max_text_width - 1);
+            let truncated = truncate_with_ellipsis(message.as_str(), max_text_width.saturating_sub(1));
             let color = if let Some(color) = self.stashes.colors.get(stash_alias) { *color } else { self.theme.COLOR_TEXT };
 
             // Render a stash
@@ -43,7 +43,7 @@ impl App {
         if total_lines == 0 {
             self.stashes_selected = 0;
         } else if self.stashes_selected >= total_lines {
-            self.stashes_selected = total_lines - 1;
+            self.stashes_selected = total_lines.saturating_sub(1);
         }
 
         // Trap selection
@@ -71,7 +71,7 @@ impl App {
 
         // Setup the list
         if self.layout_config.is_branches || self.layout_config.is_tags {
-            let top_border = Paragraph::new("─".repeat(self.layout.stashes.width as usize - 1_usize)).style(Style::default().fg(self.theme.COLOR_BORDER));
+            let top_border = Paragraph::new("─".repeat(self.layout.stashes.width.saturating_sub(1) as usize)).style(Style::default().fg(self.theme.COLOR_BORDER));
             frame.render_widget(top_border, Rect { x: self.layout.stashes.x + 1, y: self.layout.stashes.y - 1, width: self.layout.stashes.width, height: 1 });
         }
         let list = List::new(list_items).block(Block::default().padding(padding));

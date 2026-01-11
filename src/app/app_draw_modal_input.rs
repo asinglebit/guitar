@@ -33,8 +33,8 @@ impl App {
         // Compute modal area (centered and smaller than the full frame)
         let modal_width = length.min((frame.area().width as f32 * 0.8) as usize) as u16;
         let modal_height = height.min((frame.area().height as f32 * 0.6) as usize) as u16;
-        let x = frame.area().x + (frame.area().width - modal_width) / 2;
-        let y = frame.area().y + (frame.area().height - modal_height) / 2;
+        let x = frame.area().x + (frame.area().width.saturating_sub(modal_width)) / 2;
+        let y = frame.area().y + (frame.area().height.saturating_sub(modal_height)) / 2;
         let modal_area = Rect::new(x, y, modal_width, modal_height);
 
         // Clear the modal area
@@ -53,7 +53,7 @@ impl App {
         Paragraph::new(Text::from(lines)).block(modal_block).alignment(Alignment::Center).render(modal_area, frame.buffer_mut());
 
         // Input field area
-        let input_area = Rect { x: modal_area.x + modal_area.width / 2 - 29, y: modal_area.y + 4, width: 58, height: 5 };
+        let input_area = Rect { x: modal_area.x + (modal_area.width / 2).saturating_sub(29), y: modal_area.y + 4, width: 58, height: 5 };
 
         // Determine visible portion of input text
         let visible_width = input_area.width.saturating_sub(1) as usize;
@@ -80,6 +80,6 @@ impl App {
             .borders(Borders::TOP)
             .border_style(Style::default().fg(self.theme.COLOR_GREY_800))
             .border_type(ratatui::widgets::BorderType::Rounded)
-            .render(Rect { x: modal_area.x + 1, y: modal_area.y + 8, width: modal_width - 2, height: 1 }, frame.buffer_mut());
+            .render(Rect { x: modal_area.x + 1, y: modal_area.y + 8, width: modal_width.saturating_sub(2), height: 1 }, frame.buffer_mut());
     }
 }

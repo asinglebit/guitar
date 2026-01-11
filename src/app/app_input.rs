@@ -815,19 +815,19 @@ impl App {
     pub fn on_scroll_half_page_down(&mut self) {
         match self.focus {
             Focus::Branches => {
-                let half = (self.layout.branches.height as usize - 1) / 2;
+                let half = (self.layout.branches.height.saturating_sub(1) as usize) / 2;
                 self.branches_selected += half;
             },
             Focus::Tags => {
-                let half = (self.layout.tags.height as usize - 1) / 2;
+                let half = (self.layout.tags.height.saturating_sub(1) as usize) / 2;
                 self.tags_selected += half;
             },
             Focus::Stashes => {
-                let half = (self.layout.stashes.height as usize - 1) / 2;
+                let half = (self.layout.stashes.height.saturating_sub(1) as usize) / 2;
                 self.stashes_selected += half;
             },
             Focus::Viewport => {
-                let half = (self.layout.graph.height as usize - 1) / 2;
+                let half = (self.layout.graph.height.saturating_sub(1) as usize) / 2;
                 match self.viewport {
                     Viewport::Graph => {
                         let max = self.oids.get_commit_count().saturating_sub(1);
@@ -856,15 +856,15 @@ impl App {
                 }
             },
             Focus::Inspector => {
-                let half = (self.layout.inspector.height as usize - 3) / 2;
+                let half = (self.layout.inspector.height.saturating_sub(3) as usize) / 2;
                 self.inspector_selected += half;
             },
             Focus::StatusTop => {
-                let half = (self.layout.status_top.height as usize - 3) / 2;
+                let half = (self.layout.status_top.height.saturating_sub(3) as usize) / 2;
                 self.status_top_selected += half;
             },
             Focus::StatusBottom => {
-                let half = (self.layout.status_bottom.height as usize - 3) / 2;
+                let half = (self.layout.status_bottom.height.saturating_sub(3) as usize) / 2;
                 self.status_bottom_selected += half;
             },
             _ => {},
@@ -1007,7 +1007,7 @@ impl App {
             },
             Focus::Viewport => match self.viewport {
                 Viewport::Graph => {
-                    self.graph_selected = self.oids.get_commit_count() - 1;
+                    self.graph_selected = self.oids.get_commit_count().saturating_sub(1);
                     if self.graph_selected != 0 {
                         let oid = self.oids.get_oid_by_idx(self.graph_selected);
                         self.current_diff = get_filenames_diff_at_oid(&self.repo, *oid);

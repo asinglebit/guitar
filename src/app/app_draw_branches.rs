@@ -15,7 +15,7 @@ impl App {
         let padding = ratatui::widgets::Padding { left: 2, right: 0, top: 0, bottom: 0 };
 
         // Calculate maximum available width for text
-        let available_width = self.layout.branches.width as usize - 1;
+        let available_width = self.layout.branches.width.saturating_sub(1) as usize;
         let max_text_width = available_width.saturating_sub(3);
 
         // Lines
@@ -26,7 +26,7 @@ impl App {
             let is_local = self.branches.is_local(branch_name);
 
             // Text
-            let truncated = truncate_with_ellipsis(branch_name, max_text_width - 1);
+            let truncated = truncate_with_ellipsis(branch_name, max_text_width.saturating_sub(1));
             let icon = if is_visible {
                 if is_local { "●" } else { "◆" }
             } else if is_local {
@@ -42,13 +42,13 @@ impl App {
 
         // Get vertical dimensions
         let total_lines = lines.len();
-        let visible_height = self.layout.branches.height as usize - 2;
+        let visible_height = self.layout.branches.height.saturating_sub(2) as usize;
 
         // Clamp selection
         if total_lines == 0 {
             self.branches_selected = 0;
         } else if self.branches_selected >= total_lines {
-            self.branches_selected = total_lines - 1;
+            self.branches_selected = total_lines.saturating_sub(1);
         }
 
         // Trap selection

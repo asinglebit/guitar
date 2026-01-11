@@ -18,7 +18,7 @@ impl App {
         let padding = ratatui::widgets::Padding { left: 1, right: 1, top: 0, bottom: 0 };
 
         // Calculate maximum available width for text
-        let available_width = self.layout.inspector.width as usize - 1;
+        let available_width = self.layout.inspector.width.saturating_sub(1) as usize;
         let max_text_width = available_width.saturating_sub(2);
 
         // Flags
@@ -83,13 +83,13 @@ impl App {
 
         // Get vertical dimensions
         let total_lines = lines.len();
-        let visible_height = self.layout.inspector.height as usize - 2;
+        let visible_height = self.layout.inspector.height.saturating_sub(2) as usize;
 
         // Clamp selection
         if total_lines == 0 {
             self.inspector_selected = 0;
         } else if self.inspector_selected >= total_lines {
-            self.inspector_selected = total_lines - 1;
+            self.inspector_selected = total_lines.saturating_sub(1);
         }
 
         // Trap selection
