@@ -42,7 +42,7 @@ impl App {
 
         // Get vertical dimensions
         let total_lines = lines.len();
-        let visible_height = if self.layout_config.is_zen { self.layout.branches.height.saturating_sub(2) as usize } else { self.layout.branches.height.saturating_sub(2) as usize };
+        let visible_height = self.layout.branches.height.saturating_sub(2) as usize;
 
         // Clamp selection
         if total_lines == 0 {
