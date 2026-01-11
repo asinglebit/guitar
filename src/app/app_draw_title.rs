@@ -1,5 +1,5 @@
 use crate::app::app::{App, Focus};
-use crate::helpers::text::{truncate_start_with_ellipsis, truncate_with_ellipsis};
+use crate::helpers::text::truncate_start_with_ellipsis;
 use crate::helpers::{symbols::SYM_FOLDER};
 use ratatui::{
     Frame,

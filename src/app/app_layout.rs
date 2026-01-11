@@ -58,7 +58,7 @@ impl App {
             .split(chunks_vertical[0]);
 
         // Separate the main viewport into vertical panes
-        let total_width = chunks_vertical[1].width as u16;
+        let total_width = chunks_vertical[1].width;
         let width_left_pane = if is_left_pane { LAYOUT_WIDTH_LEFT_PANE } else { 0 };
         let width_right_pane = if is_right_pane { LAYOUT_WIDTH_RIGHT_PANE } else { 0 };
         let min_required = width_left_pane + width_right_pane + LAYOUT_WIDTH_MIN_CENTER;
