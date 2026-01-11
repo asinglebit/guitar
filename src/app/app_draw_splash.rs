@@ -77,8 +77,11 @@ impl App {
         list_items.push(ListItem::from(Line::default()));
         list_items.push(ListItem::from(Line::from(vec![Span::styled("made with ♡".to_string(), Style::default().fg(self.theme.COLOR_TEXT))]).centered()));
         list_items.push(ListItem::from(Line::from(vec![Span::styled("https://github.com/asinglebit/guitar".to_string(), Style::default().fg(self.theme.COLOR_TEXT))]).centered()));
-        list_items.push(ListItem::from(Line::default()));
-        list_items.push(ListItem::from(Line::from(vec![Span::styled("! please run from within a valid git repository !".to_string(), Style::default().fg(self.theme.COLOR_ORANGE))]).centered()));
+
+        if let None = &self.repo {
+            list_items.push(ListItem::from(Line::default()));
+            list_items.push(ListItem::from(Line::from(vec![Span::styled("! please run from within a valid git repository !".to_string(), Style::default().fg(self.theme.COLOR_ORANGE))]).centered()));
+        }
 
         // Setup the list
         let list = List::new(list_items).block(Block::default().padding(padding));

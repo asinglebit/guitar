@@ -57,132 +57,132 @@ impl App {
         let key_binding = KeyBinding::new(key_event.code, key_event.modifiers);
         let current_mode = self.mode;
 
+        // Handle text editing within modals
+        match self.focus {
+            Focus::ModalCommit => {
+                match key_event.code {
+                    KeyCode::Esc => {
+                        self.focus = Focus::Viewport;
+                        self.modal_input.clear();
+                    },
+                    KeyCode::Enter => {
+                        if let Some(repo) = &self.repo {
+                            commit_staged(repo, self.modal_input.value(), &self.name, &self.email).expect("Error");
+                            self.modal_input.clear();
+                            self.branches.visible.clear();
+                            self.reload();
+                            self.focus = Focus::Viewport;
+                        }
+                    },
+                    _ => {
+                        self.modal_input.on_key(key_event);
+                    },
+                }
+                return;
+            },
+            Focus::ModalCreateBranch => {
+                match key_event.code {
+                    KeyCode::Esc => {
+                        self.focus = Focus::Viewport;
+                        self.modal_input.clear();
+                    },
+                    KeyCode::Enter => {
+                        if let Some(repo) = &self.repo {
+                            let oid = self.oids.get_oid_by_idx(if self.graph_selected == 0 { 1 } else { self.graph_selected });
+                            match create_branch(repo, self.modal_input.value(), *oid) {
+                                Ok(_) => {
+                                    self.branches.visible.clear();
+                                    self.modal_input.clear();
+                                    self.reload();
+                                    self.focus = Focus::Viewport;
+                                },
+                                Err(_) => {
+                                    // TODO
+                                },
+                            }
+                        }
+                    },
+                    _ => {
+                        self.modal_input.on_key(key_event);
+                    },
+                }
+                return;
+            },
+            Focus::ModalGrep => {
+                match key_event.code {
+                    KeyCode::Esc => {
+                        self.focus = Focus::Viewport;
+                        self.modal_input.clear();
+                    },
+                    KeyCode::Enter => {
+                        let sha = self.modal_input.value();
+
+                        // Reject obviously invalid prefixes early
+                        if sha.is_empty() || sha.len() > 40 {
+                            return;
+                        }
+
+                        // Find the correpsonding oid
+                        let oid: Option<Oid> = self.oids.oids.iter().find(|oid| oid.to_string().starts_with(sha)).copied();
+
+                        // In case oid exists
+                        if let Some(oid) = oid {
+                            // Get the alias
+                            let oid_alias = self.oids.get_alias_by_oid(oid);
+
+                            // Find the position in the sorted alias vector
+                            let next = self.oids.get_sorted_aliases().iter().position(|&alias| alias == oid_alias).unwrap();
+
+                            // Scroll to line number
+                            self.graph_selected = next;
+                            self.modal_input.clear();
+                            self.focus = Focus::Viewport;
+                        }
+                    },
+                    _ => {
+                        self.modal_input.on_key(key_event);
+                    },
+                }
+                return;
+            },
+            Focus::ModalTag => {
+                match key_event.code {
+                    KeyCode::Esc => {
+                        self.focus = Focus::Viewport;
+                        self.modal_input.clear();
+                    },
+                    KeyCode::Enter => {
+                        if let Some(repo) = &self.repo {
+                            let tag_name = self.modal_input.value();
+
+                            // Reject obviously invalid prefixes early
+                            if tag_name.is_empty() {
+                                return;
+                            }
+
+                            let oid = self.oids.get_oid_by_idx(if self.graph_selected == 0 { 1 } else { self.graph_selected });
+
+                            // Get the alias
+                            tag(repo, *oid, tag_name).unwrap();
+
+                            self.reload();
+                            self.modal_input.clear();
+                            self.focus = Focus::Viewport;
+                        }
+                    },
+                    _ => {
+                        self.modal_input.on_key(key_event);
+                    },
+                }
+                return;
+            },
+            _ => {},
+        }
+
         if let Some(mode_map) = self.keymaps.get(&self.mode)
             && let Some(cmd) = mode_map.get(&key_binding)
         {
-            if self.repo.is_some() {
-                // Handle text editing within modals
-                match self.focus {
-                    Focus::ModalCommit => {
-                        match key_event.code {
-                            KeyCode::Esc => {
-                                self.focus = Focus::Viewport;
-                                self.modal_input.clear();
-                            },
-                            KeyCode::Enter => {
-                                if let Some(repo) = &self.repo {
-                                    commit_staged(repo, self.modal_input.value(), &self.name, &self.email).expect("Error");
-                                    self.modal_input.clear();
-                                    self.branches.visible.clear();
-                                    self.reload();
-                                    self.focus = Focus::Viewport;
-                                }
-                            },
-                            _ => {
-                                self.modal_input.on_key(key_event);
-                            },
-                        }
-                        return;
-                    },
-                    Focus::ModalCreateBranch => {
-                        match key_event.code {
-                            KeyCode::Esc => {
-                                self.focus = Focus::Viewport;
-                                self.modal_input.clear();
-                            },
-                            KeyCode::Enter => {
-                                if let Some(repo) = &self.repo {
-                                    let oid = self.oids.get_oid_by_idx(if self.graph_selected == 0 { 1 } else { self.graph_selected });
-                                    match create_branch(repo, self.modal_input.value(), *oid) {
-                                        Ok(_) => {
-                                            self.branches.visible.clear();
-                                            self.modal_input.clear();
-                                            self.reload();
-                                            self.focus = Focus::Viewport;
-                                        },
-                                        Err(_) => {
-                                            // TODO
-                                        },
-                                    }
-                                }
-                            },
-                            _ => {
-                                self.modal_input.on_key(key_event);
-                            },
-                        }
-                        return;
-                    },
-                    Focus::ModalGrep => {
-                        match key_event.code {
-                            KeyCode::Esc => {
-                                self.focus = Focus::Viewport;
-                                self.modal_input.clear();
-                            },
-                            KeyCode::Enter => {
-                                let sha = self.modal_input.value();
-
-                                // Reject obviously invalid prefixes early
-                                if sha.is_empty() || sha.len() > 40 {
-                                    return;
-                                }
-
-                                // Find the correpsonding oid
-                                let oid: Option<Oid> = self.oids.oids.iter().find(|oid| oid.to_string().starts_with(sha)).copied();
-
-                                // In case oid exists
-                                if let Some(oid) = oid {
-                                    // Get the alias
-                                    let oid_alias = self.oids.get_alias_by_oid(oid);
-
-                                    // Find the position in the sorted alias vector
-                                    let next = self.oids.get_sorted_aliases().iter().position(|&alias| alias == oid_alias).unwrap();
-
-                                    // Scroll to line number
-                                    self.graph_selected = next;
-                                    self.modal_input.clear();
-                                    self.focus = Focus::Viewport;
-                                }
-                            },
-                            _ => {
-                                self.modal_input.on_key(key_event);
-                            },
-                        }
-                        return;
-                    },
-                    Focus::ModalTag => {
-                        match key_event.code {
-                            KeyCode::Esc => {
-                                self.focus = Focus::Viewport;
-                                self.modal_input.clear();
-                            },
-                            KeyCode::Enter => {
-                                if let Some(repo) = &self.repo {
-                                    let tag_name = self.modal_input.value();
-
-                                    // Reject obviously invalid prefixes early
-                                    if tag_name.is_empty() {
-                                        return;
-                                    }
-
-                                    let oid = self.oids.get_oid_by_idx(if self.graph_selected == 0 { 1 } else { self.graph_selected });
-
-                                    // Get the alias
-                                    tag(repo, *oid, tag_name).unwrap();
-
-                                    self.reload();
-                                    self.modal_input.clear();
-                                    self.focus = Focus::Viewport;
-                                }
-                            },
-                            _ => {
-                                self.modal_input.on_key(key_event);
-                            },
-                        }
-                        return;
-                    },
-                    _ => {},
-                }
-
+            if !(self.viewport == Viewport::Splash && self.focus == Focus::Viewport) {
                 match cmd {
                     // User Interface
                     Command::WidenScope => self.on_widen_scope(),
@@ -249,11 +249,6 @@ impl App {
 
                     _ => {},
                 }
-
-                // Reset mode to normal
-                if current_mode == InputMode::Action {
-                    self.mode = InputMode::Normal;
-                }
             } else {
                 match cmd {
                     // User Interface
@@ -275,6 +270,11 @@ impl App {
                     _ => {},
                 }
             }
+        }
+
+        // Reset mode to normal
+        if current_mode == InputMode::Action {
+            self.mode = InputMode::Normal;
         }
     }
 
