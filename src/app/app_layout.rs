@@ -290,11 +290,9 @@ impl App {
         self.layout_config = load_layout_config();
     }
 
-    pub fn save_recent(&self) {
-        // save_layout_config(&self.layout_config);
-    }
+    // TODO: Implement recent layouts saving/loading
+    // pub fn save_recent(&self) {}
 
-    pub fn load_recent(&mut self) {
-        // self.recent = load_layout_config();
-    }
+    // TODO: Implement recent layouts saving/loading
+    pub fn load_recent(&mut self) {}
 }
