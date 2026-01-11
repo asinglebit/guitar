@@ -1,4 +1,4 @@
-use crate::app::app::{App, Viewport};
+use crate::app::app::{App, Focus, Viewport};
 use crate::config::layout::{load_layout_config, save_layout_config};
 use crate::helpers::layout::{LAYOUT_PERCENTAGE_CENTER_PANE_CRAMPED, LAYOUT_PERCENTAGE_LEFT_PANE_CRAMPED, LAYOUT_PERCENTAGE_RIGHT_PANE_CRAMPED, LAYOUT_WIDTH_LEFT_PANE, LAYOUT_WIDTH_MIN_CENTER, LAYOUT_WIDTH_RIGHT_PANE, add_scrollbar, extend_up, inset_bottom, inset_top, shrink_width};
 use ratatui::Frame;
@@ -32,6 +32,7 @@ pub struct Layout {
 impl App {
     pub fn layout(&mut self, frame: &mut Frame) {
 
+        let is_zen = self.layout_config.is_zen;
         let is_settings = self.viewport == Viewport::Splash || self.viewport == Viewport::Settings;
         let is_inspector = !is_settings && self.layout_config.is_inspector && self.graph_selected != 0;
         let is_status = !is_settings && self.layout_config.is_status;
@@ -164,6 +165,48 @@ impl App {
         let status_bottom_scrollbar = extend_up(chunks_status[1], 1);
         let mut status_bottom = extend_up(chunks_status[1], 1);
         status_bottom = shrink_width(status_bottom, 1);
+
+        if is_zen {
+            let zen = chunks_vertical[1];
+
+            let zero = Rect {
+                x: 0,
+                y: 0,
+                width: 0,
+                height: 0,
+            };
+
+            self.layout = Layout {
+                // Keep title & status bar if you want
+                title_left: chunks_title_bar[0],
+                title_right: chunks_title_bar[1],
+                app: zen,
+
+                // Only the focused pane gets space
+                branches: if matches!(self.focus, Focus::Branches) { zen } else { zero },
+                tags: if matches!(self.focus, Focus::Tags) { zen } else { zero },
+                stashes: if matches!(self.focus, Focus::Stashes) { zen } else { zero },
+                graph: if matches!(self.focus, Focus::Viewport | Focus::ModalCheckout | Focus::ModalSolo | Focus::ModalCommit | Focus::ModalCreateBranch | Focus::ModalDeleteBranch | Focus::ModalGrep | Focus::ModalTag | Focus::ModalDeleteTag) { zen } else { zero },
+                inspector: if matches!(self.focus, Focus::Inspector) { zen } else { zero },
+                status_top: if matches!(self.focus, Focus::StatusTop) { zen } else { zero },
+                status_bottom: if matches!(self.focus, Focus::StatusBottom) { zen } else { zero },
+
+                // Kill all scrollbars in zen
+                branches_scrollbar: zero,
+                tags_scrollbar: zero,
+                stashes_scrollbar: zero,
+                graph_scrollbar: zero,
+                inspector_scrollbar: zero,
+                status_top_scrollbar: zero,
+                status_bottom_scrollbar: zero,
+
+                // Keep status bar if you want
+                statusbar_left: chunks_status_bar[0],
+                statusbar_right: chunks_status_bar[1],
+            };
+
+            return;
+        }
 
         self.layout = Layout {
 

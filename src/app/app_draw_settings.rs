@@ -9,6 +9,7 @@ use crate::{
     git::queries::commits::get_git_user_info,
     helpers::text::fill_width,
 };
+use ratatui::widgets::Borders;
 use ratatui::{
     Frame,
     style::Style,
@@ -195,7 +196,7 @@ impl App {
 
         // Get vertical dimensions
         let total_lines = lines.len();
-        let visible_height = self.layout.graph.height as usize;
+        let visible_height = if self.layout_config.is_zen { self.layout.graph.height.saturating_sub(2) as usize } else { self.layout.graph.height as usize };
 
         // Snap to nearest selectable line if needed
         if !self.settings_selections.contains(&self.settings_selected) {
@@ -256,6 +257,28 @@ impl App {
                 ListItem::from(item)
             })
             .collect();
+
+        if self.layout_config.is_zen {
+            // Setup the list
+            let list = List::new(list_items).block(Block::default().borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded).padding(padding));
+
+            // Render the list
+            frame.render_widget(list, self.layout.graph);
+
+            // Setup the scrollbar
+            let mut scrollbar_state = ScrollbarState::new(total_lines.saturating_sub(visible_height)).position(start);
+            let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                .begin_symbol(Some("╮"))
+                .end_symbol(Some("╯"))
+                .track_symbol(Some("│"))
+                .thumb_symbol("▌")
+                .thumb_style(Style::default().fg(if self.focus == Focus::Viewport { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
+
+            // Render the scrollbar
+            frame.render_stateful_widget(scrollbar, self.layout.app, &mut scrollbar_state);
+            
+            return;
+        }
 
         // Setup the list
         let list = List::new(list_items).block(Block::default().padding(padding));

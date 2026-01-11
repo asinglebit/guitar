@@ -209,15 +209,11 @@ impl App {
     }
 
     pub fn draw(&mut self, frame: &mut Frame) {
-        let minimal_horizontal_space =
-            if (self.layout_config.is_branches || self.layout_config.is_tags || self.layout_config.is_stashes) && (self.layout_config.is_inspector || self.layout_config.is_status) { 100 } else { 50 };
-        // let is_zen = frame.area().width < minimal_horizontal_space;
-        let is_zen = false;
 
         // Compute the layout
         self.layout(frame);
 
-        let is_splash = self.viewport == Viewport::Splash || is_zen;
+        let is_splash = self.viewport == Viewport::Splash;
 
         frame.render_widget(
             Block::default()
@@ -226,11 +222,6 @@ impl App {
                 .border_type(ratatui::widgets::BorderType::Rounded),
             self.layout.app,
         );
-
-        if is_zen {
-            self.draw_splash(frame);
-            return;
-        }
 
         // Viewport
         match self.viewport {

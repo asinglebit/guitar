@@ -22,6 +22,7 @@ pub enum Command {
     Select,
     Back,
     Minimize,
+    ToggleZenMode,
     ToggleBranches,
     ToggleTags,
     ToggleStashes,
@@ -201,7 +202,10 @@ fn default_navigation_keymap() -> IndexMap<KeyBinding, Command> {
     // 'm' to toggle viewer mode, between full and hunks only view
     map.insert(KeyBinding::new(Char('m'), KeyModifiers::NONE), Command::ToggleHunkMode);
 
-    // UI toggles: numbered 1-6
+    // UI toggles
+
+    // 'z' for zen mode
+    map.insert(KeyBinding::new(Char('z'), KeyModifiers::NONE), Command::ToggleZenMode);
     map.insert(KeyBinding::new(Char('1'), KeyModifiers::NONE), Command::ToggleBranches);
     map.insert(KeyBinding::new(Char('2'), KeyModifiers::NONE), Command::ToggleTags);
     map.insert(KeyBinding::new(Char('3'), KeyModifiers::NONE), Command::ToggleStashes);

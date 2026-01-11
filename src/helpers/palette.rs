@@ -119,7 +119,7 @@ impl Theme {
             COLOR_GREY_800: Color::DarkGray,
             COLOR_GREY_900: Color::Reset,
             COLOR_BORDER: Color::DarkGray,
-            COLOR_TEXT: Color::Gray,
+            COLOR_TEXT: Color::White,
             COLOR_TEXT_SELECTED: Color::Reset,
         }
     }
@@ -155,7 +155,7 @@ impl Theme {
             COLOR_GREY_800: Color::DarkGray,
             COLOR_GREY_900: Color::Reset,
             COLOR_BORDER: Color::DarkGray,
-            COLOR_TEXT: Color::Gray,
+            COLOR_TEXT: Color::White,
             COLOR_TEXT_SELECTED: Color::Reset,
         }
     }

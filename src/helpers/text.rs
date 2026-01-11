@@ -16,6 +16,23 @@ pub fn truncate_with_ellipsis(text: &str, max_width: usize) -> String {
     format!("{truncated}...")
 }
 
+/// Truncate a string from the start to fit `max_width`, prepending "..." if truncated
+pub fn truncate_start_with_ellipsis(text: &str, max_width: usize) -> String {
+    let len = text.chars().count();
+    if len <= max_width {
+        return text.to_string();
+    }
+
+    // If max width is very small, just fill with dots
+    if max_width <= 3 {
+        return ".".repeat(max_width);
+    }
+
+    // Take the last (max_width - 3) characters and prepend ellipsis
+    let truncated: String = text.chars().skip(len - (max_width - 3)).collect();
+    format!("...{truncated}")
+}
+
 // Wrap text by character count without regard to word boundaries
 pub fn wrap_chars(content: String, max_width: usize) -> Vec<String> {
     let mut wrapped_lines = Vec::new();

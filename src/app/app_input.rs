@@ -185,6 +185,7 @@ impl App {
                 Command::Select => self.on_select(),
                 Command::Back => self.on_back(),
                 Command::Minimize => self.on_minimize(),
+                Command::ToggleZenMode => self.on_toggle_zen_mode(),
                 Command::ToggleBranches => self.on_toggle_branches(),
                 Command::ToggleTags => self.on_toggle_tags(),
                 Command::ToggleStashes => self.on_toggle_stashes(),
@@ -1482,6 +1483,11 @@ impl App {
         if self.viewport == Viewport::Graph && self.focus == Focus::Viewport {
             self.layout_config.is_shas = !self.layout_config.is_shas;
         }
+        self.save_layout();
+    }
+
+    pub fn on_toggle_zen_mode(&mut self) {
+        self.layout_config.is_zen = !self.layout_config.is_zen;
         self.save_layout();
     }
 

@@ -3,6 +3,7 @@ use crate::{
     app::app::{App, Focus},
     helpers::text::truncate_with_ellipsis,
 };
+use ratatui::widgets::Borders;
 use ratatui::{
     Frame,
     style::Style,
@@ -14,7 +15,7 @@ use ratatui::{layout::Rect, widgets::Paragraph};
 impl App {
     pub fn draw_tags(&mut self, frame: &mut Frame) {
         // Padding
-        let padding = ratatui::widgets::Padding { left: 2, right: 0, top: 0, bottom: 0 };
+        let padding = ratatui::widgets::Padding { left: if self.layout_config.is_zen { 1 } else { 2 }, right: 0, top: 0, bottom: 0 };
 
         // Calculate maximum available width for text
         let available_width = self.layout.tags.width.saturating_sub(1) as usize;
@@ -33,7 +34,7 @@ impl App {
 
         // Get vertical dimensions
         let total_lines = lines.len();
-        let visible_height = self.layout.tags.height.saturating_sub(if self.layout_config.is_branches { 1 } else { 2 }) as usize;
+        let visible_height = if self.layout_config.is_zen { self.layout.tags.height.saturating_sub(2) as usize } else { self.layout.tags.height.saturating_sub(if self.layout_config.is_branches { 1 } else { 2 }) as usize };
 
         // Clamp selection
         if total_lines == 0 {
@@ -64,11 +65,35 @@ impl App {
                 }
             })
             .collect();
+        
+        if self.layout_config.is_zen {
+
+            // Setup the list
+            let list = List::new(list_items).block(Block::default().borders(Borders::ALL).padding(padding).border_type(ratatui::widgets::BorderType::Rounded));
+
+            frame.render_widget(list, self.layout.tags);
+
+            // Setup the scrollbar
+            let scroll_range = (total_lines.saturating_sub(visible_height)).max(1);
+            let mut scrollbar_state = ScrollbarState::new(scroll_range).position(self.tags_scroll.get());
+            let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                .begin_symbol(Some("╮"))
+                .end_symbol(Some("╯"))
+                .track_symbol(Some("│"))
+                .thumb_symbol(if total_lines > visible_height { "▌" } else { "│" })
+                .track_style(Style::default().fg(self.theme.COLOR_BORDER))
+                .thumb_style(Style::default().fg(if total_lines > visible_height && self.focus == Focus::Tags { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
+
+            // Render the scrollbar
+            frame.render_stateful_widget(scrollbar, self.layout.tags_scrollbar, &mut scrollbar_state);
+
+            return;
+        }
 
         // Setup the list
         if self.layout_config.is_branches || self.layout_config.is_tags {
             let top_border = Paragraph::new("─".repeat(self.layout.tags.width.saturating_sub(1) as usize)).style(Style::default().fg(self.theme.COLOR_BORDER));
-            frame.render_widget(top_border, Rect { x: self.layout.tags.x + 1, y: self.layout.tags.y - 1, width: self.layout.tags.width, height: 1 });
+            frame.render_widget(top_border, Rect { x: self.layout.tags.x + 1, y: self.layout.tags.y.saturating_sub(1), width: self.layout.tags.width, height: 1 });
         }
         let list = List::new(list_items).block(Block::default().padding(padding));
 

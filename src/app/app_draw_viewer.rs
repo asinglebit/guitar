@@ -30,7 +30,7 @@ impl App {
         };
 
         let total_lines = active_lines.len();
-        let visible_height = self.layout.graph.height as usize;
+        let visible_height = if self.layout_config.is_zen { self.layout.graph.height.saturating_sub(2) as usize } else { self.layout.graph.height as usize };
 
         // Clamp selection
         if total_lines == 0 {
@@ -59,6 +59,31 @@ impl App {
                 item
             })
             .collect();
+
+        if self.layout_config.is_zen {
+
+            // Setup the list
+            let list = List::new(list_items).block(
+                Block::default().padding(padding).borders(Borders::ALL).border_style(Style::default().fg(self.theme.COLOR_BORDER)).border_type(ratatui::widgets::BorderType::Rounded),
+            );
+
+            // Render the list
+            frame.render_widget(list, self.layout.graph);
+
+            // Setup the scrollbar
+            let mut scrollbar_state = ScrollbarState::new(total_lines.saturating_sub(visible_height)).position(self.viewer_scroll.get());
+            let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                    .begin_symbol(Some("╮"))
+                    .end_symbol(Some("╯"))
+                .track_symbol(Some("│"))
+                .thumb_symbol("▌")
+                .thumb_style(Style::default().fg(if self.focus == Focus::Viewport { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
+
+            // Render the scrollbar
+            frame.render_stateful_widget(scrollbar, self.layout.graph_scrollbar, &mut scrollbar_state);
+
+            return;
+        }
 
         // Setup the list
         let list = List::new(list_items).block(

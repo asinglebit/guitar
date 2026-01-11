@@ -18,6 +18,7 @@ pub struct LayoutConfig {
     pub is_stashes: bool,
     pub is_status: bool,
     pub is_inspector: bool,
+    pub is_zen: bool,
 }
 
 pub fn load_layout_config() -> LayoutConfig {
