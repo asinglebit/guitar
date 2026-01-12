@@ -12,7 +12,14 @@ impl App {
         let available_width = self.layout.title_left.width.saturating_sub(15) as usize;
 
         // Logo and path
-        let path = if let Some(file_name) = self.file_name.clone() { format!("{}/{}", self.path.clone(), file_name) } else { self.path.clone() };
+        let path = if let Some(file_name) = self.file_name.clone() {
+            match &self.path {
+                Some(base) => format!("{}/{}", base, file_name),
+                None => file_name.clone(),
+            }
+        } else {
+            self.path.clone().unwrap_or_else(|| ".".to_string())
+        };
 
         let logo = self.logo.clone();
         let separator = Span::styled(" |", Style::default().fg(self.theme.COLOR_TEXT));

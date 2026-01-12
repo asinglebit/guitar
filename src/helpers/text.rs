@@ -218,5 +218,5 @@ pub fn fill_width(left: &str, right: &str, width: usize) -> String {
     let left_len = left.chars().count();
     let right_len = right.chars().count();
     let spaces = width.saturating_sub(left_len + right_len).max(1);
-    format!("{}{}{}", left, " ".repeat(spaces), right)
+    truncate_with_ellipsis(format!("{}{}{}", left, " ".repeat(spaces), right).as_str(), width)
 }

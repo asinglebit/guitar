@@ -1,4 +1,5 @@
 use crate::helpers::keymap::{Command, KeyBinding, keycode_to_visual_string};
+use crate::helpers::text::truncate_with_ellipsis;
 use crate::{
     core::{
         chunk::{Chunk, NONE},
@@ -516,13 +517,8 @@ pub fn render_keybindings(theme: &Theme, keymap: &IndexMap<KeyBinding, Command>,
             }
 
             let fillers = filler.repeat(filler_fill.max(1)); // at least one
-
-            Line::from(vec![
-                Span::styled(format!(" {}", cmd_string), Style::default().fg(theme.COLOR_TEXT)),
-                Span::styled(format!(" {} ", fillers), Style::default().fg(theme.COLOR_GREY_800)),
-                Span::styled(format!("{} ", key_string), Style::default().fg(theme.COLOR_TEXT)),
-            ])
-            .alignment(ratatui::layout::Alignment::Center)
+            Line::from(Span::styled(truncate_with_ellipsis(format!(" {} {} {} ", cmd_string, fillers, key_string).as_str(), width), Style::default().fg(theme.COLOR_TEXT)))
+                .alignment(ratatui::layout::Alignment::Center)
         })
         .collect()
 }

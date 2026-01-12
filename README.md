@@ -27,7 +27,7 @@ Heres a recording of me going through the features of v0.1.12
 
 ### Disclaimer
 
-I work on `guita╭` in my spare time, and give priority to the features I need in my day-to-day life. Use it with caution, and feel free to report issues or even better - contribute improvements! Im a lazy dude, and since this is a hobby project I just put unwrap() everywhere, such is life.
+I work on `guita╭` in my spare time and prioritize the features I need in my day-to-day life. Use it with caution, and feel free to report issues—or even better, contribute improvements! I’m a lazy dude, and since this is a hobby project, I just put unwrap() everywhere - such is life. I’m slowly working on improving every aspect of it.
 
 ### Motivation
 
@@ -35,22 +35,27 @@ I needed a git client that would make it easy for me to understand where I am to
 
 ### Features
 
-- **Beautiful graph rendering** – Visualize commit history clearly.  
-- **Reloading** – Reload the client manually using the shortcut when needed. Doesn't watch the directory.  
-- **Immediate jumps** – Move through history without waiting.  
-- **Pure TUI experience** – Ratatui based rendering.
-- **Auth** – Currently simply attaches to the running ssh agent.  
-- **Built-in diff viewer** – Inspect changes without leaving the terminal, however its very rudimentary.  
-- **Tag management** – Create, view or remove tags.  
-- **Stash management** – Create, view or remove stashes.  
-- **Cherrypicking** – Happy path only for now.  
-- **Opinionated** – Fetches prune branches and pull tags. Pushes are always hard and push local tags.
-- **Keymap** – Keymap is completely customizable and is serilazied into `~/.config/guitar` folder (depending on your OS).
-- **Heatmap** – Render a github-style heatmap of the repository.
-- **Layout** – Somewhat primitive, also serilazied into `~/.config/guitar` folder (depending on your OS).
-- **Terminal-friendly colors** – Easy on the eyes for long coding sessions with three builtin themes. 
+- Fast graph rendering of the entire repository, with isntant random access (hundreds of thousands of commits, spanning decades)
+- Vim-like navigation
+- Reload the client manually using the shortcut when needed. Doesn't watch the directory
+- List recent repositories for ease of access
+- Automatically attaches to the ssh agent. Just make sure it runs.
+- Diff inspector
+- Tag management
+- Stash management
+- Branch management
+- Commit metadata inspector
+- Staging, unstaging, commiting, fetching and pushing
+- Chrerypicking (happy path only for now)
+- Keymap is completely customizable and is serilazied into `~/.config/guitar` folder (depending on your OS).
+- Layout, also serilazied into `~/.config/guitar` folder (depending on your OS).
+- Zen mode, for one pane based interaction
+- Comes with three color themes
+- Rendering using ratatui
 
 ### Roadmap
+
+Planned features: jujutsu integration, git worktrees, conflict mode, merging, rebasing and more...
 
 Follow the link to get an idea of the roadmap and see what currently is being worked on:
 

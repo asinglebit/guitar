@@ -31,7 +31,6 @@ impl App {
         // Setup list items
         let mut lines: Vec<Line> = Vec::new();
         self.settings_selections = Vec::new();
-
         lines.push(Line::default());
 
         // Each heat cell is "X " - two columns
@@ -66,13 +65,10 @@ impl App {
         lines.push(Line::default());
         for (day_idx, &label) in WEEKDAY_LABELS.iter().enumerate() {
             let mut spans = Vec::new();
-
             // Day label
-            spans.push(Span::styled(format!("{}  ", label), Style::default().fg(self.theme.COLOR_TEXT)));
-
+            spans.push(Span::styled(format!(" {}  ", label), Style::default().fg(self.theme.COLOR_TEXT)));
             // Heatmap cells
             spans.extend(self.heatmap[day_idx][week_start..].iter().map(|&count| heat_cell(count, &self.theme)));
-
             lines.push(Line::from(spans).centered());
         }
 
@@ -89,6 +85,8 @@ impl App {
         );
         self.settings_selections.push(lines.len().saturating_sub(1));
         lines.push(Line::from(Span::styled(fill_width(" layout:", format!(" {}/layout.json ", path).as_str(), heatmap_width), Style::default().fg(self.theme.COLOR_TEXT))).centered());
+        self.settings_selections.push(lines.len().saturating_sub(1));
+        lines.push(Line::from(Span::styled(fill_width(" recent repositories:", format!(" {}/recent.json ", path).as_str(), heatmap_width), Style::default().fg(self.theme.COLOR_TEXT).bg(self.theme.COLOR_GREY_900))).centered());
         self.settings_selections.push(lines.len().saturating_sub(1));
 
         // Credentials
@@ -170,8 +168,15 @@ impl App {
         lines.push(Line::default());
         lines.push(Line::from(Span::styled(fill_width(" shortcuts / action mode:", "", heatmap_width), Style::default().fg(self.theme.COLOR_TEXT))).centered());
         lines.push(Line::default());
-        if let Some(mode_keymap) = self.keymaps.get(&InputMode::Action) {
-            render_keybindings(&self.theme, mode_keymap, heatmap_width).iter().enumerate().for_each(|(idx, kb_line)| {
+        if let Some(action_keymap) = self.keymaps.get(&InputMode::Action) {
+            // Get normal keys
+            let normal_keys: std::collections::HashSet<_> = self.keymaps.get(&InputMode::Normal).map(|km| km.keys().cloned().collect()).unwrap_or_default();
+
+            // Filter action keymap to only unique keys
+            let unique_action = action_keymap.iter().filter(|(kb, _)| !normal_keys.contains(kb)).map(|(kb, cmd)| (kb.clone(), cmd.clone())).collect();
+
+            // Render only unique action keys
+            render_keybindings(&self.theme, &unique_action, heatmap_width).iter().enumerate().for_each(|(idx, kb_line)| {
                 let spans: Vec<Span> = kb_line
                     .clone()
                     .spans
@@ -184,9 +189,8 @@ impl App {
                         Span::styled(span.content.clone(), style)
                     })
                     .collect();
-                lines.push(Line::from(spans).centered());
 
-                // Record the line index as selectable
+                lines.push(Line::from(spans).centered());
                 self.settings_selections.push(lines.len().saturating_sub(1));
             });
         }

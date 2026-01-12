@@ -4,9 +4,10 @@ use crate::{
     git::os::path::try_into_git_repo_root,
     helpers::{
         copy::{STR_CREATE_BRANCH, STR_CREATE_COMMIT, STR_CREATE_TAG, STR_FIND_SHA},
-        heatmap::{DAYS, WEEKS},
+        heatmap::{DAYS, WEEKS, empty_heatmap},
         keymap::{Command, KeyBinding},
         layout::LayoutConfig,
+        recent::{load_recent, save_recent},
     },
 };
 use crate::{
@@ -84,9 +85,8 @@ pub enum Direction {
 pub struct App {
     // General
     pub logo: Vec<Span<'static>>,
-    pub path: String,
-    // TODO: Implement recent layouts saving/loading
-    // pub recent: Vec<String>,
+    pub path: Option<String>,
+    pub recent: Vec<String>,
     pub repo: Option<Rc<Repository>>,
     pub spinner: Spinner,
     pub keymaps: IndexMap<InputMode, IndexMap<KeyBinding, Command>>,
@@ -149,6 +149,10 @@ pub struct App {
     pub viewer_selected: usize,
     pub viewer_scroll: Cell<usize>,
 
+    // Splash
+    pub splash_selected: usize,
+    pub splash_selections: Vec<usize>,
+
     // Settings
     pub settings_selected: usize,
     pub settings_selections: Vec<usize>,
@@ -194,7 +198,7 @@ impl App {
         self.load_recent();
         self.load_layout();
         self.load_keymap();
-        self.reload();
+        self.reload(None);
 
         // Main loop
         while !self.is_exit {
@@ -312,14 +316,28 @@ impl App {
         }
     }
 
-    pub fn reload(&mut self) {
-        let args: Vec<String> = env::args().collect();
-        let path = if args.len() > 1 { &args[1] } else { &".".to_string() };
+    pub fn reload(&mut self, override_path: Option<String>) {
+        // Reset
+        self.heatmap = empty_heatmap();
+        self.current_diff = Vec::new();
+        self.viewer_lines = Vec::new();
+        self.viewer_edges = Vec::new();
+        self.viewer_hunks = Vec::new();
+        self.branches = Branches::default();
+        self.tags = Tags::default();
+        self.stashes = Stashes::default();
 
-        // Try to canonicalize the path, fallback to "."
+        // Determine repo path
+        let path = if let Some(path) = override_path {
+            path
+        } else if let Some(path) = self.path.clone() {
+            path
+        } else {
+            let args: Vec<String> = env::args().collect();
+            let path = if args.len() > 1 { &args[1] } else { &".".to_string() };
+            path.to_string()
+        };
         let canonical_path = std::fs::canonicalize(path).unwrap_or_else(|_| PathBuf::from("."));
-
-        // Try to get git repo root, fallback to canonical_path
         let absolute_path: PathBuf = try_into_git_repo_root(&canonical_path).unwrap_or(canonical_path.clone());
 
         // Try to open the repository, fallback to None
@@ -328,11 +346,19 @@ impl App {
             Err(_) => None,
         };
 
-        self.path = absolute_path.display().to_string();
+        let absolute_path = absolute_path.display().to_string();
+        self.path = Some(absolute_path.clone());
         self.repo = repo;
 
         // Only proceed if we successfully opened a repo
         if let Some(repo) = &self.repo {
+            // Add the repo path to the list of recent repositories if not present already
+            if !self.recent.iter().any(|v| v == &absolute_path) {
+                self.recent.push(absolute_path.clone());
+            }
+
+            save_recent(&self.recent);
+
             // Update colors
             self.color = Rc::new(RefCell::new(ColorPicker::from_theme(&self.theme)));
 
@@ -353,7 +379,7 @@ impl App {
             }
 
             // Get user credentials
-            let (name, email) = get_git_user_info(repo).expect("Error");
+            let (name, email) = get_git_user_info(repo).expect("Couldn't get user credentials");
             self.name = name.unwrap();
             self.email = email.unwrap();
 
@@ -369,13 +395,12 @@ impl App {
             self.walker_rx = Some(rx);
 
             // Copy the repo path and visible branches
-            let path = self.path.clone();
             let visible = self.branches.visible.clone();
 
             // Spawn a thread that computes something; it will check cancel flag between iterations
             let handle = thread::spawn(move || {
                 // Create the walker
-                let mut walk_ctx = Walker::new(path, 10000, visible).expect("Error");
+                let mut walk_ctx = Walker::new(absolute_path, 10000, visible).expect("Error");
                 let mut is_first = true;
 
                 // Walker loop
@@ -433,7 +458,7 @@ impl App {
                 }
 
                 // Get uncomitted changes info
-                self.uncommitted = get_filenames_diff_at_workdir(repo).expect("Error");
+                self.uncommitted = get_filenames_diff_at_workdir(repo).expect("Couldn't get the file diff");
             }
 
             // Lookup tables
@@ -460,6 +485,10 @@ impl App {
                 self.heatmap = build_heatmap(repo, &self.oids.oids);
             }
         }
+    }
+
+    pub fn load_recent(&mut self) {
+        self.recent = load_recent();
     }
 
     pub fn exit(&mut self) {

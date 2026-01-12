@@ -30,9 +30,8 @@ impl Default for App {
         App {
             // General
             logo,
-            path: "".to_string(),
-            // TODO: Implement recent layouts saving/loading
-            // recent: Vec::new(),
+            path: None,
+            recent: Vec::new(),
             repo: None,
             spinner: Spinner::new(),
             keymaps: IndexMap::new(),
@@ -90,6 +89,10 @@ impl Default for App {
             // Graph
             graph_selected: 0,
             graph_scroll: 0.into(),
+
+            // Splash
+            splash_selected: 0,
+            splash_selections: Vec::new(),
 
             // Settings
             settings_selected: 0,

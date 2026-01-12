@@ -70,7 +70,7 @@ impl App {
                             commit_staged(repo, self.modal_input.value(), &self.name, &self.email).expect("Error");
                             self.modal_input.clear();
                             self.branches.visible.clear();
-                            self.reload();
+                            self.reload(None);
                             self.focus = Focus::Viewport;
                         }
                     },
@@ -93,7 +93,7 @@ impl App {
                                 Ok(_) => {
                                     self.branches.visible.clear();
                                     self.modal_input.clear();
-                                    self.reload();
+                                    self.reload(None);
                                     self.focus = Focus::Viewport;
                                 },
                                 Err(_) => {
@@ -165,7 +165,7 @@ impl App {
                             // Get the alias
                             tag(repo, *oid, tag_name).unwrap();
 
-                            self.reload();
+                            self.reload(None);
                             self.modal_input.clear();
                             self.focus = Focus::Viewport;
                         }
@@ -199,7 +199,6 @@ impl App {
                     Command::ToggleStatus => self.on_toggle_status(),
                     Command::ToggleInspector => self.on_toggle_inspector(),
                     Command::ToggleShas => self.on_toggle_shas(),
-                    // Command::ToggleRecentRepos => self.on_toggle_recent_repos(),
                     Command::ToggleHelp => self.on_toggle_help(),
                     Command::ActionMode => self.on_action_mode(),
                     Command::Exit => self.on_exit(),
@@ -246,13 +245,13 @@ impl App {
                     Command::Untag => self.on_untag(),
                     Command::Cherrypick => self.on_cherrypick(),
                     Command::Reload => self.on_reload(),
-
-                    _ => {},
                 }
             } else {
                 match cmd {
                     // User Interface
+                    Command::NarrowScope => self.on_narrow_scope(),
                     Command::Select => self.on_select(),
+                    Command::Back => self.on_back(),
                     Command::Exit => self.on_exit(),
 
                     // Lists
@@ -284,18 +283,27 @@ impl App {
 
     pub fn on_select(&mut self) {
         match self.focus {
-            Focus::Viewport => {
-                if self.viewport == Viewport::Settings
-                    && let Some(position) = self.settings_selections.iter().position(|&x| x == self.settings_selected)
-                {
-                    match position {
-                        6 => self.theme = Theme::classic(),
-                        7 => self.theme = Theme::ansi(),
-                        8 => self.theme = Theme::monochrome(),
-                        _ => {},
+            Focus::Viewport => match self.viewport {
+                Viewport::Settings => {
+                    if let Some(position) = self.settings_selections.iter().position(|&x| x == self.settings_selected) {
+                        match position {
+                            6 => self.theme = Theme::classic(),
+                            7 => self.theme = Theme::ansi(),
+                            8 => self.theme = Theme::monochrome(),
+                            _ => {},
+                        }
+                        self.reload(None);
                     }
-                    self.reload();
-                }
+                },
+                Viewport::Splash => {
+                    if let Some(position) = self.splash_selections.iter().position(|&x| x == self.splash_selected)
+                        && let Some(path) = self.recent.get(position)
+                    {
+                        self.reload(Some(path.to_string()));
+                        self.graph_selected = 0;
+                    }
+                },
+                _ => {},
             },
             Focus::Branches => {
                 self.viewport = Viewport::Graph;
@@ -306,14 +314,16 @@ impl App {
             Focus::Tags => {
                 self.viewport = Viewport::Graph;
                 self.focus = Focus::Viewport;
-                let alias = self.tags.sorted.get(self.tags_selected).unwrap().0;
-                self.graph_selected = self.oids.get_sorted_aliases().iter().position(|o| o == &alias).unwrap_or(0);
+                if let Some(alias) = self.tags.sorted.get(self.tags_selected) {
+                    self.graph_selected = self.oids.get_sorted_aliases().iter().position(|o| o == &alias.0).unwrap_or(0);
+                }
             },
             Focus::Stashes => {
                 self.viewport = Viewport::Graph;
                 self.focus = Focus::Viewport;
-                let alias = self.oids.stashes.get(self.stashes_selected).unwrap();
-                self.graph_selected = self.oids.get_sorted_aliases().iter().position(|o| o == alias).unwrap_or(0);
+                if let Some(alias) = self.oids.stashes.get(self.stashes_selected) {
+                    self.graph_selected = self.oids.get_sorted_aliases().iter().position(|o| o == alias).unwrap_or(0);
+                }
             },
             Focus::StatusTop | Focus::StatusBottom => {
                 if let Some(repo) = &self.repo.clone() {
@@ -328,7 +338,7 @@ impl App {
                     checkout_branch(repo, &mut self.branches.visible, &mut self.branches.local, alias, branches.get(self.modal_checkout_selected as usize).unwrap()).expect("Error");
                     self.modal_checkout_selected = 0;
                     self.focus = Focus::Viewport;
-                    self.reload();
+                    self.reload(None);
                 }
             },
             Focus::ModalSolo => {
@@ -348,7 +358,7 @@ impl App {
                 }
                 self.modal_solo_selected = 0;
                 self.focus = Focus::Viewport;
-                self.reload();
+                self.reload(None);
             },
             Focus::ModalDeleteBranch => {
                 if let Some(repo) = &self.repo {
@@ -360,7 +370,7 @@ impl App {
                             self.branches.visible.clear();
                             self.modal_delete_branch_selected = 0;
                             self.focus = Focus::Viewport;
-                            self.reload();
+                            self.reload(None);
                         },
                         Err(_) => {
                             // TODO
@@ -376,7 +386,7 @@ impl App {
                     untag(repo, tag).unwrap();
                     self.modal_delete_tag_selected = 0;
                     self.focus = Focus::Viewport;
-                    self.reload();
+                    self.reload(None);
                 }
             },
             _ => {},
@@ -431,8 +441,8 @@ impl App {
 
     pub fn on_narrow_scope(&mut self) {
         match self.focus {
-            Focus::Viewport => {
-                if self.viewport == Viewport::Graph {
+            Focus::Viewport => match self.viewport {
+                Viewport::Graph => {
                     if self.graph_selected != 0 {
                         self.layout_config.is_inspector = true;
                         self.focus = Focus::Inspector;
@@ -447,7 +457,16 @@ impl App {
                             self.focus = Focus::StatusBottom;
                         }
                     }
-                }
+                },
+                Viewport::Splash => {
+                    if let Some(position) = self.splash_selections.iter().position(|&x| x == self.splash_selected)
+                        && let Some(path) = self.recent.get(position)
+                    {
+                        self.reload(Some(path.to_string()));
+                        self.graph_selected = 0;
+                    }
+                },
+                _ => {},
             },
             Focus::Inspector => {
                 self.layout_config.is_status = true;
@@ -462,14 +481,16 @@ impl App {
             Focus::Tags => {
                 self.viewport = Viewport::Graph;
                 self.focus = Focus::Viewport;
-                let alias = self.tags.sorted.get(self.tags_selected).unwrap().0;
-                self.graph_selected = self.oids.get_sorted_aliases().iter().position(|o| o == &alias).unwrap_or(0);
+                if let Some(alias) = self.tags.sorted.get(self.tags_selected) {
+                    self.graph_selected = self.oids.get_sorted_aliases().iter().position(|o| o == &alias.0).unwrap_or(0);
+                }
             },
             Focus::Stashes => {
                 self.viewport = Viewport::Graph;
                 self.focus = Focus::Viewport;
-                let alias = self.oids.stashes.get(self.stashes_selected).unwrap();
-                self.graph_selected = self.oids.get_sorted_aliases().iter().position(|o| o == alias).unwrap_or(0);
+                if let Some(alias) = self.oids.stashes.get(self.stashes_selected) {
+                    self.graph_selected = self.oids.get_sorted_aliases().iter().position(|o| o == alias).unwrap_or(0);
+                }
             },
             Focus::StatusTop | Focus::StatusBottom => {
                 if let Some(repo) = &self.repo.clone() {
@@ -533,7 +554,10 @@ impl App {
                         self.settings_selected = self.settings_selected.saturating_sub(page);
                         self.last_input_direction = Some(Direction::Up);
                     },
-                    _ => {},
+                    Viewport::Splash => {
+                        self.splash_selected = self.splash_selected.saturating_sub(page);
+                        self.last_input_direction = Some(Direction::Up);
+                    },
                 }
             },
             Focus::Inspector => {
@@ -593,7 +617,10 @@ impl App {
                         self.settings_selected += page;
                         self.last_input_direction = Some(Direction::Down);
                     },
-                    _ => {},
+                    Viewport::Splash => {
+                        self.splash_selected += page;
+                        self.last_input_direction = Some(Direction::Down);
+                    },
                 }
             },
             Focus::Inspector => {
@@ -648,7 +675,10 @@ impl App {
                         self.settings_selected = self.settings_selected.saturating_sub(1);
                         self.last_input_direction = Some(Direction::Up);
                     },
-                    _ => {},
+                    Viewport::Splash => {
+                        self.splash_selected = self.splash_selected.saturating_sub(1);
+                        self.last_input_direction = Some(Direction::Up);
+                    },
                 }
                 if self.viewport == Viewport::Graph {}
             },
@@ -723,7 +753,10 @@ impl App {
                     self.settings_selected += 1;
                     self.last_input_direction = Some(Direction::Down);
                 },
-                _ => {},
+                Viewport::Splash => {
+                    self.splash_selected += 1;
+                    self.last_input_direction = Some(Direction::Down);
+                },
             },
             Focus::Inspector => {
                 self.inspector_selected += 1;
@@ -853,7 +886,10 @@ impl App {
                         self.settings_selected = self.settings_selected.saturating_sub(half);
                         self.last_input_direction = Some(Direction::Up);
                     },
-                    _ => {},
+                    Viewport::Splash => {
+                        self.splash_selected = self.splash_selected.saturating_sub(half);
+                        self.last_input_direction = Some(Direction::Up);
+                    },
                 }
             },
             Focus::Inspector => {
@@ -914,7 +950,10 @@ impl App {
                         self.settings_selected += half;
                         self.last_input_direction = Some(Direction::Down);
                     },
-                    _ => {},
+                    Viewport::Splash => {
+                        self.splash_selected += half;
+                        self.last_input_direction = Some(Direction::Down);
+                    },
                 }
             },
             Focus::Inspector => {
@@ -1047,7 +1086,9 @@ impl App {
                 Viewport::Settings => {
                     self.settings_selected = 0;
                 },
-                _ => {},
+                Viewport::Splash => {
+                    self.splash_selected = 0;
+                },
             },
             Focus::Inspector => {
                 self.inspector_selected = 0;
@@ -1089,7 +1130,9 @@ impl App {
                 Viewport::Settings => {
                     self.settings_selected = usize::MAX;
                 },
-                _ => {},
+                Viewport::Splash => {
+                    self.splash_selected = usize::MAX;
+                },
             },
             Focus::Inspector => {
                 self.inspector_selected = usize::MAX;
@@ -1128,7 +1171,7 @@ impl App {
                 self.branches.visible.remove(oid);
             }
 
-            self.reload();
+            self.reload(None);
         }
     }
 
@@ -1146,7 +1189,7 @@ impl App {
                     self.branches.visible.clear();
                     self.branches.visible.entry(*oid).and_modify(|branches| branches.push(branch.clone())).or_insert_with(|| vec![branch.clone()]);
                 }
-                self.reload();
+                self.reload(None);
             },
             Focus::Viewport => {
                 if self.focus == Focus::Viewport && self.viewport != Viewport::Graph || self.graph_selected == 0 {
@@ -1168,7 +1211,7 @@ impl App {
                         self.branches.visible.clear();
                         self.branches.visible.entry(alias).and_modify(|branches| branches.push(branch.clone())).or_insert_with(|| vec![branch.clone()]);
                     }
-                    self.reload();
+                    self.reload(None);
                 } else {
                     self.focus = Focus::ModalSolo;
                 }
@@ -1193,7 +1236,7 @@ impl App {
 
             // Due to incosistnent git2 api, stashing requires mutalbe repo reference, im too lazy
             pop(&mut repo, oid, false).unwrap();
-            self.reload();
+            self.reload(None);
         }
     }
 
@@ -1213,7 +1256,7 @@ impl App {
 
             // Due to incosistnent git2 api, stashing requires mutalbe repo reference, im too lazy
             pop(&mut repo, oid, true).unwrap();
-            self.reload();
+            self.reload(None);
         }
     }
 
@@ -1227,7 +1270,7 @@ impl App {
 
             // Due to incosistnent git2 api, stashing requires mutalbe repo reference, im too lazy
             stash(&mut repo).unwrap();
-            self.reload();
+            self.reload(None);
         }
     }
 
@@ -1239,13 +1282,16 @@ impl App {
 
     pub fn on_fetch_all(&mut self) {
         if self.viewport != Viewport::Settings {
-            let handle = fetch_over_ssh(&self.path, "origin");
+            let repo_path = self.path.as_deref().unwrap_or(".");
+            let handle = fetch_over_ssh(repo_path, "origin");
             match handle.join().expect("Thread panicked") {
                 Ok(_) => {
                     self.branches.visible.clear();
-                    self.reload();
+                    self.reload(None);
                 },
-                Err(e) => eprintln!("Fetch failed: {}", e),
+                _ => {
+                    // TODO: Handle error
+                },
             }
         }
     }
@@ -1271,12 +1317,12 @@ impl App {
                 checkout_head(repo, *oid);
                 self.focus = Focus::Viewport;
                 self.branches.visible.clear();
-                self.reload();
+                self.reload(None);
             } else if branches.len() == 1 {
                 checkout_branch(repo, &mut self.branches.visible, &mut self.branches.local, alias, branches.first().unwrap()).expect("Error");
                 self.focus = Focus::Viewport;
                 self.branches.visible.clear();
-                self.reload();
+                self.reload(None);
             } else {
                 self.focus = Focus::ModalCheckout;
             }
@@ -1291,9 +1337,9 @@ impl App {
                 return;
             }
             let oid = self.oids.get_oid_by_idx(self.graph_selected);
-            reset_to_commit(repo, *oid, git2::ResetType::Hard).expect("Error");
+            reset_to_commit(repo, *oid, git2::ResetType::Hard).expect("Couldn't hard reset");
             self.branches.visible.clear();
-            self.reload();
+            self.reload(None);
             self.focus = Focus::Viewport;
         }
     }
@@ -1306,9 +1352,9 @@ impl App {
                 return;
             }
             let oid = self.oids.get_oid_by_idx(self.graph_selected);
-            reset_to_commit(repo, *oid, git2::ResetType::Mixed).expect("Error");
+            reset_to_commit(repo, *oid, git2::ResetType::Mixed).expect("Couldn't mixed reset");
             self.branches.visible.clear();
-            self.reload();
+            self.reload(None);
             self.focus = Focus::Viewport;
         }
     }
@@ -1321,8 +1367,8 @@ impl App {
                     match self.focus {
                         Focus::Viewport => {
                             if self.uncommitted.is_staged {
-                                unstage_all(repo).expect("Error");
-                                self.reload();
+                                unstage_all(repo).expect("Couldn't unstage all");
+                                self.reload(None);
                             }
                         },
                         Focus::StatusTop => {
@@ -1348,8 +1394,8 @@ impl App {
                                     }
                                 }
                             };
-                            unstage_file(repo, Path::new(&file)).expect("Error");
-                            self.reload();
+                            unstage_file(repo, Path::new(&file)).expect("Couldn't unstage file");
+                            self.reload(None);
                         },
                         _ => {},
                     }
@@ -1366,8 +1412,8 @@ impl App {
                     match self.focus {
                         Focus::Viewport => {
                             if self.uncommitted.is_unstaged {
-                                git_add_all(repo).expect("Error");
-                                self.reload();
+                                git_add_all(repo).expect("Couldn't add all");
+                                self.reload(None);
                             }
                         },
                         Focus::StatusBottom => {
@@ -1393,8 +1439,8 @@ impl App {
                                     }
                                 }
                             };
-                            stage_file(repo, Path::new(&file)).expect("Error");
-                            self.reload();
+                            stage_file(repo, Path::new(&file)).expect("Couldn't add file");
+                            self.reload(None);
                         },
                         _ => {},
                     }
@@ -1419,13 +1465,17 @@ impl App {
             match self.viewport {
                 Viewport::Settings | Viewport::Viewer => {},
                 _ => {
-                    let handle = push_over_ssh(&self.path, "origin", get_current_branch(repo).unwrap().as_str(), true);
+                    let repo_path = self.path.as_deref().unwrap_or(".");
+                    let branch = get_current_branch(repo).expect("Couldn't get current branch");
+                    let handle = push_over_ssh(repo_path, "origin", branch.as_str(), true);
                     match handle.join().expect("Thread panicked") {
                         Ok(_) => {
                             self.branches.visible.clear();
-                            self.reload();
+                            self.reload(None);
                         },
-                        Err(e) => eprintln!("Fetch failed: {}", e),
+                        _ => {
+                            // TODO: Handle error
+                        },
                     }
                 },
             }
@@ -1454,7 +1504,7 @@ impl App {
                             let proceed = if let Some(current) = get_current_branch(repo) { current != *branch } else { true };
                             if proceed && delete_branch(repo, branch).is_ok() {
                                 self.branches.visible.clear();
-                                self.reload();
+                                self.reload(None);
                             };
                         },
                         Focus::Viewport => {
@@ -1471,7 +1521,7 @@ impl App {
                                         1 => {
                                             if delete_branch(repo, filtered_branches[0]).is_ok() {
                                                 self.branches.visible.clear();
-                                                self.reload();
+                                                self.reload(None);
                                             };
                                         },
                                         _ => {
@@ -1507,7 +1557,7 @@ impl App {
                     Focus::Tags => {
                         let tag = &self.tags.sorted.get(self.tags_selected).unwrap().1;
                         untag(repo, tag).unwrap();
-                        self.reload();
+                        self.reload(None);
                     },
                     Focus::Viewport => {
                         if self.graph_selected != 0 {
@@ -1517,7 +1567,7 @@ impl App {
                                     0 => {},
                                     1 => {
                                         untag(repo, tag_names[0].as_str()).unwrap();
-                                        self.reload();
+                                        self.reload(None);
                                     },
                                     _ => {
                                         self.focus = Focus::ModalDeleteTag;
@@ -1545,7 +1595,7 @@ impl App {
             cherry_pick_commit(repo, *oid, Some("message"), true).unwrap();
 
             // Reload after operation
-            self.reload();
+            self.reload(None);
         }
     }
 
@@ -1558,6 +1608,18 @@ impl App {
                 self.modal_checkout_selected = 0;
                 self.focus = Focus::Viewport;
             },
+            Focus::Viewport => match self.viewport {
+                Viewport::Graph => {
+                    self.viewport = Viewport::Splash;
+                    self.focus = Focus::Viewport;
+                },
+                _ => {
+                    self.viewer_selected = 0;
+                    self.viewport = Viewport::Graph;
+                    self.focus = Focus::Viewport;
+                    self.file_name = None;
+                },
+            },
             _ => {
                 self.viewer_selected = 0;
                 self.viewport = Viewport::Graph;
@@ -1568,7 +1630,7 @@ impl App {
     }
 
     pub fn on_reload(&mut self) {
-        self.reload();
+        self.reload(None);
         match self.focus {
             Focus::ModalCheckout | Focus::ModalCommit => {
                 self.focus = Focus::Viewport;
@@ -1652,12 +1714,6 @@ impl App {
         }
         self.save_layout();
     }
-
-    // TODO: Implement recent repos panel
-    // pub fn on_toggle_recent_repos(&mut self) {
-    //     self.viewport = Viewport::Splash;
-    //     self.focus = Focus::Viewport;
-    // }
 
     pub fn on_toggle_help(&mut self) {
         match self.viewport {

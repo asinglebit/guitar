@@ -15,4 +15,4 @@ pub const SYM_MERGE: &str = "•";
 pub const SYM_UNCOMMITED: &str = "◌";
 pub const SYM_TAG: &str = "⚑";
 
-pub const WEEKDAY_LABELS: [&str; 7] = ["S", "S", "M", "T", "W", "T", "F"];
+pub const WEEKDAY_LABELS: [&str; 7] = ["M", "T", "W", "T", "F", "S", "S"];

@@ -58,21 +58,17 @@ impl App {
             }
         };
 
-        let icon_spinner = if self.spinner.is_running() { format!(" {}", self.spinner.get_char()) } else { "".to_string() };
+        let icon_spinner = if self.spinner.is_running() { format!("{} ", self.spinner.get_char()) } else { "".to_string() };
 
         // Action mode indicator (moved here)
-        let mut action_hint = if self.mode == InputMode::Action {
-            vec![Span::styled(" 🞊 ", Style::default().fg(self.theme.COLOR_ORANGE))]
-        } else {
-            vec![Span::styled(" 🞅 ", Style::default().fg(self.theme.COLOR_GREY_700))]
-        };
+        let mut action_hint = if self.mode == InputMode::Action { vec![Span::styled("● ", Style::default().fg(self.theme.COLOR_GRAPEFRUIT))] } else { Vec::new() };
 
         // Zen mode indicator
         if self.layout_config.is_zen {
-            action_hint.push(Span::styled("🞊 ", Style::default().fg(self.theme.COLOR_BLUE)));
+            action_hint.push(Span::styled("● ", Style::default().fg(self.theme.COLOR_GRASS)));
         }
 
-        let mut right_spans = vec![Span::styled(if total == 0 { "".to_string() } else { format!("{}/{}{}", cursor, total, icon_spinner) }, Style::default().fg(self.theme.COLOR_TEXT))];
+        let mut right_spans = vec![Span::styled(if total == 0 { "".to_string() } else { format!("{}/{}{} ", cursor, total, icon_spinner) }, Style::default().fg(self.theme.COLOR_TEXT))];
 
         right_spans.extend(action_hint);
 
