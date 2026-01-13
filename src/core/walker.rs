@@ -8,7 +8,7 @@ use crate::{
     },
     git::queries::commits::{get_sorted_oids, get_tag_oids, get_tip_oids},
 };
-use git2::{Repository};
+use git2::Repository;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 // Context for walking and rendering commits
@@ -117,7 +117,6 @@ impl Walker {
 
     // Walk through batch of commits, update buffers and render lines
     pub fn walk(&mut self) -> bool {
-
         // Repo borrow
         let repo = self.repo.borrow();
 
@@ -156,7 +155,7 @@ impl Walker {
         }
 
         // One mutable borrow per walk
-        let mut buffer = self.buffer.borrow_mut(); 
+        let mut buffer = self.buffer.borrow_mut();
 
         // Go through the commits, inferring the graph
         for &alias in sorted_batch.iter() {
@@ -171,15 +170,9 @@ impl Walker {
 
             // Get parent aliases
             let (parent_a, parent_b) = if stashes.contains(&alias) {
-                (
-                    parent_a_oid.map(|p| self.oids.get_alias_by_oid(p)).unwrap_or(NONE),
-                    NONE,
-                )
+                (parent_a_oid.map(|p| self.oids.get_alias_by_oid(p)).unwrap_or(NONE), NONE)
             } else {
-                (
-                    parent_a_oid.map(|p| self.oids.get_alias_by_oid(p)).unwrap_or(NONE),
-                    parent_b_oid.map(|p| self.oids.get_alias_by_oid(p)).unwrap_or(NONE),
-                )
+                (parent_a_oid.map(|p| self.oids.get_alias_by_oid(p)).unwrap_or(NONE), parent_b_oid.map(|p| self.oids.get_alias_by_oid(p)).unwrap_or(NONE))
             };
 
             // Create commit chunk for the current commit with its parents
@@ -187,7 +180,7 @@ impl Walker {
 
             // Update
             buffer.update(chunk);
-            
+
             for (lane_idx, chunk) in buffer.curr.iter().enumerate() {
                 if !chunk.is_dummy() && alias == chunk.alias {
                     if self.branches_local.contains_key(&alias) || self.branches_remote.contains_key(&alias) {

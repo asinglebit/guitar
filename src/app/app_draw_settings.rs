@@ -86,7 +86,13 @@ impl App {
         self.settings_selections.push(lines.len().saturating_sub(1));
         lines.push(Line::from(Span::styled(fill_width(" layout:", format!(" {}/layout.json ", path).as_str(), heatmap_width), Style::default().fg(self.theme.COLOR_TEXT))).centered());
         self.settings_selections.push(lines.len().saturating_sub(1));
-        lines.push(Line::from(Span::styled(fill_width(" recent repositories:", format!(" {}/recent.json ", path).as_str(), heatmap_width), Style::default().fg(self.theme.COLOR_TEXT).bg(self.theme.COLOR_GREY_900))).centered());
+        lines.push(
+            Line::from(Span::styled(
+                fill_width(" recent repositories:", format!(" {}/recent.json ", path).as_str(), heatmap_width),
+                Style::default().fg(self.theme.COLOR_TEXT).bg(self.theme.COLOR_GREY_900),
+            ))
+            .centered(),
+        );
         self.settings_selections.push(lines.len().saturating_sub(1));
 
         // Credentials
