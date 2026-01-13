@@ -23,7 +23,7 @@ indexmap = "2.12.1"
 miette = { version = "7", features = ["fancy"] } # pretty diagnostics
 rand = "0.9"
 ratatui = "0.30.0"
-toml = "0.9.10"
+toml = "0.9.11"
 walkdir = "2.5.0"
 
 # Enable more optimization in the release profile at the cost of compile time.
