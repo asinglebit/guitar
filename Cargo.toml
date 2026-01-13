@@ -7,7 +7,7 @@ edition = "2024"
 homepage = "https://github.com/asinglebit/guitar/"
 repository = "https://github.com/asinglebit/guitar/"
 readme = "README.md"
-license = "GPL-3.0"
+license = "GPL-3.0-only"
 
 [dependencies]
 chrono = "0.4"
