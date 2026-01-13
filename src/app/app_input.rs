@@ -1656,11 +1656,10 @@ impl App {
                     let mut selected = self.splash_selections.first().copied().unwrap_or(0);
 
                     // If current repo path exists in recent, add its position
-                    if let Some(path) = &self.path {
-                        if let Some(pos) = self.recent.iter().position(|p| p == path) {
+                    if let Some(path) = &self.path
+                        && let Some(pos) = self.recent.iter().position(|p| p == path) {
                             selected = selected.saturating_add(pos);
                         }
-                    }
 
                     self.splash_selected = selected;
                 },
