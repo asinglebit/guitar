@@ -3,8 +3,11 @@ name = "guitar"
 version = "0.1.37"
 description = "Terminal based git interface"
 authors = ["rattleworks <gasimov.abdulali@gmail.com>"]
-license = "MIT"
 edition = "2024"
+homepage = "https://github.com/asinglebit/guitar/"
+repository = "https://github.com/asinglebit/guitar/"
+readme = "README.md"
+license = "GPL-3.0"
 
 [dependencies]
 chrono = "0.4"
