@@ -686,7 +686,7 @@ dependencies = [
 
 [[package]]
 name = "guitar"
-version = "0.1.38"
+version = "0.1.39"
 dependencies = [
  "chrono",
  "colored",
