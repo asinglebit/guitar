@@ -44,18 +44,19 @@ pub fn wrap_chars(content: String, max_width: usize) -> Vec<String> {
             continue;
         }
 
+        let char_vec: Vec<char> = line.chars().collect();
         let mut start = 0;
-        while start < line.chars().count() {
-            // Slice line in chunks up to max_width
-            let end = (start + max_width).min(line.chars().count());
-            wrapped_lines.push(line[start..end].to_string());
+
+        while start < char_vec.len() {
+            let end = (start + max_width).min(char_vec.len());
+            let slice: String = char_vec[start..end].iter().collect();
+            wrapped_lines.push(slice);
             start = end;
         }
     }
 
     wrapped_lines
 }
-
 // Wrap text by words, preserving spaces and indentation
 // Fall back to wrap_chars() when a word is longer than max_width
 pub fn wrap_words(content: String, max_width: usize) -> Vec<String> {
