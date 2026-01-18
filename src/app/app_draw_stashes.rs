@@ -5,13 +5,13 @@ use crate::{
     helpers::text::truncate_with_ellipsis,
 };
 use ratatui::widgets::Borders;
-use ratatui::{layout::Rect, widgets::Paragraph};
 use ratatui::{
+    Frame,
     style::Style,
     text::{Line, Span},
     widgets::{Block, List, ListItem, Scrollbar, ScrollbarOrientation, ScrollbarState},
-    Frame,
 };
+use ratatui::{layout::Rect, widgets::Paragraph};
 
 impl App {
     pub fn draw_stashes(&mut self, frame: &mut Frame, repo: &git2::Repository) {

@@ -3,9 +3,9 @@ use crate::core::renderers::{render_buffer_range, render_graph_range, render_mes
 use ratatui::layout::{Alignment, Constraint, Direction, Layout};
 use ratatui::widgets::Paragraph;
 use ratatui::{
+    Frame,
     style::Style,
     widgets::{Block, Borders, Cell as WidgetCell, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, Table},
-    Frame,
 };
 
 impl App {

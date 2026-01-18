@@ -3,10 +3,10 @@ use crate::{
     helpers::text::{center_line, truncate_with_ellipsis},
 };
 use ratatui::{
+    Frame,
     style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Scrollbar, ScrollbarOrientation, ScrollbarState},
-    Frame,
 };
 
 impl App {
@@ -28,11 +28,7 @@ impl App {
             // Text
             let truncated = truncate_with_ellipsis(branch_name, max_text_width.saturating_sub(1));
             let icon = if is_visible {
-                if is_local {
-                    "●"
-                } else {
-                    "◆"
-                }
+                if is_local { "●" } else { "◆" }
             } else if is_local {
                 "○"
             } else {

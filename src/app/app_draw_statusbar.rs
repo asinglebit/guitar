@@ -4,10 +4,10 @@ use crate::{
     helpers::keymap::InputMode,
 };
 use ratatui::{
+    Frame,
     style::Style,
     text::{Line, Span, Text},
     widgets::Block,
-    Frame,
 };
 
 impl App {
