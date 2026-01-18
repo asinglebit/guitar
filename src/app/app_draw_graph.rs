@@ -1,9 +1,9 @@
 use crate::app::app::{App, Focus};
 use crate::core::renderers::{render_buffer_range, render_graph_range, render_message_range, render_sha_range};
 use ratatui::{
-    Frame,
     style::Style,
     widgets::{Block, Borders, Cell as WidgetCell, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, Table},
+    Frame,
 };
 
 impl App {
@@ -49,7 +49,8 @@ impl App {
             repo,
             &self.oids,
             &self.branches.local,
-            &self.branches.visible,
+            &self.branches.all,
+            &self.branches.visible_branch_names,
             &self.tags.local,
             &mut self.branches.colors,
             &mut self.tags.colors,

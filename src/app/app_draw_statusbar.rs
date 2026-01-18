@@ -4,10 +4,10 @@ use crate::{
     helpers::keymap::InputMode,
 };
 use ratatui::{
-    Frame,
     style::Style,
     text::{Line, Span, Text},
     widgets::Block,
+    Frame,
 };
 
 impl App {
@@ -53,7 +53,13 @@ impl App {
                 },
                 Focus::StatusTop => self.status_top_selected + 1,
                 Focus::StatusBottom => self.status_bottom_selected + 1,
-                Focus::Branches => self.branches.visible.values().map(|b| b.len()).sum(),
+                Focus::Branches => {
+                    if self.branches.visible_branch_names.is_empty() {
+                        self.branches.all.len()
+                    } else {
+                        self.branches.visible_branch_names.len()
+                    }
+                },
                 _ => 0,
             }
         };

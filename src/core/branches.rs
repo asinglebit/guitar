@@ -35,23 +35,6 @@ impl Branches {
             self.all.entry(oidi).and_modify(|existing| existing.extend(branches.iter().cloned())).or_insert_with(|| branches.clone());
         }
 
-        // Rebuild visible branches
-        self.visible.clear();
-        if self.visible_branch_names.is_empty() {
-            // If no name-based filter, show everything
-            for (&alias, branches) in self.all.iter() {
-                self.visible.insert(alias, branches.clone());
-            }
-        } else {
-            // Otherwise rebuild visibility by name
-            for (&alias, branches) in self.all.iter() {
-                let matched: Vec<String> = branches.iter().filter(|b| self.visible_branch_names.contains(*b)).cloned().collect();
-                if !matched.is_empty() {
-                    self.visible.insert(alias, matched);
-                }
-            }
-        }
-
         // Branch tuple vectors
         let mut local: Vec<(u32, String)> = self.local.iter().flat_map(|(&alias, branches)| branches.iter().map(move |branch| (alias, branch.clone()))).collect();
         let mut remote: Vec<(u32, String)> = self.remote.iter().flat_map(|(&alias, branches)| branches.iter().map(move |branch| (alias, branch.clone()))).collect();
@@ -86,10 +69,6 @@ impl Branches {
 
     pub fn get_color(&self, theme: &Theme, branch_alias: &u32) -> Color {
         *self.colors.get(branch_alias).unwrap_or(&theme.COLOR_TEXT)
-    }
-
-    pub fn is_visible(&self, branch_alias: &u32, branch_name: &String) -> bool {
-        self.visible.get(branch_alias).is_some_and(|branch_names| branch_names.iter().any(|current_branch| current_branch == branch_name))
     }
 
     pub fn is_local(&self, branch_name: &String) -> bool {

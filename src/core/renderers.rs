@@ -1,4 +1,4 @@
-use crate::helpers::keymap::{Command, KeyBinding, keycode_to_visual_string};
+use crate::helpers::keymap::{keycode_to_visual_string, Command, KeyBinding};
 use crate::helpers::text::truncate_with_ellipsis;
 use crate::{
     core::{
@@ -426,8 +426,20 @@ pub fn render_sha_range(theme: &Theme, oids: &Oids, start: usize, end: usize) ->
 
 #[allow(clippy::too_many_arguments)]
 pub fn render_message_range(
-    theme: &Theme, repo: &Repository, oids: &Oids, local: &HashMap<u32, Vec<String>>, visible: &HashMap<u32, Vec<String>>, tags: &HashMap<u32, Vec<String>>, branch_colors: &mut HashMap<u32, Color>,
-    tag_colors: &mut HashMap<u32, Color>, stashes_colors: &mut HashMap<u32, Color>, start: usize, end: usize, selected: usize, uncommitted: &UncommittedChanges,
+    theme: &Theme,
+    repo: &Repository,
+    oids: &Oids,
+    local: &HashMap<u32, Vec<String>>,
+    all_branches: &HashMap<u32, Vec<String>>,
+    visible_branch_names: &HashSet<String>,
+    tags: &HashMap<u32, Vec<String>>,
+    branch_colors: &mut HashMap<u32, Color>,
+    tag_colors: &mut HashMap<u32, Color>,
+    stashes_colors: &mut HashMap<u32, Color>,
+    start: usize,
+    end: usize,
+    selected: usize,
+    uncommitted: &UncommittedChanges,
 ) -> Vec<Line<'static>> {
     let mut lines: Vec<Line> = Vec::new();
 
@@ -440,16 +452,14 @@ pub fn render_message_range(
             let oid = oids.get_oid_by_alias(alias);
             let commit = repo.find_commit(*oid).unwrap();
 
-            if let Some(visible) = visible.get(&alias) {
-                for branch in visible {
-                    // Only render branches that are visible
-                    if visible.iter().any(|b| b == branch) {
-                        // Check if the branch is local
-                        let is_local = local.values().any(|branches| branches.iter().any(|b| b.as_str() == branch));
-
+            // Dynamically collect all branches for this alias
+            if let Some(branch_list) = all_branches.get(&alias) {
+                for branch in branch_list {
+                    if visible_branch_names.contains(branch) || visible_branch_names.is_empty() {
+                        let is_local = local.values().any(|branches| branches.iter().any(|b| b == branch));
                         spans.push(Span::styled(
                             format!("{} {} ", if is_local { SYM_COMMIT_BRANCH } else { "◆" }, branch),
-                            Style::default().fg(if let Some(color) = branch_colors.get(&alias) { *color } else { theme.COLOR_TEXT }),
+                            Style::default().fg(*branch_colors.get(&alias).unwrap_or(&theme.COLOR_TEXT)),
                         ));
                     }
                 }

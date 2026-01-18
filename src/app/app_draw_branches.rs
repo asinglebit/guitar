@@ -3,10 +3,10 @@ use crate::{
     helpers::text::truncate_with_ellipsis,
 };
 use ratatui::{
-    Frame,
     style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Scrollbar, ScrollbarOrientation, ScrollbarState},
+    Frame,
 };
 
 impl App {
@@ -22,13 +22,17 @@ impl App {
         let mut lines: Vec<Line<'_>> = Vec::new();
         for (branch_alias, branch_name) in self.branches.get_sorted_aliases().iter() {
             // Get branch descriptors
-            let is_visible = self.branches.is_visible(branch_alias, branch_name);
+            let is_visible = self.branches.visible_branch_names.contains(branch_name) || self.branches.visible_branch_names.is_empty();
             let is_local = self.branches.is_local(branch_name);
 
             // Text
             let truncated = truncate_with_ellipsis(branch_name, max_text_width.saturating_sub(1));
             let icon = if is_visible {
-                if is_local { "●" } else { "◆" }
+                if is_local {
+                    "●"
+                } else {
+                    "◆"
+                }
             } else if is_local {
                 "○"
             } else {

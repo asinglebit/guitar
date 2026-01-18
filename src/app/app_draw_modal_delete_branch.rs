@@ -1,10 +1,10 @@
 use crate::{app::app::App, git::queries::commits::get_current_branch};
 use ratatui::{
-    Frame,
     layout::{Alignment, Rect},
     style::Style,
     text::{Line, Span, Text},
     widgets::{Block, Borders, Clear, Paragraph, Widget},
+    Frame,
 };
 
 impl App {
@@ -21,7 +21,13 @@ impl App {
         // Render list
         let current = get_current_branch(repo);
         let color = self.branches.colors.get(&alias).unwrap();
-        let branches = self.branches.visible.get(&alias).unwrap();
+        // Get all visible branch names for this alias
+        let branches: Vec<String> = if self.branches.visible_branch_names.is_empty() {
+            self.branches.all.get(&alias).cloned().unwrap_or_default()
+        } else {
+            self.branches.visible_branch_names.iter().filter(|b| self.branches.all.get(&alias).map_or(false, |all| all.contains(b))).cloned().collect()
+        };
+
         branches.iter().filter(|branch| current.as_ref() != Some(*branch)).enumerate().for_each(|(idx, branch)| {
             height += 1;
             let is_local = self.branches.local.values().any(|branches| branches.iter().any(|b| b.as_str() == branch));
