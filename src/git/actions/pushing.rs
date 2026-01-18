@@ -1,0 +1,77 @@
+use git2::{build::CheckoutBuilder, BranchType, Cred, Error, ErrorCode, FetchOptions, Oid, PushOptions, RemoteCallbacks, Repository, ResetType, Signature, StatusOptions};
+use git2::{CherrypickOptions, FetchPrune, StashApplyOptions, StashFlags};
+use std::{collections::HashMap, thread};
+
+pub fn push_over_ssh(repo_path: &str, remote_name: &str, branch: &str, force: bool) -> thread::JoinHandle<Result<(), git2::Error>> {
+    // Clone inputs so they can move into the thread safely
+    let repo_path = repo_path.to_string();
+    let remote_name = remote_name.to_string();
+    let branch = branch.to_string();
+
+    thread::spawn(move || {
+        // Open the repository
+        let repo = Repository::open(&repo_path)?;
+        let mut remote = repo.find_remote(&remote_name)?;
+
+        // Configure SSH authentication
+        let mut callbacks = RemoteCallbacks::new();
+        callbacks.credentials(|_url, _username_from_url, _| Cred::ssh_key_from_agent("git"));
+
+        // Track progress
+        callbacks.push_update_reference(|_refname, status| {
+            if let Some(_err) = status {
+                // eprintln!("Failed to update {refname}: {err}");
+            } else {
+                // println!("Updated {refname}");
+            }
+            Ok(())
+        });
+
+        // Configure push options
+        let mut push_options = PushOptions::new();
+        push_options.remote_callbacks(callbacks);
+
+        // Build refspecs
+        let mut refspecs = vec![];
+
+        // Branch
+        let branch_refspec = if force { format!("+refs/heads/{0}:refs/heads/{0}", branch) } else { format!("refs/heads/{0}:refs/heads/{0}", branch) };
+        refspecs.push(branch_refspec);
+
+        // Local tags
+        for tag_name in repo.tag_names(None)?.iter().flatten() {
+            let tag_refspec = format!("refs/tags/{0}:refs/tags/{0}", tag_name);
+            refspecs.push(tag_refspec);
+        }
+
+        // Perform the push
+        remote.push(&refspecs.iter().map(|s| s.as_str()).collect::<Vec<_>>(), Some(&mut push_options))?;
+
+        // println!("Push complete for branch '{}'", branch);
+        Ok(())
+    })
+}
+
+pub fn delete_remote_branch_ssh(repo_path: &str, remote_name: &str, branch: &str) -> thread::JoinHandle<Result<(), git2::Error>> {
+    let repo_path = repo_path.to_string();
+    let remote_name = remote_name.to_string();
+    let branch = branch.to_string();
+
+    thread::spawn(move || {
+        let repo = Repository::open(&repo_path)?;
+        let mut remote = repo.find_remote(&remote_name)?;
+
+        let mut callbacks = RemoteCallbacks::new();
+        callbacks.credentials(|_url, _username_from_url, _| Cred::ssh_key_from_agent("git"));
+
+        let mut push_options = PushOptions::new();
+        push_options.remote_callbacks(callbacks);
+
+        // Deletion refspec
+        let refspec = format!(":refs/heads/{}", branch);
+
+        remote.push(&[&refspec], Some(&mut push_options))?;
+
+        Ok(())
+    })
+}

@@ -37,7 +37,16 @@ mod core {
 }
 pub mod git {
     pub mod actions {
-        pub mod commits;
+        pub mod branching;
+        pub mod checkout;
+        pub mod cherrypicking;
+        pub mod committing;
+        pub mod fetching;
+        pub mod pushing;
+        pub mod resetting;
+        pub mod staging;
+        pub mod stashing;
+        pub mod tagging;
     }
     pub mod os {
         pub mod path;

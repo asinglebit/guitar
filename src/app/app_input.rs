@@ -4,13 +4,11 @@ use crate::{
         app_default::ViewerMode,
     },
     git::{
-        actions::commits::{checkout_branch, checkout_head, commit_staged, create_branch, delete_branch, fetch_over_ssh, git_add_all, push_over_ssh, reset_to_commit, unstage_all},
-        queries::{commits::get_current_branch, diffs::get_filenames_diff_at_oid},
+        actions::{branching::{create_branch, delete_branch}, checkout::{checkout_branch, checkout_head}, cherrypicking::cherry_pick_commit, committing::commit_staged, fetching::fetch_over_ssh, pushing::push_over_ssh, resetting::reset_to_commit, staging::{stage_all, stage_file, unstage_all, unstage_file}, stashing::{pop, stash}, tagging::{tag, untag}}, queries::{commits::get_current_branch, diffs::get_filenames_diff_at_oid}
     },
     helpers::{keymap::InputMode, palette::Theme},
 };
 use crate::{
-    git::actions::commits::{cherry_pick_commit, pop, stage_file, stash, tag, unstage_file, untag},
     helpers::keymap::{load_or_init_keymaps, Command, KeyBinding},
 };
 use git2::{Oid, Repository};
@@ -1448,7 +1446,7 @@ impl App {
                     match self.focus {
                         Focus::Viewport => {
                             if self.uncommitted.is_unstaged {
-                                git_add_all(repo).expect("Couldn't add all");
+                                stage_all(repo).expect("Couldn't add all");
                                 self.reload(None);
                             }
                         },
