@@ -1349,10 +1349,6 @@ impl App {
                 let (alias, branch) = self.branches.sorted.get(self.branches_selected).unwrap();
                 checkout_branch(repo, &mut self.branches.visible, &mut self.branches.local, *alias, branch).expect("Error");
                 self.graph_selected = self.oids.get_sorted_aliases().iter().position(|o| o == alias).unwrap_or(0);
-                if self.graph_selected != 0 && self.graph_selected < self.oids.get_commit_count() {
-                    let oid = self.oids.get_oid_by_idx(self.graph_selected);
-                    self.current_diff = get_filenames_diff_at_oid(repo, *oid);
-                }
                 self.focus = Focus::Viewport;
                 self.branches.visible.clear();
                 self.reload(None);

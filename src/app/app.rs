@@ -1,7 +1,7 @@
 use crate::{
     app::input::TextInput,
     core::stashes::Stashes,
-    git::os::path::try_into_git_repo_root,
+    git::{os::path::try_into_git_repo_root, queries::diffs::get_filenames_diff_at_oid},
     helpers::{
         copy::{STR_CREATE_BRANCH, STR_CREATE_COMMIT, STR_CREATE_TAG, STR_FIND_SHA},
         heatmap::{DAYS, WEEKS, empty_heatmap},
@@ -352,6 +352,13 @@ impl App {
 
         // Only proceed if we successfully opened a repo
         if let Some(repo) = &self.repo {
+
+            // Try reposition selection
+            if self.graph_selected != 0 && self.graph_selected < self.oids.get_commit_count() {
+                let oid = self.oids.get_oid_by_idx(self.graph_selected);
+                self.current_diff = get_filenames_diff_at_oid(repo, *oid);
+            }
+            
             // Add the repo path to the list of recent repositories if not present already
             if !self.recent.iter().any(|v| v == &absolute_path) {
                 self.recent.push(absolute_path.clone());
@@ -475,6 +482,12 @@ impl App {
 
             // Update stashes
             self.stashes.feed(&self.color, &result.stashes_lanes);
+
+            // Try reposition selection
+            if self.graph_selected != 0 && self.graph_selected < self.oids.get_commit_count() {
+                let oid = self.oids.get_oid_by_idx(self.graph_selected);
+                self.current_diff = get_filenames_diff_at_oid(repo, *oid);
+            }
 
             // We parsed the entire repository
             if !result.is_again {
