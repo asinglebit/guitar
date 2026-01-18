@@ -1,9 +1,9 @@
 use crate::app::app::{App, Focus};
 use ratatui::{
+    Frame,
     style::Style,
     text::{Line, Span},
     widgets::{Block, List, ListItem},
-    Frame,
 };
 
 impl App {
