@@ -352,12 +352,6 @@ impl App {
 
         // Only proceed if we successfully opened a repo
         if let Some(repo) = &self.repo {
-
-            // Try reposition selection
-            if self.graph_selected != 0 && self.graph_selected < self.oids.get_commit_count() {
-                let oid = self.oids.get_oid_by_idx(self.graph_selected);
-                self.current_diff = get_filenames_diff_at_oid(repo, *oid);
-            }
             
             // Add the repo path to the list of recent repositories if not present already
             if !self.recent.iter().any(|v| v == &absolute_path) {
