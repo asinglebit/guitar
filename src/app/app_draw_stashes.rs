@@ -1,4 +1,5 @@
 use crate::helpers::symbols::SYM_COMMIT_STASH;
+use crate::helpers::text::center_line;
 use crate::{
     app::app::{App, Focus},
     helpers::text::truncate_with_ellipsis,
@@ -36,6 +37,18 @@ impl App {
             lines.push(Line::from(Span::styled(format!("{SYM_COMMIT_STASH} {truncated}"), Style::default().fg(color))));
         }
 
+        // Handle no changes
+        let mut stashes_empty = false;
+        if lines.is_empty() {
+            stashes_empty = true;
+            let visible_height = if self.layout_config.is_zen { self.layout.stashes.height.saturating_sub(2) as usize } else { self.layout.stashes.height as usize };
+            let blank_lines_before = visible_height.saturating_sub(3) / 2;
+            for _ in 0..blank_lines_before {
+                lines.push(Line::default());
+            }
+            lines.push(Line::from(Span::styled(center_line(&truncate_with_ellipsis("⊘ no stashes", max_text_width), max_text_width + 3), Style::default().fg(self.theme.COLOR_GREY_800))));
+        }
+
         // Get vertical dimensions
         let total_lines = lines.len();
         let visible_height = if self.layout_config.is_zen {
@@ -63,10 +76,10 @@ impl App {
             .iter()
             .enumerate()
             .map(|(idx, line)| {
-                if start + idx == self.stashes_selected && self.focus == Focus::Stashes {
+                if start + idx == self.stashes_selected && self.focus == Focus::Stashes && !stashes_empty {
                     let spans: Vec<Span> = line.iter().map(|span| Span::styled(span.content.clone(), span.style)).collect();
                     ListItem::new(Line::from(spans)).style(Style::default().bg(self.theme.COLOR_GREY_800))
-                } else if (idx + start).is_multiple_of(2) {
+                } else if (idx + start).is_multiple_of(2) && !stashes_empty {
                     ListItem::new(Line::from(line.clone().spans)).style(Style::default().bg(self.theme.COLOR_GREY_900))
                 } else {
                     ListItem::new(line.clone())
@@ -111,7 +124,7 @@ impl App {
         let mut scrollbar_state = ScrollbarState::new(scroll_range).position(self.stashes_scroll.get());
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
             .begin_symbol(Some(if self.layout_config.is_branches || self.layout_config.is_tags { "│" } else { "─" }))
-            .end_symbol(Some("─"))
+            .end_symbol(if (self.layout_config.is_branches && self.layout_config.is_tags) { Some("│") } else { Some("─") })
             .track_symbol(Some("│"))
             .thumb_symbol(if total_lines > visible_height { "▌" } else { "│" })
             .track_style(Style::default().fg(self.theme.COLOR_BORDER))

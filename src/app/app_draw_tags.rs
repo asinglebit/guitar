@@ -1,4 +1,5 @@
 use crate::helpers::symbols::SYM_TAG;
+use crate::helpers::text::center_line;
 use crate::{
     app::app::{App, Focus},
     helpers::text::truncate_with_ellipsis,
@@ -32,6 +33,18 @@ impl App {
             lines.push(Line::from(Span::styled(format!("{SYM_TAG} {truncated}"), Style::default().fg(color))));
         }
 
+        // Handle no tags
+        let mut tags_empty = false;
+        if lines.is_empty() {
+            tags_empty = true;
+            let visible_height = if self.layout_config.is_zen { self.layout.tags.height.saturating_sub(2) as usize } else { self.layout.tags.height as usize };
+            let blank_lines_before = visible_height.saturating_sub(3) / 2;
+            for _ in 0..blank_lines_before {
+                lines.push(Line::default());
+            }
+            lines.push(Line::from(Span::styled(center_line(&truncate_with_ellipsis("⊘ no tags", max_text_width), max_text_width + 3), Style::default().fg(self.theme.COLOR_GREY_800))));
+        }
+
         // Get vertical dimensions
         let total_lines = lines.len();
         let visible_height = if self.layout_config.is_zen {
@@ -59,10 +72,10 @@ impl App {
             .iter()
             .enumerate()
             .map(|(idx, line)| {
-                if start + idx == self.tags_selected && self.focus == Focus::Tags {
+                if start + idx == self.tags_selected && self.focus == Focus::Tags && !tags_empty {
                     let spans: Vec<Span> = line.iter().map(|span| Span::styled(span.content.clone(), span.style)).collect();
                     ListItem::new(Line::from(spans)).style(Style::default().bg(self.theme.COLOR_GREY_800))
-                } else if (idx + start).is_multiple_of(2) {
+                } else if (idx + start).is_multiple_of(2) && !tags_empty {
                     ListItem::new(Line::from(line.clone().spans)).style(Style::default().bg(self.theme.COLOR_GREY_900))
                 } else {
                     ListItem::new(line.clone())
