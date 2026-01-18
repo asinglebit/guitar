@@ -1,9 +1,9 @@
 use crate::app::app::{App, Direction, Focus};
 use ratatui::{
-    Frame,
     style::Style,
     text::{Line, Span},
     widgets::{Block, List, ListItem},
+    Frame,
 };
 
 impl App {
@@ -36,7 +36,6 @@ impl App {
 
         // Setup list items
         let mut lines: Vec<Line> = Vec::new();
-        self.splash_selections = Vec::new();
 
         // How many rows the actual content will take
         let content_rows =
@@ -116,63 +115,32 @@ impl App {
             } else {
                 lines.push(Line::from(vec![Span::styled("recent repositories:".to_string(), Style::default().fg(self.theme.COLOR_TEXT))]).centered());
                 lines.push(Line::default());
-                self.recent.iter().for_each(|path| {
-                    self.splash_selections.push(lines.len());
-                    let style = if Some(path) == self.path.as_ref() { self.theme.COLOR_GRASS } else { self.theme.COLOR_TEXT };
-                    lines.push(Line::from(Span::styled(path.clone(), Style::default().fg(style))).centered());
-                });
-            }
+                // Repository lines
+self.recent.iter().enumerate().for_each(|(i, path)| {
+    let style = if Some(path) == self.path.as_ref() {
+        self.theme.COLOR_GRASS
+    } else {
+        self.theme.COLOR_TEXT
+    };
 
-            // Snap to nearest selectable line if needed
-            if !self.splash_selections.contains(&self.splash_selected) {
-                // Find nearest selectable line above or below
-                let mut nearest = None;
+    let mut line = Line::from(Span::styled(path.clone(), Style::default().fg(style))).centered();
 
-                // Moving down
-                if self.last_input_direction == Some(Direction::Down) {
-                    nearest = self.splash_selections.iter().copied().find(|&i| i > self.splash_selected);
-                }
+    // Add selection highlighting
+    if i == self.splash_selected && self.focus == Focus::Viewport && !self.spinner.is_running() {
+        let mut spans = Vec::new();
+        spans.push(Span::styled("⏵ ", Style::default().fg(self.theme.COLOR_GRASS)));
+        spans.extend(line.spans.clone());
+        spans.push(Span::styled(" ⏴", Style::default().fg(self.theme.COLOR_GRASS)));
+        line = Line::from(spans).centered();
+    }
 
-                // Moving up
-                if nearest.is_none() && self.last_input_direction == Some(Direction::Up) {
-                    nearest = self.splash_selections.iter().rev().copied().find(|&i| i < self.splash_selected);
-                }
-
-                // Fallback to nearest by distance if neither direction flag is set
-                if nearest.is_none() {
-                    nearest = self.splash_selections.iter().min_by_key(|&&i| i.abs_diff(self.splash_selected)).copied();
-                }
-
-                if let Some(target) = nearest {
-                    self.splash_selected = target;
-                }
+    lines.push(line);
+});
             }
         }
 
-        // Setup list items
-        let list_items: Vec<ListItem> = lines
-            .iter()
-            .enumerate()
-            .map(|(i, line)| {
-                let absolute_idx = start + i;
-                let mut item = line.clone();
-
-                if item.spans.is_empty() {
-                    item.spans.push(Span::raw(""));
-                }
-
-                if !self.spinner.is_running() && absolute_idx == self.splash_selected && self.focus == Focus::Viewport {
-                    let mut spans = Vec::new();
-                    spans.push(Span::styled("⏵ ", Style::default().fg(self.theme.COLOR_GRASS)));
-                    spans.extend(item.spans.clone());
-                    spans.push(Span::styled(" ⏴", Style::default().fg(self.theme.COLOR_GRASS)));
-                    item = Line::from(spans).centered();
-                }
-
-                ListItem::from(item)
-            })
-            .collect();
-
+// Convert to ListItems for rendering
+let list_items: Vec<ListItem> = lines.into_iter().map(ListItem::from).collect();
         // Setup the list
         let list = List::new(list_items).block(Block::default().padding(padding));
 

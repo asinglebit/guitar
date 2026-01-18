@@ -57,7 +57,6 @@ pub fn get_tag_oids(repo: &Repository, oids: &mut Oids) -> HashMap<u32, Vec<Stri
     local
 }
 
-// Outcomes:
 // Update the oids vector
 pub fn get_sorted_oids(batcher: &Batcher, oids: &mut Oids, sorted: &mut Vec<u32>, amount: usize) {
     // Get the next batch of commits

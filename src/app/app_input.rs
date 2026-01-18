@@ -1,5 +1,6 @@
 use crate::git::actions::resetting::reset_file;
-use crate::helpers::keymap::{Command, KeyBinding, load_or_init_keymaps};
+use crate::helpers::keymap::{load_or_init_keymaps, Command, KeyBinding};
+use crate::logf;
 use crate::{
     app::{
         app::{App, Direction, Focus, Viewport},
@@ -305,9 +306,7 @@ impl App {
                     }
                 },
                 Viewport::Splash => {
-                    if let Some(position) = self.splash_selections.iter().position(|&x| x == self.splash_selected)
-                        && let Some(path) = self.recent.get(position)
-                    {
+                    if let Some(path) = self.recent.get(self.splash_selected) {
                         self.reload(Some(path.to_string()));
                         self.graph_selected = 0;
                     }
@@ -486,9 +485,7 @@ impl App {
                     }
                 },
                 Viewport::Splash => {
-                    if let Some(position) = self.splash_selections.iter().position(|&x| x == self.splash_selected)
-                        && let Some(path) = self.recent.get(position)
-                    {
+                    if let Some(path) = self.recent.get(self.splash_selected) {
                         self.reload(Some(path.to_string()));
                         self.graph_selected = 0;
                     }
@@ -664,6 +661,9 @@ impl App {
                     },
                     Viewport::Splash => {
                         self.splash_selected += page;
+                        if self.splash_selected >= self.recent.len() {
+                            self.splash_selected = self.recent.len() - 1;
+                        };
                         self.last_input_direction = Some(Direction::Down);
                     },
                 }
@@ -800,6 +800,9 @@ impl App {
                 },
                 Viewport::Splash => {
                     self.splash_selected += 1;
+                    if self.splash_selected >= self.recent.len() {
+                        self.splash_selected = self.recent.len() - 1;
+                    };
                     self.last_input_direction = Some(Direction::Down);
                 },
             },
@@ -997,6 +1000,9 @@ impl App {
                     },
                     Viewport::Splash => {
                         self.splash_selected += half;
+                        if self.splash_selected >= self.recent.len() {
+                            self.splash_selected = self.recent.len() - 1;
+                        };
                         self.last_input_direction = Some(Direction::Down);
                     },
                 }
@@ -1176,7 +1182,7 @@ impl App {
                     self.settings_selected = usize::MAX;
                 },
                 Viewport::Splash => {
-                    self.splash_selected = usize::MAX;
+                    self.splash_selected = self.recent.len() - 1;
                 },
             },
             Focus::Inspector => {
@@ -1681,13 +1687,13 @@ impl App {
                     self.focus = Focus::Viewport;
 
                     // Start with the first selectable line
-                    let mut selected = self.splash_selections.first().copied().unwrap_or(0);
+                    let mut selected = 0;
 
                     // If current repo path exists in recent, add its position
                     if let Some(path) = &self.path
                         && let Some(pos) = self.recent.iter().position(|p| p == path)
                     {
-                        selected = selected.saturating_add(pos);
+                        selected = pos;
                     }
 
                     self.splash_selected = selected;

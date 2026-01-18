@@ -92,7 +92,6 @@ impl Default for App {
 
             // Splash
             splash_selected: 0,
-            splash_selections: Vec::new(),
 
             // Settings
             settings_selected: 0,

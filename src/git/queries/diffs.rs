@@ -52,11 +52,8 @@ pub fn get_filenames_diff_at_workdir(repo: &Repository) -> Result<UncommittedCha
     changes.modified_count = deduplicate(&changes.staged.modified, &changes.unstaged.modified);
     changes.added_count = deduplicate(&changes.staged.added, &changes.unstaged.added);
     changes.deleted_count = deduplicate(&changes.staged.deleted, &changes.unstaged.deleted);
-
     changes.is_staged = !changes.staged.modified.is_empty() || !changes.staged.added.is_empty() || !changes.staged.deleted.is_empty();
-
     changes.is_unstaged = !changes.unstaged.modified.is_empty() || !changes.unstaged.added.is_empty() || !changes.unstaged.deleted.is_empty();
-
     changes.is_clean = !changes.is_staged && !changes.is_unstaged;
 
     Ok(changes)
