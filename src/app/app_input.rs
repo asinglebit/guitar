@@ -747,7 +747,7 @@ impl App {
 
                 // Filter the global set for this alias
                 let branch_names: Vec<String> =
-                    self.branches.visible_branch_names.iter().filter(|name| self.branches.all.get(&alias).map_or(false, |branches| branches.contains(name))).cloned().collect();
+                    self.branches.visible_branch_names.iter().filter(|name| self.branches.all.get(&alias).is_some_and(|branches| branches.contains(name))).cloned().collect();
 
                 let len = branch_names.len() as i32;
                 if len > 0 {
@@ -761,7 +761,7 @@ impl App {
 
                 // Get all visible branch names for this alias
                 let branch_names: Vec<String> =
-                    self.branches.visible_branch_names.iter().filter(|name| self.branches.all.get(&alias).map_or(false, |branches| branches.contains(name))).cloned().collect();
+                    self.branches.visible_branch_names.iter().filter(|name| self.branches.all.get(&alias).is_some_and(|branches| branches.contains(name))).cloned().collect();
 
                 let len = branch_names.len() as i32;
 
@@ -778,7 +778,7 @@ impl App {
 
                     // Get all visible branches for this alias
                     let mut branch_names: Vec<String> =
-                        self.branches.visible_branch_names.iter().filter(|name| self.branches.all.get(&alias).map_or(false, |branches| branches.contains(name))).cloned().collect();
+                        self.branches.visible_branch_names.iter().filter(|name| self.branches.all.get(&alias).is_some_and(|branches| branches.contains(name))).cloned().collect();
 
                     // Exclude current branch from deletable branches
                     if let Some(current) = get_current_branch(repo) {
@@ -858,7 +858,7 @@ impl App {
 
                 // Filter global visible_branch_names to only branches under this alias
                 let branch_names: Vec<String> =
-                    self.branches.visible_branch_names.iter().filter(|name| self.branches.all.get(&alias).map_or(false, |branches| branches.contains(name))).cloned().collect();
+                    self.branches.visible_branch_names.iter().filter(|name| self.branches.all.get(&alias).is_some_and(|branches| branches.contains(name))).cloned().collect();
 
                 let len = branch_names.len() as i32;
                 if len > 0 {
@@ -872,7 +872,7 @@ impl App {
 
                 // Get all visible branch names for this alias
                 let branch_names: Vec<String> =
-                    self.branches.visible_branch_names.iter().filter(|name| self.branches.all.get(&alias).map_or(false, |branches| branches.contains(name))).cloned().collect();
+                    self.branches.visible_branch_names.iter().filter(|name| self.branches.all.get(&alias).is_some_and(|branches| branches.contains(name))).cloned().collect();
 
                 let len = branch_names.len() as i32;
 
@@ -889,7 +889,7 @@ impl App {
 
                     // Get all visible branches for this alias
                     let mut branch_names: Vec<String> =
-                        self.branches.visible_branch_names.iter().filter(|name| self.branches.all.get(&alias).map_or(false, |branches| branches.contains(name))).cloned().collect();
+                        self.branches.visible_branch_names.iter().filter(|name| self.branches.all.get(&alias).is_some_and(|branches| branches.contains(name))).cloned().collect();
 
                     // Exclude current branch from deletable branches
                     if let Some(current) = get_current_branch(repo) {

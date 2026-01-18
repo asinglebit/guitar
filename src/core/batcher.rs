@@ -2,7 +2,7 @@ use crate::core::oids::Oids;
 use git2::{BranchType, Oid, Repository, Revwalk};
 use im::HashSet;
 use std::cell::RefCell;
-use std::{collections::HashMap, rc::Rc, sync::Mutex};
+use std::{rc::Rc, sync::Mutex};
 
 // Encapsulate a revwalk over the git repository, allowing incremental fetching of commits
 pub struct Batcher {
@@ -11,14 +11,14 @@ pub struct Batcher {
 
 impl Batcher {
     // Creates a new Batcher by building a revwalk from the repo
-    pub fn new(repo: Rc<RefCell<Repository>>, visible_branch_names: &HashSet<String>, oids: &mut Oids) -> Result<Self, git2::Error> {
-        let revwalk = Self::build(&repo.borrow(), visible_branch_names, oids)?;
+    pub fn new(repo: Rc<RefCell<Repository>>, visible_branch_names: &HashSet<String>) -> Result<Self, git2::Error> {
+        let revwalk = Self::build(&repo.borrow(), visible_branch_names)?;
         Ok(Self { revwalk: Mutex::new(revwalk) })
     }
 
     // Reset the revwalk
-    pub fn reset(&self, repo: Rc<RefCell<Repository>>, visible_branch_names: &HashSet<String>, oids: &mut Oids) -> Result<(), git2::Error> {
-        let revwalk = Self::build(&repo.borrow(), visible_branch_names, oids)?;
+    pub fn reset(&self, repo: Rc<RefCell<Repository>>, visible_branch_names: &HashSet<String>) -> Result<(), git2::Error> {
+        let revwalk = Self::build(&repo.borrow(), visible_branch_names)?;
         let mut guard = self.revwalk.lock().unwrap();
         *guard = revwalk;
         Ok(())
@@ -30,7 +30,7 @@ impl Batcher {
         revwalk.by_ref().take(count).filter_map(Result::ok).collect()
     }
 
-    fn build(repo: &Repository, visible_branch_names: &HashSet<String>, oids: &mut Oids) -> Result<Revwalk<'static>, git2::Error> {
+    fn build(repo: &Repository, visible_branch_names: &HashSet<String>) -> Result<Revwalk<'static>, git2::Error> {
         let repo_ref: &'static Repository = unsafe { std::mem::transmute::<&Repository, &'static Repository>(repo) };
 
         let mut revwalk = repo_ref.revwalk()?;

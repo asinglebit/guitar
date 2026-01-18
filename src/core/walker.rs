@@ -91,7 +91,7 @@ impl Walker {
         }
 
         // Batcher
-        let batcher = Batcher::new(repo.clone(), &visible_branch_names, &mut oids).expect("Error");
+        let batcher = Batcher::new(repo.clone(), &visible_branch_names).expect("Error");
 
         Ok(Self {
             repo,

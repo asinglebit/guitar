@@ -24,7 +24,7 @@ impl App {
         let branches: Vec<String> = if self.branches.visible_branch_names.is_empty() {
             self.branches.all.get(&alias).cloned().unwrap_or_default()
         } else {
-            self.branches.visible_branch_names.iter().filter(|b| self.branches.all.get(&alias).map_or(false, |all| all.contains(b))).cloned().collect()
+            self.branches.visible_branch_names.iter().filter(|b| self.branches.all.get(&alias).is_some_and(|all| all.contains(b))).cloned().collect()
         };
 
         branches.iter().enumerate().for_each(|(idx, branch)| {
