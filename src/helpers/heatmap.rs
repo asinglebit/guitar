@@ -74,7 +74,7 @@ pub fn build_heatmap(repo: &Repository, oids: &Vec<Oid>) -> [[usize; WEEKS]; DAY
         let week_idx = WEEKS - 1 - week;
 
         // Get row index from Monday to Sunday
-        let day_idx = (weekday_today + 6 - (logical % 7)) % 7;
+        let day_idx = (weekday_today + 7 - (days_ago % 7)) % 7;
 
         // Number of commits for this day
         let count = *counts.get(&days_ago).unwrap_or(&0);
