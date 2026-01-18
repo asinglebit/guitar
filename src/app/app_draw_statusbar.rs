@@ -4,19 +4,19 @@ use crate::{
     helpers::keymap::InputMode,
 };
 use ratatui::{
-    Frame,
     style::Style,
     text::{Line, Span, Text},
     widgets::Block,
+    Frame,
 };
 
 impl App {
     pub fn draw_statusbar(&mut self, frame: &mut Frame, repo: &git2::Repository) {
         let lines = match get_current_branch(repo) {
             Some(branch) => Line::from(vec![Span::styled(format!("  ● {}", branch), Style::default().fg(self.theme.COLOR_GRASS))]),
-            None => {
-                let oid = repo.head().unwrap().target().unwrap();
-                Line::from(vec![Span::styled(format!("  detached head: #{:.6}", oid), Style::default().fg(self.theme.COLOR_TEXT))])
+            None => match repo.head().ok().and_then(|h| h.target()) {
+                Some(oid) => Line::from(vec![Span::styled(format!("  detached head: #{:.6}", oid), Style::default().fg(self.theme.COLOR_TEXT))]),
+                None => Line::from(vec![Span::styled("  no head (no commits yet)", Style::default().fg(self.theme.COLOR_TEXT))]),
             },
         };
 

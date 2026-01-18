@@ -1,9 +1,11 @@
 use crate::app::app::{App, Focus};
 use crate::core::renderers::{render_buffer_range, render_graph_range, render_message_range, render_sha_range};
+use ratatui::layout::{Alignment, Constraint, Direction, Layout};
+use ratatui::widgets::Paragraph;
 use ratatui::{
-    Frame,
     style::Style,
     widgets::{Block, Borders, Cell as WidgetCell, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, Table},
+    Frame,
 };
 
 impl App {
@@ -30,8 +32,23 @@ impl App {
         let mut buffer = self.buffer.borrow_mut();
         buffer.decompress(start, end + 1);
 
-        // Get head
-        let head_oid = repo.head().unwrap().target().unwrap();
+        // Determine the current HEAD oid
+        let head_oid = match repo.head().ok().and_then(|h| h.target()) {
+            Some(oid) => oid,
+            None => {
+                let outer_block = Block::default().borders(Borders::LEFT | Borders::RIGHT).border_style(Style::default().fg(self.theme.COLOR_BORDER));
+
+                frame.render_widget(outer_block, self.layout.graph);
+
+                let chunks = Layout::default().direction(Direction::Vertical).constraints([Constraint::Percentage(50), Constraint::Length(3), Constraint::Percentage(50)]).split(self.layout.graph);
+
+                let message = Paragraph::new("⊘ no commits").alignment(Alignment::Center).style(Style::default().fg(self.theme.COLOR_BORDER));
+
+                frame.render_widget(message, chunks[1]);
+                return;
+            },
+        };
+
         let head_oid_alias = self.oids.get_alias_by_oid(head_oid);
 
         // Rendered lines

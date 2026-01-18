@@ -1,12 +1,12 @@
 use crate::{
     app::app::{App, Focus},
-    helpers::text::truncate_with_ellipsis,
+    helpers::text::{center_line, truncate_with_ellipsis},
 };
 use ratatui::{
-    Frame,
     style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Scrollbar, ScrollbarOrientation, ScrollbarState},
+    Frame,
 };
 
 impl App {
@@ -28,7 +28,11 @@ impl App {
             // Text
             let truncated = truncate_with_ellipsis(branch_name, max_text_width.saturating_sub(1));
             let icon = if is_visible {
-                if is_local { "●" } else { "◆" }
+                if is_local {
+                    "●"
+                } else {
+                    "◆"
+                }
             } else if is_local {
                 "○"
             } else {
@@ -38,6 +42,18 @@ impl App {
 
             // Render a branch
             lines.push(Line::from(Span::styled(format!("{icon} {truncated}"), Style::default().fg(color))));
+        }
+
+        // Handle no changes
+        let mut branches_empty = false;
+        if lines.is_empty() {
+            branches_empty = true;
+            let visible_height = if self.layout_config.is_zen { self.layout.branches.height.saturating_sub(2) as usize } else { self.layout.branches.height as usize };
+            let blank_lines_before = visible_height.saturating_sub(3) / 2;
+            for _ in 0..blank_lines_before {
+                lines.push(Line::default());
+            }
+            lines.push(Line::from(Span::styled(center_line(&truncate_with_ellipsis("⊘ no branches", max_text_width), max_text_width + 3), Style::default().fg(self.theme.COLOR_GREY_800))));
         }
 
         // Get vertical dimensions
@@ -63,10 +79,10 @@ impl App {
             .iter()
             .enumerate()
             .map(|(idx, line)| {
-                if start + idx == self.branches_selected && self.focus == Focus::Branches {
+                if start + idx == self.branches_selected && self.focus == Focus::Branches && !branches_empty {
                     let spans: Vec<Span> = line.iter().map(|span| Span::styled(span.content.clone(), span.style)).collect();
                     ListItem::new(Line::from(spans)).style(Style::default().bg(self.theme.COLOR_GREY_800))
-                } else if (idx + start).is_multiple_of(2) {
+                } else if (idx + start).is_multiple_of(2) && !branches_empty {
                     ListItem::new(Line::from(line.clone().spans)).style(Style::default().bg(self.theme.COLOR_GREY_900))
                 } else {
                     ListItem::new(line.clone())

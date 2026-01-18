@@ -76,8 +76,11 @@ pub fn get_sorted_oids(batcher: &Batcher, oids: &mut Oids, sorted: &mut Vec<u32>
 
 // Returns the name of the currently checked-out branch, or None if detached HEAD
 pub fn get_current_branch(repo: &Repository) -> Option<String> {
-    let head = repo.head().unwrap();
-    if head.is_branch() { head.shorthand().map(|s| s.to_string()) } else { None }
+    let head = repo.head().ok()?;
+    if !head.is_branch() {
+        return None;
+    }
+    head.shorthand().map(|s| s.to_string())
 }
 
 // Returns a map of commit OIDs to their timestamps:

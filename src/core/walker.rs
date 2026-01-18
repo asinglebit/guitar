@@ -122,7 +122,12 @@ impl Walker {
         let repo = self.repo.borrow();
 
         // Determine the current HEAD oid
-        let head_oid = repo.head().unwrap().target().unwrap();
+        let head_oid = match repo.head().ok().and_then(|h| h.target()) {
+            Some(oid) => oid,
+            None => {
+                return false;
+            },
+        };
 
         // Get the alias
         let head_alias = self.oids.get_alias_by_oid(head_oid);
