@@ -1,6 +1,5 @@
-use git2::{BranchType, Cred, Error, ErrorCode, FetchOptions, Oid, PushOptions, RemoteCallbacks, Repository, ResetType, Signature, StatusOptions, build::CheckoutBuilder};
-use git2::{CherrypickOptions, FetchPrune, StashApplyOptions, StashFlags};
-use std::{collections::HashMap, thread};
+use git2::{Oid, Repository};
+use git2::{StashApplyOptions, StashFlags};
 
 pub fn stash(repo: &mut Repository) -> Result<Oid, git2::Error> {
     let flags = StashFlags::DEFAULT | StashFlags::INCLUDE_UNTRACKED;

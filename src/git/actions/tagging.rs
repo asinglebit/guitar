@@ -1,6 +1,4 @@
-use git2::{BranchType, Cred, Error, ErrorCode, FetchOptions, Oid, PushOptions, RemoteCallbacks, Repository, ResetType, Signature, StatusOptions, build::CheckoutBuilder};
-use git2::{CherrypickOptions, FetchPrune, StashApplyOptions, StashFlags};
-use std::{collections::HashMap, thread};
+use git2::{Error, Oid, Repository};
 
 pub fn tag(repo: &Repository, oid: git2::Oid, tag: &str) -> Result<Oid, Error> {
     repo.tag_lightweight(tag, &repo.find_object(oid, None)?, false)

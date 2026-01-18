@@ -1,6 +1,5 @@
-use git2::{BranchType, Cred, Error, ErrorCode, FetchOptions, Oid, PushOptions, RemoteCallbacks, Repository, ResetType, Signature, StatusOptions, build::CheckoutBuilder};
-use git2::{CherrypickOptions, FetchPrune, StashApplyOptions, StashFlags};
-use std::{collections::HashMap, thread};
+use git2::{Cred, PushOptions, RemoteCallbacks, Repository};
+use std::thread;
 
 pub fn push_over_ssh(repo_path: &str, remote_name: &str, branch: &str, force: bool) -> thread::JoinHandle<Result<(), git2::Error>> {
     // Clone inputs so they can move into the thread safely

@@ -1,6 +1,5 @@
-use git2::{BranchType, Cred, Error, ErrorCode, FetchOptions, Oid, PushOptions, RemoteCallbacks, Repository, ResetType, Signature, StatusOptions, build::CheckoutBuilder};
-use git2::{CherrypickOptions, FetchPrune, StashApplyOptions, StashFlags};
-use std::{collections::HashMap, thread};
+use git2::{BranchType, Oid, Repository, build::CheckoutBuilder};
+use std::collections::HashMap;
 
 pub fn checkout_head(repo: &Repository, oid: Oid) {
     // Find the commit object

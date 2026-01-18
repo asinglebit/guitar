@@ -1,6 +1,6 @@
-use git2::{BranchType, Cred, Error, ErrorCode, FetchOptions, Oid, PushOptions, RemoteCallbacks, Repository, ResetType, Signature, StatusOptions, build::CheckoutBuilder};
-use git2::{CherrypickOptions, FetchPrune, StashApplyOptions, StashFlags};
-use std::{collections::HashMap, thread};
+use git2::{Cred, FetchOptions, RemoteCallbacks, Repository};
+use git2::FetchPrune;
+use std::thread;
 
 pub fn fetch_over_ssh(repo_path: &str, remote_name: &str) -> thread::JoinHandle<Result<(), git2::Error>> {
     // Clone the strings so the thread owns them

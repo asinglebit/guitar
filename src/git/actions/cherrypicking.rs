@@ -1,6 +1,5 @@
-use git2::{BranchType, Cred, Error, ErrorCode, FetchOptions, Oid, PushOptions, RemoteCallbacks, Repository, ResetType, Signature, StatusOptions, build::CheckoutBuilder};
-use git2::{CherrypickOptions, FetchPrune, StashApplyOptions, StashFlags};
-use std::{collections::HashMap, thread};
+use git2::{Error, Oid, Repository, build::CheckoutBuilder};
+use git2::CherrypickOptions;
 
 pub fn cherry_pick_commit(
     repo: &Repository,

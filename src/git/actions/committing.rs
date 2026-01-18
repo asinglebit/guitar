@@ -1,6 +1,4 @@
-use git2::{BranchType, Cred, Error, ErrorCode, FetchOptions, Oid, PushOptions, RemoteCallbacks, Repository, ResetType, Signature, StatusOptions, build::CheckoutBuilder};
-use git2::{CherrypickOptions, FetchPrune, StashApplyOptions, StashFlags};
-use std::{collections::HashMap, thread};
+use git2::{Error, ErrorCode, Oid, Repository, Signature};
 
 pub fn commit_staged(repo: &Repository, message: &str, name: &str, email: &str) -> Result<Oid, Error> {
     let mut index = repo.index()?;
