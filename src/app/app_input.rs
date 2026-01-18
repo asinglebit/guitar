@@ -1348,6 +1348,9 @@ impl App {
                 // Always allow checkout from branches view
                 let (alias, branch) = self.branches.sorted.get(self.branches_selected).unwrap();
                 checkout_branch(repo, &mut self.branches.visible, &mut self.branches.local, *alias, branch).expect("Error");
+                self.focus = Focus::Viewport;
+                self.branches.visible.clear();
+                self.reload(None);
             }
             Focus::Viewport => {
                 // Only allow checkout from graph if a non-zero line is selected
