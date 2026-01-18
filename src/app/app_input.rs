@@ -1,3 +1,4 @@
+use crate::git::actions::resetting::reset_file;
 use crate::helpers::keymap::{Command, KeyBinding, load_or_init_keymaps};
 use crate::{
     app::{
@@ -1382,17 +1383,26 @@ impl App {
     }
 
     pub fn on_hard_reset(&mut self) {
-        if let Some(repo) = &self.repo
-            && self.focus == Focus::Viewport
-        {
-            if self.focus == Focus::Viewport && self.viewport != Viewport::Graph {
-                return;
+        if let Some(repo) = &self.repo {
+            match self.focus {
+                Focus::Viewport => {
+                    if self.viewport != Viewport::Graph {
+                        return;
+                    }
+                    let oid = self.oids.get_oid_by_idx(self.graph_selected);
+                    reset_to_commit(repo, *oid, git2::ResetType::Hard).expect("Couldn't hard reset");
+                    self.branches.visible.clear();
+                    self.reload(None);
+                    self.focus = Focus::Viewport;
+                }
+                Focus::StatusTop | Focus::StatusBottom => {
+                    if let Some(file_name) = self.get_selected_file_name() {
+                        let path = Path::new(&file_name);
+                        let _ = reset_file(repo, path);
+                    }
+                }
+                _ => {}
             }
-            let oid = self.oids.get_oid_by_idx(self.graph_selected);
-            reset_to_commit(repo, *oid, git2::ResetType::Hard).expect("Couldn't hard reset");
-            self.branches.visible.clear();
-            self.reload(None);
-            self.focus = Focus::Viewport;
         }
     }
 

@@ -104,60 +104,58 @@ impl App {
         frame.render_stateful_widget(scrollbar, self.layout.graph_scrollbar, &mut scrollbar_state);
     }
 
-    pub fn open_viewer(&mut self, repo: &git2::Repository) {
+    // Returns the file name for the currently selected file based on focus and selection
+    pub fn get_selected_file_name(&self) -> Option<String> {
         match self.focus {
             Focus::StatusTop => {
-                // If a commit is selected in the top graph view
                 if self.graph_selected != 0 && !self.current_diff.is_empty() {
-                    // Set the file_name to the currently selected file in the diff
-                    self.file_name = Some(self.current_diff.get(self.status_top_selected).unwrap().filename.to_string());
-
-                    // Update the viewer to show the file at the selected commit OID
-                    let oid = self.oids.get_oid_by_idx(self.graph_selected);
-                    self.update_viewer(*oid, repo);
-                    self.viewport = Viewport::Viewer;
+                    // File from the diff of the selected commit
+                    Some(self.current_diff.get(self.status_top_selected)?.filename.to_string())
                 } else if self.graph_selected == 0 && self.uncommitted.is_staged {
-                    // If HEAD is selected and staged uncommitted changes exist
+                    // File from staged uncommitted changes
                     let modified_len = self.uncommitted.staged.modified.len();
                     let added_len = self.uncommitted.staged.added.len();
                     let index = self.status_top_selected;
 
-                    // Select the file name from staged changes depending on index
-                    self.file_name = if index < modified_len {
+                    if index < modified_len {
                         self.uncommitted.staged.modified.get(index).cloned()
                     } else if index < modified_len + added_len {
                         self.uncommitted.staged.added.get(index - modified_len).cloned()
                     } else {
                         self.uncommitted.staged.deleted.get(index - modified_len - added_len).cloned()
-                    };
-
-                    // Update viewer for uncommitted file (Oid::zero indicates workdir)
-                    self.update_viewer(Oid::zero(), repo);
-                    self.viewport = Viewport::Viewer;
+                    }
+                } else {
+                    None
                 }
-            },
+            }
             Focus::StatusBottom => {
-                // If uncommitted unstaged changes exist in bottom status view
                 if self.graph_selected == 0 && self.uncommitted.is_unstaged {
+                    // File from unstaged uncommitted changes
                     let modified_len = self.uncommitted.unstaged.modified.len();
                     let added_len = self.uncommitted.unstaged.added.len();
                     let index = self.status_bottom_selected;
 
-                    // Select the file name from unstaged changes depending on index
-                    self.file_name = if index < modified_len {
+                    if index < modified_len {
                         self.uncommitted.unstaged.modified.get(index).cloned()
                     } else if index < modified_len + added_len {
                         self.uncommitted.unstaged.added.get(index - modified_len).cloned()
                     } else {
                         self.uncommitted.unstaged.deleted.get(index - modified_len - added_len).cloned()
-                    };
-
-                    // Update viewer for uncommitted file
-                    self.update_viewer(Oid::zero(), repo);
-                    self.viewport = Viewport::Viewer;
+                    }
+                } else {
+                    None
                 }
-            },
-            _ => {},
+            }
+            _ => None,
+        }
+    }
+
+    pub fn open_viewer(&mut self, repo: &git2::Repository) {
+        if let Some(file_name) = self.get_selected_file_name() {
+            self.file_name = Some(file_name);
+            let oid = if self.graph_selected != 0 { self.oids.get_oid_by_idx(self.graph_selected) } else { &Oid::zero() };
+            self.update_viewer(*oid, repo);
+            self.viewport = Viewport::Viewer;
         }
     }
 
