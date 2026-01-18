@@ -1,5 +1,5 @@
 use crate::git::actions::resetting::reset_file;
-use crate::helpers::keymap::{Command, KeyBinding, load_or_init_keymaps};
+use crate::helpers::keymap::{load_or_init_keymaps, Command, KeyBinding};
 use crate::{
     app::{
         app::{App, Direction, Focus, Viewport},
@@ -360,11 +360,15 @@ impl App {
                 if let Some(repo) = &self.repo {
                     let alias = self.oids.get_alias_by_idx(self.graph_selected);
 
-                    // Get the currently listed branch names
-                    let branch_names: Vec<String> = self.branches.visible_branch_names.iter().cloned().collect();
+                    // Get visible branches for this alias, fallback to all if empty
+                    let visible_branch_names: Vec<String> = if self.branches.visible_branch_names.is_empty() {
+                        self.branches.all.get(&alias).cloned().unwrap_or_default()
+                    } else {
+                        self.branches.visible_branch_names.iter().filter(|b| self.branches.all.get(&alias).is_some_and(|all| all.contains(b))).cloned().collect()
+                    };
 
-                    if let Some(branch_name) = branch_names.get(self.modal_checkout_selected as usize) {
-                        checkout_branch(repo, &mut self.branches.visible_branch_names, &mut self.branches.local, alias, branch_name).expect("Error");
+                    if let Some(branch_name) = visible_branch_names.get(self.modal_checkout_selected as usize) {
+                        checkout_branch(repo, &mut self.branches.visible_branch_names, &mut self.branches.local, alias, branch_name).expect("Failed to checkout branch");
 
                         self.modal_checkout_selected = 0;
                         self.focus = Focus::Viewport;
@@ -373,13 +377,22 @@ impl App {
                 }
             },
             Focus::ModalSolo => {
-                let branch_names: Vec<String> = self.branches.visible_branch_names.iter().cloned().collect();
+                // Get the currently selected commit alias
+                let alias = self.oids.get_alias_by_idx(self.graph_selected);
 
-                if let Some(branch) = branch_names.get(self.modal_solo_selected as usize) {
+                // Get visible branches for this alias, fallback to all if visible set is empty
+                let visible_branch_names: Vec<String> = if self.branches.visible_branch_names.is_empty() {
+                    self.branches.all.get(&alias).cloned().unwrap_or_default()
+                } else {
+                    self.branches.visible_branch_names.iter().filter(|b| self.branches.all.get(&alias).is_some_and(|all| all.contains(b))).cloned().collect()
+                };
+
+                // Pick the branch at modal_solo_selected index
+                if let Some(branch) = visible_branch_names.get(self.modal_solo_selected as usize) {
                     let is_already_solo = self.branches.visible_branch_names.len() == 1 && self.branches.visible_branch_names.contains(branch);
 
                     if is_already_solo {
-                        // Show everything again
+                        // Show all branches again
                         self.branches.visible_branch_names.clear();
                     } else {
                         // Solo this branch
@@ -387,18 +400,27 @@ impl App {
                         self.branches.visible_branch_names.insert(branch.clone());
                     }
                 }
+
                 self.modal_solo_selected = 0;
                 self.focus = Focus::Viewport;
                 self.reload(None);
             },
+
             Focus::ModalDeleteBranch => {
                 if let Some(repo) = &self.repo {
-                    // Get all visible branch names in a deterministic order
-                    let branch_names: Vec<String> = self.branches.visible_branch_names.iter().cloned().collect();
-                    if let Some(branch) = branch_names.get(self.modal_delete_branch_selected as usize) {
+                    let alias = self.oids.get_alias_by_idx(self.graph_selected);
+
+                    // Get visible branches for this alias, fallback to all if visible set is empty
+                    let visible_branch_names: Vec<String> = if self.branches.visible_branch_names.is_empty() {
+                        self.branches.all.get(&alias).cloned().unwrap_or_default()
+                    } else {
+                        self.branches.visible_branch_names.iter().filter(|b| self.branches.all.get(&alias).is_some_and(|all| all.contains(b))).cloned().collect()
+                    };
+
+                    // Pick the branch at modal_delete_branch_selected index
+                    if let Some(branch) = visible_branch_names.get(self.modal_delete_branch_selected as usize) {
                         match delete_branch(repo, branch) {
                             Ok(_) => {
-                                // Remove the deleted branch from the visible set
                                 self.branches.visible_branch_names.remove(branch);
                                 self.modal_delete_branch_selected = 0;
                                 self.focus = Focus::Viewport;
@@ -746,9 +768,12 @@ impl App {
             Focus::ModalCheckout => {
                 let alias = self.oids.get_alias_by_idx(self.graph_selected);
 
-                // Filter the global set for this alias
-                let branch_names: Vec<String> =
-                    self.branches.visible_branch_names.iter().filter(|name| self.branches.all.get(&alias).is_some_and(|branches| branches.contains(name))).cloned().collect();
+                // Get branch names: visible first, fallback to all if empty
+                let branch_names: Vec<String> = if self.branches.visible_branch_names.is_empty() {
+                    self.branches.all.get(&alias).cloned().unwrap_or_default()
+                } else {
+                    self.branches.visible_branch_names.iter().filter(|name| self.branches.all.get(&alias).is_some_and(|branches| branches.contains(name))).cloned().collect()
+                };
 
                 let len = branch_names.len() as i32;
                 if len > 0 {
@@ -760,14 +785,15 @@ impl App {
             Focus::ModalSolo => {
                 let alias = self.oids.get_alias_by_idx(self.graph_selected);
 
-                // Get all visible branch names for this alias
-                let branch_names: Vec<String> =
-                    self.branches.visible_branch_names.iter().filter(|name| self.branches.all.get(&alias).is_some_and(|branches| branches.contains(name))).cloned().collect();
+                // Get branch names: visible first, fallback to all if empty
+                let branch_names: Vec<String> = if self.branches.visible_branch_names.is_empty() {
+                    self.branches.all.get(&alias).cloned().unwrap_or_default()
+                } else {
+                    self.branches.visible_branch_names.iter().filter(|name| self.branches.all.get(&alias).is_some_and(|branches| branches.contains(name))).cloned().collect()
+                };
 
                 let len = branch_names.len() as i32;
-
                 if len > 0 {
-                    // Scroll up with wrapping
                     self.modal_solo_selected = if self.modal_solo_selected - 1 < 0 { len - 1 } else { self.modal_solo_selected - 1 };
                 } else {
                     self.modal_solo_selected = 0;
@@ -777,9 +803,12 @@ impl App {
                 if let Some(repo) = &self.repo {
                     let alias = self.oids.get_alias_by_idx(self.graph_selected);
 
-                    // Get all visible branches for this alias
-                    let mut branch_names: Vec<String> =
-                        self.branches.visible_branch_names.iter().filter(|name| self.branches.all.get(&alias).is_some_and(|branches| branches.contains(name))).cloned().collect();
+                    // Get branch names: visible first, fallback to all if empty
+                    let mut branch_names: Vec<String> = if self.branches.visible_branch_names.is_empty() {
+                        self.branches.all.get(&alias).cloned().unwrap_or_default()
+                    } else {
+                        self.branches.visible_branch_names.iter().filter(|name| self.branches.all.get(&alias).is_some_and(|branches| branches.contains(name))).cloned().collect()
+                    };
 
                     // Exclude current branch from deletable branches
                     if let Some(current) = get_current_branch(repo) {
@@ -787,9 +816,7 @@ impl App {
                     }
 
                     let length = branch_names.len() as i32;
-
                     if length > 0 {
-                        // Scroll up with wrapping
                         self.modal_delete_branch_selected = if self.modal_delete_branch_selected - 1 < 0 { length - 1 } else { self.modal_delete_branch_selected - 1 };
                     } else {
                         self.modal_delete_branch_selected = 0;
@@ -857,9 +884,12 @@ impl App {
             Focus::ModalCheckout => {
                 let alias = self.oids.get_alias_by_idx(self.graph_selected);
 
-                // Filter global visible_branch_names to only branches under this alias
-                let branch_names: Vec<String> =
-                    self.branches.visible_branch_names.iter().filter(|name| self.branches.all.get(&alias).is_some_and(|branches| branches.contains(name))).cloned().collect();
+                // Get branch names: visible first, fallback to all if empty
+                let branch_names: Vec<String> = if self.branches.visible_branch_names.is_empty() {
+                    self.branches.all.get(&alias).cloned().unwrap_or_default()
+                } else {
+                    self.branches.visible_branch_names.iter().filter(|name| self.branches.all.get(&alias).is_some_and(|branches| branches.contains(name))).cloned().collect()
+                };
 
                 let len = branch_names.len() as i32;
                 if len > 0 {
@@ -871,12 +901,14 @@ impl App {
             Focus::ModalSolo => {
                 let alias = self.oids.get_alias_by_idx(self.graph_selected);
 
-                // Get all visible branch names for this alias
-                let branch_names: Vec<String> =
-                    self.branches.visible_branch_names.iter().filter(|name| self.branches.all.get(&alias).is_some_and(|branches| branches.contains(name))).cloned().collect();
+                // Get branch names: visible first, fallback to all if empty
+                let branch_names: Vec<String> = if self.branches.visible_branch_names.is_empty() {
+                    self.branches.all.get(&alias).cloned().unwrap_or_default()
+                } else {
+                    self.branches.visible_branch_names.iter().filter(|name| self.branches.all.get(&alias).is_some_and(|branches| branches.contains(name))).cloned().collect()
+                };
 
                 let len = branch_names.len() as i32;
-
                 if len > 0 {
                     // Scroll down with wrapping
                     self.modal_solo_selected = (self.modal_solo_selected + 1) % len;
@@ -888,9 +920,12 @@ impl App {
                 if let Some(repo) = &self.repo {
                     let alias = self.oids.get_alias_by_idx(self.graph_selected);
 
-                    // Get all visible branches for this alias
-                    let mut branch_names: Vec<String> =
-                        self.branches.visible_branch_names.iter().filter(|name| self.branches.all.get(&alias).is_some_and(|branches| branches.contains(name))).cloned().collect();
+                    // Get branch names: visible first, fallback to all if empty
+                    let mut branch_names: Vec<String> = if self.branches.visible_branch_names.is_empty() {
+                        self.branches.all.get(&alias).cloned().unwrap_or_default()
+                    } else {
+                        self.branches.visible_branch_names.iter().filter(|name| self.branches.all.get(&alias).is_some_and(|branches| branches.contains(name))).cloned().collect()
+                    };
 
                     // Exclude current branch from deletable branches
                     if let Some(current) = get_current_branch(repo) {
@@ -898,9 +933,8 @@ impl App {
                     }
 
                     let length = branch_names.len() as i32;
-
                     if length > 0 {
-                        // Scroll DOWN with wrapping
+                        // Scroll down with wrapping
                         self.modal_delete_branch_selected = (self.modal_delete_branch_selected + 1) % length;
                     } else {
                         self.modal_delete_branch_selected = 0;
@@ -1136,7 +1170,11 @@ impl App {
             .iter()
             .filter_map(|(&alias, all_branches)| {
                 let relevant_branches: Vec<&String> = all_branches.iter().filter(|b| self.branches.visible_branch_names.is_empty() || self.branches.visible_branch_names.contains(*b)).collect();
-                if relevant_branches.is_empty() { None } else { self.branches.indices.get(alias as usize).copied() }
+                if relevant_branches.is_empty() {
+                    None
+                } else {
+                    self.branches.indices.get(alias as usize).copied()
+                }
             })
             .collect();
 

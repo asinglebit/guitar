@@ -1,4 +1,4 @@
-use git2::{BranchType, Oid, Repository, build::CheckoutBuilder};
+use git2::{build::CheckoutBuilder, BranchType, Oid, Repository};
 use im::HashSet;
 use std::collections::HashMap;
 
@@ -25,14 +25,18 @@ pub fn checkout_branch(repo: &Repository, visible_branch_names: &mut HashSet<Str
 
     // Already local
     if repo.find_branch(branch_name, BranchType::Local).is_ok() {
-        visible_branch_names.insert(branch_name.to_string());
+        if !visible_branch_names.is_empty() {
+            visible_branch_names.insert(branch_name.to_string());
+        }
         return checkout(repo, branch_name);
     }
 
     // Remote case: origin/foo
     if let Some((_remote, branch)) = branch_name.split_once('/') {
         if repo.find_branch(branch, BranchType::Local).is_ok() {
-            visible_branch_names.insert(branch.to_string());
+            if !visible_branch_names.is_empty() {
+                visible_branch_names.insert(branch.to_string());
+            }
             return checkout(repo, branch);
         }
 
@@ -47,7 +51,9 @@ pub fn checkout_branch(repo: &Repository, visible_branch_names: &mut HashSet<Str
             local.entry(alias).or_default().push(branch.to_string());
 
             // Make visible (UI)
-            visible_branch_names.insert(branch.to_string());
+            if !visible_branch_names.is_empty() {
+                visible_branch_names.insert(branch.to_string());
+            }
 
             return checkout(repo, branch);
         }

@@ -4,7 +4,7 @@ use crate::{
     git::{os::path::try_into_git_repo_root, queries::diffs::get_filenames_diff_at_oid},
     helpers::{
         copy::{STR_CREATE_BRANCH, STR_CREATE_COMMIT, STR_CREATE_TAG, STR_FIND_SHA},
-        heatmap::{DAYS, WEEKS, empty_heatmap},
+        heatmap::{empty_heatmap, DAYS, WEEKS},
         keymap::{Command, KeyBinding},
         layout::LayoutConfig,
         recent::{load_recent, save_recent},
@@ -34,17 +34,17 @@ use crossterm::{
 use git2::Repository;
 use indexmap::IndexMap;
 use ratatui::{
-    DefaultTerminal, Frame,
     crossterm::event,
     style::Style,
     text::Span,
     widgets::{Block, Borders, ListItem},
+    DefaultTerminal, Frame,
 };
 use std::{
     cell::{Cell, RefCell},
     io,
     rc::Rc,
-    sync::{Arc, atomic::AtomicBool, mpsc::channel},
+    sync::{atomic::AtomicBool, mpsc::channel, Arc},
     thread,
     time::Duration,
 };
@@ -58,7 +58,7 @@ pub enum Viewport {
     Settings,
 }
 
-#[derive(PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Focus {
     Viewport,
     Inspector,
