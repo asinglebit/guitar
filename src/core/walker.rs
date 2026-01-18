@@ -9,6 +9,7 @@ use crate::{
     git::queries::commits::{get_sorted_oids, get_tag_oids, get_tip_oids},
 };
 use git2::Repository;
+use im::HashSet;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 // Context for walking and rendering commits
@@ -62,7 +63,7 @@ pub struct WalkerOutput {
 
 impl Walker {
     // Creates a new walker
-    pub fn new(path: String, amount: usize, visible: HashMap<u32, Vec<String>>) -> Result<Self, git2::Error> {
+    pub fn new(path: String, amount: usize, visible_branch_names: HashSet<String>) -> Result<Self, git2::Error> {
         let path = path.clone();
         let repo = Rc::new(RefCell::new(Repository::open(path).expect("Failed to open repo")));
 
@@ -90,7 +91,7 @@ impl Walker {
         }
 
         // Batcher
-        let batcher = Batcher::new(repo.clone(), visible, &mut oids).expect("Error");
+        let batcher = Batcher::new(repo.clone(), &visible_branch_names, &mut oids).expect("Error");
 
         Ok(Self {
             repo,

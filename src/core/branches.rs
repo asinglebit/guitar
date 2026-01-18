@@ -2,6 +2,7 @@ use crate::{
     core::oids::Oids,
     helpers::{colors::ColorPicker, palette::Theme},
 };
+use im::HashSet;
 use ratatui::style::Color;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
@@ -13,7 +14,7 @@ pub struct Branches {
     pub colors: HashMap<u32, Color>,
     pub sorted: Vec<(u32, String)>,
     pub indices: Vec<usize>,
-    pub visible: HashMap<u32, Vec<String>>,
+    pub visible_branch_names: HashSet<String>,
 }
 
 impl Branches {
@@ -34,10 +35,20 @@ impl Branches {
             self.all.entry(oidi).and_modify(|existing| existing.extend(branches.iter().cloned())).or_insert_with(|| branches.clone());
         }
 
-        // Make all branches visible if none are
-        if self.visible.is_empty() {
+        // Rebuild visible branches
+        self.visible.clear();
+        if self.visible_branch_names.is_empty() {
+            // If no name-based filter, show everything
             for (&alias, branches) in self.all.iter() {
                 self.visible.insert(alias, branches.clone());
+            }
+        } else {
+            // Otherwise rebuild visibility by name
+            for (&alias, branches) in self.all.iter() {
+                let matched: Vec<String> = branches.iter().filter(|b| self.visible_branch_names.contains(*b)).cloned().collect();
+                if !matched.is_empty() {
+                    self.visible.insert(alias, matched);
+                }
             }
         }
 

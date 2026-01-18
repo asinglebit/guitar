@@ -1,5 +1,6 @@
 use crate::core::oids::Oids;
 use git2::{BranchType, Oid, Repository, Revwalk};
+use im::HashSet;
 use std::cell::RefCell;
 use std::{collections::HashMap, rc::Rc, sync::Mutex};
 
@@ -10,14 +11,14 @@ pub struct Batcher {
 
 impl Batcher {
     // Creates a new Batcher by building a revwalk from the repo
-    pub fn new(repo: Rc<RefCell<Repository>>, visible: HashMap<u32, Vec<String>>, oids: &mut Oids) -> Result<Self, git2::Error> {
-        let revwalk = Self::build(&repo.borrow(), visible, oids)?;
+    pub fn new(repo: Rc<RefCell<Repository>>, visible_branch_names: &HashSet<String>, oids: &mut Oids) -> Result<Self, git2::Error> {
+        let revwalk = Self::build(&repo.borrow(), visible_branch_names, oids)?;
         Ok(Self { revwalk: Mutex::new(revwalk) })
     }
 
     // Reset the revwalk
-    pub fn reset(&self, repo: Rc<RefCell<Repository>>, visible: HashMap<u32, Vec<String>>, oids: &mut Oids) -> Result<(), git2::Error> {
-        let revwalk = Self::build(&repo.borrow(), visible, oids)?;
+    pub fn reset(&self, repo: Rc<RefCell<Repository>>, visible_branch_names: &HashSet<String>, oids: &mut Oids) -> Result<(), git2::Error> {
+        let revwalk = Self::build(&repo.borrow(), visible_branch_names, oids)?;
         let mut guard = self.revwalk.lock().unwrap();
         *guard = revwalk;
         Ok(())
@@ -29,29 +30,26 @@ impl Batcher {
         revwalk.by_ref().take(count).filter_map(Result::ok).collect()
     }
 
-    // Internal helper to build a revwalk for all branch tips
-    fn build(repo: &Repository, visible: HashMap<u32, Vec<String>>, oids: &mut Oids) -> Result<Revwalk<'static>, git2::Error> {
-        // Safe: we keep repo alive in Rc, so transmute to 'static is safe
+    fn build(repo: &Repository, visible_branch_names: &HashSet<String>, oids: &mut Oids) -> Result<Revwalk<'static>, git2::Error> {
         let repo_ref: &'static Repository = unsafe { std::mem::transmute::<&Repository, &'static Repository>(repo) };
+
         let mut revwalk = repo_ref.revwalk()?;
 
-        // TODO: Steal faster implementation from get_tip_oids function!
-        // Push all branches_local and branches_remote branch tips
         for branch_type in [BranchType::Local, BranchType::Remote] {
             for branch_result in repo.branches(Some(branch_type))? {
                 let (branch, _) = branch_result?;
-                if let Some(oid) = branch.get().target() {
-                    // Get the oidi
-                    let alias = oids.get_alias_by_oid(oid);
 
-                    if visible.is_empty() || visible.contains_key(&alias) {
-                        revwalk.push(oid)?;
-                    }
+                let Some(oid) = branch.get().target() else { continue };
+
+                let name = branch.name()?.unwrap_or("").to_string();
+
+                // No filter → show everything
+                if visible_branch_names.is_empty() || visible_branch_names.contains(&name) {
+                    revwalk.push(oid)?;
                 }
             }
         }
 
-        // Topological and chronological sorting
         revwalk.set_sorting(git2::Sort::TOPOLOGICAL | git2::Sort::TIME)?;
         Ok(revwalk)
     }

@@ -1,5 +1,5 @@
 use crate::git::actions::resetting::reset_file;
-use crate::helpers::keymap::{Command, KeyBinding, load_or_init_keymaps};
+use crate::helpers::keymap::{load_or_init_keymaps, Command, KeyBinding};
 use crate::{
     app::{
         app::{App, Direction, Focus, Viewport},
@@ -78,7 +78,6 @@ impl App {
                         if let Some(repo) = &self.repo {
                             commit_staged(repo, self.modal_input.value(), &self.name, &self.email).expect("Error");
                             self.modal_input.clear();
-                            self.branches.visible.clear();
                             self.reload(None);
                             self.focus = Focus::Viewport;
                         }
@@ -100,7 +99,6 @@ impl App {
                             let oid = self.oids.get_oid_by_idx(if self.graph_selected == 0 { 1 } else { self.graph_selected });
                             match create_branch(repo, self.modal_input.value(), *oid) {
                                 Ok(_) => {
-                                    self.branches.visible.clear();
                                     self.modal_input.clear();
                                     self.reload(None);
                                     self.focus = Focus::Viewport;
@@ -359,47 +357,56 @@ impl App {
             Focus::ModalCheckout => {
                 if let Some(repo) = &self.repo {
                     let alias = self.oids.get_alias_by_idx(self.graph_selected);
-                    let branches = self.branches.visible.get(&alias).cloned().unwrap_or_default();
-                    checkout_branch(repo, &mut self.branches.visible, &mut self.branches.local, alias, branches.get(self.modal_checkout_selected as usize).unwrap()).expect("Error");
-                    self.modal_checkout_selected = 0;
-                    self.focus = Focus::Viewport;
-                    self.reload(None);
+
+                    // Get the currently listed branch names
+                    let branch_names: Vec<String> = self.branches.visible_branch_names.iter().cloned().collect();
+
+                    if let Some(branch_name) = branch_names.get(self.modal_checkout_selected as usize) {
+                        checkout_branch(repo, &mut self.branches.visible_branch_names, &mut self.branches.local, alias, branch_name).expect("Error");
+
+                        self.modal_checkout_selected = 0;
+                        self.focus = Focus::Viewport;
+                        self.reload(None);
+                    }
                 }
             },
             Focus::ModalSolo => {
-                let alias = self.oids.get_alias_by_idx(self.graph_selected);
-                let branches = self.branches.visible.get(&alias).cloned().unwrap_or_default();
-                let branch = branches.get(self.modal_solo_selected as usize).unwrap();
+                let branch_names: Vec<String> = self.branches.visible_branch_names.iter().cloned().collect();
 
-                // Check if the same branch is already the only one visible
-                let already_visible =
-                    self.branches.visible.len() == 1 && self.branches.visible.entry(alias).or_default().len() == 1 && self.branches.visible.entry(alias).or_default().contains(branch);
+                if let Some(branch) = branch_names.get(self.modal_solo_selected as usize) {
+                    let is_already_solo = self.branches.visible_branch_names.len() == 1 && self.branches.visible_branch_names.contains(branch);
 
-                if already_visible {
-                    self.branches.visible.clear();
-                } else {
-                    self.branches.visible.clear();
-                    self.branches.visible.entry(alias).and_modify(|branches| branches.push(branch.clone())).or_insert_with(|| vec![branch.clone()]);
+                    if is_already_solo {
+                        // Show everything again
+                        self.branches.visible_branch_names.clear();
+                    } else {
+                        // Solo this branch
+                        self.branches.visible_branch_names.clear();
+                        self.branches.visible_branch_names.insert(branch.clone());
+                    }
                 }
+
                 self.modal_solo_selected = 0;
                 self.focus = Focus::Viewport;
                 self.reload(None);
             },
             Focus::ModalDeleteBranch => {
                 if let Some(repo) = &self.repo {
-                    let alias = self.oids.get_alias_by_idx(self.graph_selected);
-                    let branches = self.branches.visible.get(&alias).cloned().unwrap_or_default();
-                    let branch = branches.get(self.modal_delete_branch_selected as usize).unwrap();
-                    match delete_branch(repo, branch) {
-                        Ok(_) => {
-                            self.branches.visible.clear();
-                            self.modal_delete_branch_selected = 0;
-                            self.focus = Focus::Viewport;
-                            self.reload(None);
-                        },
-                        Err(_) => {
-                            // TODO
-                        },
+                    // Get all visible branch names in a deterministic order
+                    let branch_names: Vec<String> = self.branches.visible_branch_names.iter().cloned().collect();
+                    if let Some(branch) = branch_names.get(self.modal_delete_branch_selected as usize) {
+                        match delete_branch(repo, branch) {
+                            Ok(_) => {
+                                // Remove the deleted branch from the visible set
+                                self.branches.visible_branch_names.remove(branch);
+                                self.modal_delete_branch_selected = 0;
+                                self.focus = Focus::Viewport;
+                                self.reload(None);
+                            },
+                            Err(_) => {
+                                // TODO: show error or notification
+                            },
+                        }
                     }
                 }
             },
@@ -737,23 +744,55 @@ impl App {
             },
             Focus::ModalCheckout => {
                 let alias = self.oids.get_alias_by_idx(self.graph_selected);
-                let branches = self.branches.visible.entry(alias).or_default();
-                self.modal_checkout_selected = if self.modal_checkout_selected - 1 < 0 { branches.len() as i32 - 1 } else { self.modal_checkout_selected - 1 };
+
+                // Filter the global set for this alias
+                let branch_names: Vec<String> =
+                    self.branches.visible_branch_names.iter().filter(|name| self.branches.all.get(&alias).map_or(false, |branches| branches.contains(name))).cloned().collect();
+
+                let len = branch_names.len() as i32;
+                if len > 0 {
+                    self.modal_checkout_selected = if self.modal_checkout_selected - 1 < 0 { len - 1 } else { self.modal_checkout_selected - 1 };
+                } else {
+                    self.modal_checkout_selected = 0;
+                }
             },
             Focus::ModalSolo => {
                 let alias = self.oids.get_alias_by_idx(self.graph_selected);
-                let branches = self.branches.visible.entry(alias).or_default();
-                self.modal_solo_selected = if self.modal_solo_selected - 1 < 0 { branches.len() as i32 - 1 } else { self.modal_solo_selected - 1 };
+
+                // Get all visible branch names for this alias
+                let branch_names: Vec<String> =
+                    self.branches.visible_branch_names.iter().filter(|name| self.branches.all.get(&alias).map_or(false, |branches| branches.contains(name))).cloned().collect();
+
+                let len = branch_names.len() as i32;
+
+                if len > 0 {
+                    // Scroll up with wrapping
+                    self.modal_solo_selected = if self.modal_solo_selected - 1 < 0 { len - 1 } else { self.modal_solo_selected - 1 };
+                } else {
+                    self.modal_solo_selected = 0;
+                }
             },
             Focus::ModalDeleteBranch => {
                 if let Some(repo) = &self.repo {
                     let alias = self.oids.get_alias_by_idx(self.graph_selected);
-                    let branches = self.branches.visible.entry(alias).or_default();
-                    let length = match get_current_branch(repo) {
-                        Some(current) => branches.iter().filter(|branch| current != **branch).count(),
-                        None => branches.len(),
-                    };
-                    self.modal_delete_branch_selected = if self.modal_delete_branch_selected - 1 < 0 { length as i32 - 1 } else { self.modal_delete_branch_selected - 1 };
+
+                    // Get all visible branches for this alias
+                    let mut branch_names: Vec<String> =
+                        self.branches.visible_branch_names.iter().filter(|name| self.branches.all.get(&alias).map_or(false, |branches| branches.contains(name))).cloned().collect();
+
+                    // Exclude current branch from deletable branches
+                    if let Some(current) = get_current_branch(repo) {
+                        branch_names.retain(|branch| branch != &current);
+                    }
+
+                    let length = branch_names.len() as i32;
+
+                    if length > 0 {
+                        // Scroll up with wrapping
+                        self.modal_delete_branch_selected = if self.modal_delete_branch_selected - 1 < 0 { length - 1 } else { self.modal_delete_branch_selected - 1 };
+                    } else {
+                        self.modal_delete_branch_selected = 0;
+                    }
                 }
             },
             Focus::ModalDeleteTag => {
@@ -816,23 +855,55 @@ impl App {
             },
             Focus::ModalCheckout => {
                 let alias = self.oids.get_alias_by_idx(self.graph_selected);
-                let branches = self.branches.visible.entry(alias).or_default();
-                self.modal_checkout_selected = if self.modal_checkout_selected + 1 > branches.len() as i32 - 1 { 0 } else { self.modal_checkout_selected + 1 };
+
+                // Filter global visible_branch_names to only branches under this alias
+                let branch_names: Vec<String> =
+                    self.branches.visible_branch_names.iter().filter(|name| self.branches.all.get(&alias).map_or(false, |branches| branches.contains(name))).cloned().collect();
+
+                let len = branch_names.len() as i32;
+                if len > 0 {
+                    self.modal_checkout_selected = (self.modal_checkout_selected + 1) % len;
+                } else {
+                    self.modal_checkout_selected = 0;
+                }
             },
             Focus::ModalSolo => {
                 let alias = self.oids.get_alias_by_idx(self.graph_selected);
-                let branches = self.branches.visible.entry(alias).or_default();
-                self.modal_solo_selected = if self.modal_solo_selected + 1 > branches.len() as i32 - 1 { 0 } else { self.modal_solo_selected + 1 };
+
+                // Get all visible branch names for this alias
+                let branch_names: Vec<String> =
+                    self.branches.visible_branch_names.iter().filter(|name| self.branches.all.get(&alias).map_or(false, |branches| branches.contains(name))).cloned().collect();
+
+                let len = branch_names.len() as i32;
+
+                if len > 0 {
+                    // Scroll down with wrapping
+                    self.modal_solo_selected = (self.modal_solo_selected + 1) % len;
+                } else {
+                    self.modal_solo_selected = 0;
+                }
             },
             Focus::ModalDeleteBranch => {
                 if let Some(repo) = &self.repo {
                     let alias = self.oids.get_alias_by_idx(self.graph_selected);
-                    let branches = self.branches.visible.entry(alias).or_default();
-                    let length = match get_current_branch(repo) {
-                        Some(current) => branches.iter().filter(|branch| current != **branch).count(),
-                        None => branches.len(),
-                    };
-                    self.modal_delete_branch_selected = if self.modal_delete_branch_selected + 1 > length as i32 - 1 { 0 } else { self.modal_delete_branch_selected + 1 };
+
+                    // Get all visible branches for this alias
+                    let mut branch_names: Vec<String> =
+                        self.branches.visible_branch_names.iter().filter(|name| self.branches.all.get(&alias).map_or(false, |branches| branches.contains(name))).cloned().collect();
+
+                    // Exclude current branch from deletable branches
+                    if let Some(current) = get_current_branch(repo) {
+                        branch_names.retain(|branch| branch != &current);
+                    }
+
+                    let length = branch_names.len() as i32;
+
+                    if length > 0 {
+                        // Scroll DOWN with wrapping
+                        self.modal_delete_branch_selected = (self.modal_delete_branch_selected + 1) % length;
+                    } else {
+                        self.modal_delete_branch_selected = 0;
+                    }
                 }
             },
             Focus::ModalDeleteTag => {
@@ -1199,26 +1270,13 @@ impl App {
 
     pub fn on_toggle_branch(&mut self) {
         if self.focus == Focus::Branches {
-            let (oid, branch) = self.branches.sorted.get(self.branches_selected).unwrap();
-
+            let (_, branch) = self.branches.sorted.get(self.branches_selected).unwrap();
             let branch = branch.clone();
 
-            self.branches
-                .visible
-                .entry(*oid)
-                .and_modify(|branches| {
-                    if let Some(pos) = branches.iter().position(|b| b == &branch) {
-                        branches.remove(pos);
-                    } else {
-                        branches.push(branch.clone());
-                    }
-                })
-                .or_insert_with(|| vec![branch]);
-
-            if let Some(branches) = self.branches.visible.get(oid)
-                && branches.is_empty()
-            {
-                self.branches.visible.remove(oid);
+            if self.branches.visible_branch_names.contains(&branch) {
+                self.branches.visible_branch_names.remove(&branch);
+            } else {
+                self.branches.visible_branch_names.insert(branch);
             }
 
             self.reload(None);
@@ -1228,46 +1286,52 @@ impl App {
     pub fn on_solo_branch(&mut self) {
         match self.focus {
             Focus::Branches => {
-                let (oid, branch) = self.branches.sorted.get(self.branches_selected).unwrap();
+                let (_, branch) = self.branches.sorted.get(self.branches_selected).unwrap();
+                let branch = branch.clone();
 
-                // Check if the same branch is already the only one visible
-                let already_visible = self.branches.visible.len() == 1 && self.branches.visible.entry(*oid).or_default().len() == 1 && self.branches.visible.entry(*oid).or_default().contains(branch);
-
-                if already_visible {
-                    self.branches.visible.clear();
+                // If this branch is already the only visible one, clear it
+                if self.branches.visible_branch_names.len() == 1 && self.branches.visible_branch_names.contains(&branch) {
+                    self.branches.visible_branch_names.clear();
                 } else {
-                    self.branches.visible.clear();
-                    self.branches.visible.entry(*oid).and_modify(|branches| branches.push(branch.clone())).or_insert_with(|| vec![branch.clone()]);
+                    self.branches.visible_branch_names.clear();
+                    self.branches.visible_branch_names.insert(branch);
                 }
+
                 self.reload(None);
             },
+
             Focus::Viewport => {
-                if self.focus == Focus::Viewport && self.viewport != Viewport::Graph || self.graph_selected == 0 {
+                if self.viewport != Viewport::Graph || self.graph_selected == 0 {
                     return;
                 }
 
                 let alias = self.oids.get_alias_by_idx(self.graph_selected);
-                let branches = self.branches.visible.get(&alias).cloned().unwrap_or_default();
 
-                if branches.is_empty() {
+                // Filter the sorted branches that belong to this alias
+                let branches_for_alias: Vec<String> = self.branches.sorted.iter().filter(|(b_alias, _)| *b_alias == alias).map(|(_, name)| name.clone()).collect();
+
+                if branches_for_alias.is_empty() {
                     return;
                 }
 
-                if branches.len() == 1 {
-                    let branch = branches.first().unwrap();
-                    if self.branches.visible.len() == 1 && self.branches.visible.entry(alias).or_default().len() == 1 && self.branches.visible.entry(alias).or_default().contains(branch) {
-                        self.branches.visible.clear();
+                if branches_for_alias.len() == 1 {
+                    let branch = &branches_for_alias[0];
+
+                    if self.branches.visible_branch_names.len() == 1 && self.branches.visible_branch_names.contains(branch) {
+                        self.branches.visible_branch_names.clear();
                     } else {
-                        self.branches.visible.clear();
-                        self.branches.visible.entry(alias).and_modify(|branches| branches.push(branch.clone())).or_insert_with(|| vec![branch.clone()]);
+                        self.branches.visible_branch_names.clear();
+                        self.branches.visible_branch_names.insert(branch.clone());
                     }
+
                     self.reload(None);
                 } else {
                     self.focus = Focus::ModalSolo;
                 }
             },
+
             _ => {},
-        };
+        }
     }
 
     pub fn on_drop(&mut self) {
@@ -1336,7 +1400,6 @@ impl App {
             let handle = fetch_over_ssh(repo_path, "origin");
             match handle.join().expect("Thread panicked") {
                 Ok(_) => {
-                    self.branches.visible.clear();
                     self.reload(None);
                 },
                 _ => {
@@ -1353,12 +1416,23 @@ impl App {
             Focus::Branches => {
                 // Always allow checkout from branches view
                 let (alias, branch) = self.branches.sorted.get(self.branches_selected).unwrap();
-                checkout_branch(repo, &mut self.branches.visible, &mut self.branches.local, *alias, branch).expect("Error");
+
+                checkout_branch(
+                    repo,
+                    &mut self.branches.visible_branch_names, // HashSet of visible branches
+                    &mut self.branches.local,                // Local branches map
+                    *alias,
+                    branch,
+                )
+                .expect("Error");
+
+                // Update graph selection to point to the alias
                 self.graph_selected = self.oids.get_sorted_aliases().iter().position(|o| o == alias).unwrap_or(0);
+
                 self.focus = Focus::Viewport;
-                self.branches.visible.clear();
                 self.reload(None);
             },
+
             Focus::Viewport => {
                 // Only allow checkout from graph if a non-zero line is selected
                 if self.viewport != Viewport::Graph || self.graph_selected == 0 {
@@ -1367,22 +1441,31 @@ impl App {
 
                 let alias = self.oids.get_alias_by_idx(self.graph_selected);
                 let oid = self.oids.get_oid_by_alias(alias);
-                let branches = self.branches.all.entry(alias).or_default();
 
-                if branches.is_empty() {
-                    checkout_head(repo, *oid);
-                    self.focus = Focus::Viewport;
-                    self.branches.visible.clear();
-                    self.reload(None);
-                } else if branches.len() == 1 {
-                    checkout_branch(repo, &mut self.branches.visible, &mut self.branches.local, alias, branches.first().unwrap()).expect("Error");
-                    self.focus = Focus::Viewport;
-                    self.branches.visible.clear();
-                    self.reload(None);
-                } else {
-                    self.focus = Focus::ModalCheckout;
+                // All branches pointing to this commit
+                let branches_for_alias: Vec<String> = self.branches.all.get(&alias).cloned().unwrap_or_default();
+
+                match branches_for_alias.len() {
+                    0 => {
+                        // No branch: checkout detached HEAD
+                        checkout_head(repo, *oid);
+                        self.focus = Focus::Viewport;
+                        self.reload(None);
+                    },
+                    1 => {
+                        // Exactly one branch: checkout immediately
+                        checkout_branch(repo, &mut self.branches.visible_branch_names, &mut self.branches.local, alias, &branches_for_alias[0]).expect("Error");
+
+                        self.focus = Focus::Viewport;
+                        self.reload(None);
+                    },
+                    _ => {
+                        // Multiple branches: open modal to select
+                        self.focus = Focus::ModalCheckout;
+                    },
                 }
             },
+
             _ => (), // other focus modes don't allow checkout
         }
     }
@@ -1396,7 +1479,6 @@ impl App {
                     }
                     let oid = self.oids.get_oid_by_idx(self.graph_selected);
                     reset_to_commit(repo, *oid, git2::ResetType::Hard).expect("Couldn't hard reset");
-                    self.branches.visible.clear();
                     self.reload(None);
                     self.focus = Focus::Viewport;
                 },
@@ -1404,7 +1486,6 @@ impl App {
                     if let Some(file_name) = self.get_selected_file_name() {
                         let path = Path::new(&file_name);
                         let _ = reset_file(repo, path);
-                        self.branches.visible.clear();
                         self.reload(None);
                     }
                 },
@@ -1422,7 +1503,6 @@ impl App {
             }
             let oid = self.oids.get_oid_by_idx(self.graph_selected);
             reset_to_commit(repo, *oid, git2::ResetType::Mixed).expect("Couldn't mixed reset");
-            self.branches.visible.clear();
             self.reload(None);
             self.focus = Focus::Viewport;
         }
@@ -1539,7 +1619,6 @@ impl App {
                     let handle = push_over_ssh(repo_path, "origin", branch.as_str(), true);
                     match handle.join().expect("Thread panicked") {
                         Ok(_) => {
-                            self.branches.visible.clear();
                             self.reload(None);
                         },
                         _ => {
@@ -1563,47 +1642,58 @@ impl App {
     }
 
     pub fn on_delete_branch(&mut self) {
-        if let Some(repo) = &self.repo {
-            match self.viewport {
-                Viewport::Settings | Viewport::Viewer => {},
-                _ => {
-                    match self.focus {
-                        Focus::Branches => {
-                            let branch = &self.branches.sorted.get(self.branches_selected).unwrap().1;
-                            let proceed = if let Some(current) = get_current_branch(repo) { current != *branch } else { true };
-                            if proceed && delete_branch(repo, branch).is_ok() {
-                                self.branches.visible.clear();
-                                self.reload(None);
-                            };
-                        },
-                        Focus::Viewport => {
-                            if self.graph_selected != 0 {
-                                let alias = self.oids.get_alias_by_idx(if self.graph_selected == 0 { 1 } else { self.graph_selected });
-                                let current = get_current_branch(repo);
+        let Some(repo) = &self.repo else { return };
 
-                                if let Some(branches) = self.branches.visible.get(&alias) {
-                                    // Filter out the current branch, if any
-                                    let filtered_branches: Vec<_> = branches.iter().filter(|branch| current.as_ref() != Some(*branch)).collect();
+        match self.viewport {
+            Viewport::Settings | Viewport::Viewer => return,
+            _ => {},
+        }
 
-                                    match filtered_branches.len() {
-                                        0 => {},
-                                        1 => {
-                                            if delete_branch(repo, filtered_branches[0]).is_ok() {
-                                                self.branches.visible.clear();
-                                                self.reload(None);
-                                            };
-                                        },
-                                        _ => {
-                                            self.focus = Focus::ModalDeleteBranch;
-                                        },
-                                    }
-                                }
-                            }
-                        },
-                        _ => {},
-                    }
-                },
-            }
+        match self.focus {
+            Focus::Branches => {
+                // Get the selected branch
+                let branch = &self.branches.sorted.get(self.branches_selected).unwrap().1;
+
+                // Only proceed if it's not the current branch
+                let proceed = match get_current_branch(repo) {
+                    Some(current) => current != *branch,
+                    None => true,
+                };
+
+                if proceed && delete_branch(repo, branch).is_ok() {
+                    // Remove it from visible set
+                    self.branches.visible_branch_names.remove(branch);
+                    self.reload(None);
+                }
+            },
+
+            Focus::Viewport => {
+                if self.graph_selected == 0 {
+                    return;
+                }
+
+                let alias = self.oids.get_alias_by_idx(self.graph_selected);
+                let current = get_current_branch(repo);
+
+                // Get all visible branches pointing to this alias
+                let visible_branches: Vec<_> = self.branches.all.get(&alias).cloned().unwrap_or_default().into_iter().filter(|b| current.as_ref() != Some(b)).collect();
+
+                match visible_branches.len() {
+                    0 => {}, // nothing to delete
+                    1 => {
+                        if delete_branch(repo, &visible_branches[0]).is_ok() {
+                            self.branches.visible_branch_names.remove(&visible_branches[0]);
+                            self.reload(None);
+                        }
+                    },
+                    _ => {
+                        // Multiple branches → show modal to select which one to delete
+                        self.focus = Focus::ModalDeleteBranch;
+                    },
+                }
+            },
+
+            _ => {},
         }
     }
 
