@@ -1,5 +1,5 @@
 use crate::git::actions::resetting::reset_file;
-use crate::helpers::keymap::{load_or_init_keymaps, Command, KeyBinding};
+use crate::helpers::keymap::{Command, KeyBinding, load_or_init_keymaps};
 use crate::{
     app::{
         app::{App, Direction, Focus, Viewport},
@@ -1170,11 +1170,7 @@ impl App {
             .iter()
             .filter_map(|(&alias, all_branches)| {
                 let relevant_branches: Vec<&String> = all_branches.iter().filter(|b| self.branches.visible_branch_names.is_empty() || self.branches.visible_branch_names.contains(*b)).collect();
-                if relevant_branches.is_empty() {
-                    None
-                } else {
-                    self.branches.indices.get(alias as usize).copied()
-                }
+                if relevant_branches.is_empty() { None } else { self.branches.indices.get(alias as usize).copied() }
             })
             .collect();
 

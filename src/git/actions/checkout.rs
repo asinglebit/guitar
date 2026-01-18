@@ -1,4 +1,4 @@
-use git2::{build::CheckoutBuilder, BranchType, Oid, Repository};
+use git2::{BranchType, Oid, Repository, build::CheckoutBuilder};
 use im::HashSet;
 use std::collections::HashMap;
 
