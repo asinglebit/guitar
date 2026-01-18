@@ -1,9 +1,9 @@
 use crate::app::app::{App, Focus};
 use ratatui::{
-    Frame,
     style::Style,
     text::{Line, Span},
     widgets::{Block, List, ListItem},
+    Frame,
 };
 
 impl App {
@@ -104,41 +104,41 @@ impl App {
             let icon_spinner = format!("{} ", self.spinner.get_char());
             lines.push(Line::from(vec![Span::styled(format!("{} loading...", icon_spinner), Style::default().fg(self.theme.COLOR_TEXT))]).centered());
         } else if self.recent.is_empty() {
-                        lines.push(Line::from(vec![Span::styled("made with ♡".to_string(), Style::default().fg(self.theme.COLOR_TEXT))]).centered());
-                        lines.push(Line::default());
-                        lines.push(Line::from(vec![Span::styled("https://github.com/asinglebit/guitar".to_string(), Style::default().fg(self.theme.COLOR_TEXT))]).centered());
-                        if self.repo.is_none() {
-                            lines.push(Line::default());
-                            lines.push(Line::from(vec![Span::styled("! not a valid git repository !".to_string(), Style::default().fg(self.theme.COLOR_ORANGE))]).centered());
-                        }
-                    } else {
-                        lines.push(Line::from(vec![Span::styled("recent repositories:".to_string(), Style::default().fg(self.theme.COLOR_TEXT))]).centered());
-                        lines.push(Line::default());
-                        // Repository lines
-        self.recent.iter().enumerate().for_each(|(i, path)| {
-            let style = if Some(path) == self.path.as_ref() {
-                self.theme.COLOR_GRASS
-            } else {
-                self.theme.COLOR_TEXT
-            };
-
-            let mut line = Line::from(Span::styled(path.clone(), Style::default().fg(style))).centered();
-
-            // Add selection highlighting
-            if i == self.splash_selected && self.focus == Focus::Viewport && !self.spinner.is_running() {
-                let mut spans = Vec::new();
-                spans.push(Span::styled("⏵ ", Style::default().fg(self.theme.COLOR_GRASS)));
-                spans.extend(line.spans.clone());
-                spans.push(Span::styled(" ⏴", Style::default().fg(self.theme.COLOR_GRASS)));
-                line = Line::from(spans).centered();
+            lines.push(Line::from(vec![Span::styled("made with ♡".to_string(), Style::default().fg(self.theme.COLOR_TEXT))]).centered());
+            lines.push(Line::default());
+            lines.push(Line::from(vec![Span::styled("https://github.com/asinglebit/guitar".to_string(), Style::default().fg(self.theme.COLOR_TEXT))]).centered());
+            if self.repo.is_none() {
+                lines.push(Line::default());
+                lines.push(Line::from(vec![Span::styled("! not a valid git repository !".to_string(), Style::default().fg(self.theme.COLOR_ORANGE))]).centered());
             }
+        } else {
+            lines.push(Line::from(vec![Span::styled("recent repositories:".to_string(), Style::default().fg(self.theme.COLOR_TEXT))]).centered());
+            lines.push(Line::default());
+            // Repository lines
+            self.recent.iter().enumerate().for_each(|(i, path)| {
+                let style = if Some(path) == self.path.as_ref() {
+                    self.theme.COLOR_GRASS
+                } else {
+                    self.theme.COLOR_TEXT
+                };
 
-            lines.push(line);
-        });
-                    }
+                let mut line = Line::from(Span::styled(path.clone(), Style::default().fg(style))).centered();
 
-// Convert to ListItems for rendering
-let list_items: Vec<ListItem> = lines.into_iter().map(ListItem::from).collect();
+                // Add selection highlighting
+                if i == self.splash_selected && self.focus == Focus::Viewport && !self.spinner.is_running() {
+                    let mut spans = Vec::new();
+                    spans.push(Span::styled("⏵ ", Style::default().fg(self.theme.COLOR_GRASS)));
+                    spans.extend(line.spans.clone());
+                    spans.push(Span::styled(" ⏴", Style::default().fg(self.theme.COLOR_GRASS)));
+                    line = Line::from(spans).centered();
+                }
+
+                lines.push(line);
+            });
+        }
+
+        // Convert to ListItems for rendering
+        let list_items: Vec<ListItem> = lines.into_iter().map(ListItem::from).collect();
         // Setup the list
         let list = List::new(list_items).block(Block::default().padding(padding));
 
