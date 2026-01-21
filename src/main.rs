@@ -76,7 +76,6 @@ pub mod helpers {
 use crate::{app::app::App, helpers::version::VERSION};
 
 fn main() -> io::Result<()> {
-
     // Check args for meta queries
     let args: Vec<String> = env::args().collect();
 
