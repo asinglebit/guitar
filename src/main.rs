@@ -1,4 +1,4 @@
-use std::io;
+use std::{env, io};
 mod app {
     #[allow(clippy::module_inception)]
     pub mod app;
@@ -73,9 +73,19 @@ pub mod helpers {
     pub mod version;
 }
 
-use crate::app::app::App;
+use crate::{app::app::App, helpers::version::VERSION};
 
 fn main() -> io::Result<()> {
+
+    // Check args for meta queries
+    let args: Vec<String> = env::args().collect();
+
+    // Return version if requested and then quit
+    if args.iter().any(|a| a == "--version" || a == "-v") {
+        println!("{VERSION}");
+        return Ok(());
+    }
+
     let mut terminal = ratatui::init();
     let app_result = App::default().run(&mut terminal);
     ratatui::restore();
