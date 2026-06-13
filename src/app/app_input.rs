@@ -1,7 +1,7 @@
 use crate::git::actions::resetting::reset_file;
 use crate::helpers::{
     keymap::{Command, KeyBinding, load_or_init_keymaps},
-    layout::{LAYOUT_HEIGHT_MIN_STACKED_PANE, LAYOUT_WIDTH_MIN_CENTER, LAYOUT_WIDTH_MIN_SIDE_PANE},
+    layout::{LAYOUT_HEIGHT_MIN_STACKED_PANE, LAYOUT_WIDTH_MIN_CENTER, LAYOUT_WIDTH_MIN_SIDE_PANE, LAYOUT_WIDTH_MIN_SPLIT_PANE},
 };
 use crate::{
     app::{
@@ -153,10 +153,16 @@ impl App {
     }
 
     fn layout_drag_at(&self, column: u16, row: u16) -> Option<LayoutDrag> {
-        if self.layout_config.is_zen || matches!(self.viewport, Viewport::Splash | Viewport::Settings) || self.is_modal_focus() {
+        if matches!(self.viewport, Viewport::Splash | Viewport::Settings) || self.is_modal_focus() {
             return None;
         }
 
+        if Self::rect_contains(self.layout.divider_viewer_split, column, row) {
+            return Some(LayoutDrag::ViewerSplit);
+        }
+        if self.layout_config.is_zen {
+            return None;
+        }
         if Self::rect_contains(self.layout.divider_left, column, row) {
             return Some(LayoutDrag::LeftPane);
         }
@@ -205,6 +211,18 @@ impl App {
         match drag {
             LayoutDrag::LeftPane => self.resize_left_pane(column),
             LayoutDrag::RightPane => self.resize_right_pane(column),
+            LayoutDrag::ViewerSplit => {
+                if let Some((left, right)) = Self::resized_horizontal_pair_weights(
+                    column,
+                    self.layout.viewer_split_left,
+                    self.layout.viewer_split_right,
+                    self.layout_config.weight_viewer_split_left,
+                    self.layout_config.weight_viewer_split_right,
+                ) {
+                    self.layout_config.weight_viewer_split_left = left;
+                    self.layout_config.weight_viewer_split_right = right;
+                }
+            },
             LayoutDrag::BranchesTags => {
                 if let Some((branches, tags)) = Self::resized_pair_weights(row, self.layout.pane_branches, self.layout.pane_tags, self.layout_config.weight_branches, self.layout_config.weight_tags) {
                     self.layout_config.weight_branches = branches;
@@ -290,6 +308,30 @@ impl App {
         }
 
         let first_weight = ((first_height as u32 * total_weight as u32) / pair_height as u32).clamp(1, total_weight.saturating_sub(1) as u32) as u16;
+        Some((first_weight, total_weight.saturating_sub(first_weight)))
+    }
+
+    fn resized_horizontal_pair_weights(column: u16, first: Rect, second: Rect, first_weight: u16, second_weight: u16) -> Option<(u16, u16)> {
+        if first.width == 0 || second.width == 0 {
+            return None;
+        }
+
+        let pair_left = first.x;
+        let pair_right = second.x.saturating_add(second.width);
+        let pair_width = pair_right.saturating_sub(pair_left);
+        if pair_width < 2 {
+            return None;
+        }
+
+        let min_width = LAYOUT_WIDTH_MIN_SPLIT_PANE.min(pair_width / 2).max(1);
+        let max_first_width = pair_width.saturating_sub(min_width);
+        let first_width = column.saturating_sub(pair_left).clamp(min_width, max_first_width);
+        let total_weight = first_weight.max(1).saturating_add(second_weight.max(1));
+        if total_weight < 2 {
+            return None;
+        }
+
+        let first_weight = ((first_width as u32 * total_weight as u32) / pair_width as u32).clamp(1, total_weight.saturating_sub(1) as u32) as u16;
         Some((first_weight, total_weight.saturating_sub(first_weight)))
     }
 
@@ -487,6 +529,7 @@ impl App {
 
                     // Viewer commands change how diffs are navigated.
                     Command::ToggleHunkMode => self.on_toggle_hunk_mode(),
+                    Command::ToggleSplitDiffMode => self.on_toggle_split_diff_mode(),
 
                     // Git commands mutate repository state and usually reload afterward.
                     Command::Drop => self.on_drop(),
@@ -935,10 +978,13 @@ impl App {
                         }
                     },
                     Viewport::Viewer => {
-                        if self.viewer_selected + page < self.viewer_lines.len() {
+                        let total = self.viewer_row_count();
+                        if total == 0 {
+                            self.viewer_selected = 0;
+                        } else if self.viewer_selected + page < total {
                             self.viewer_selected += page;
                         } else {
-                            self.viewer_selected = self.viewer_lines.len() - 1;
+                            self.viewer_selected = total - 1;
                         }
                     },
                     Viewport::Settings => {
@@ -1112,7 +1158,7 @@ impl App {
                     }
                 },
                 Viewport::Viewer => {
-                    if self.viewer_selected + 1 < self.viewer_lines.len() {
+                    if self.viewer_selected + 1 < self.viewer_row_count() {
                         self.viewer_selected += 1;
                     }
                 },
@@ -1287,6 +1333,9 @@ impl App {
                         ViewerMode::Hunks => {
                             self.viewer_selected = self.viewer_selected.saturating_sub(half);
                         },
+                        ViewerMode::Split => {
+                            self.viewer_selected = self.viewer_selected.saturating_sub(half);
+                        },
                     },
                     Viewport::Settings => {
                         self.settings_selected = self.settings_selected.saturating_sub(half);
@@ -1349,6 +1398,9 @@ impl App {
                             }
                         },
                         ViewerMode::Hunks => {
+                            self.viewer_selected += half;
+                        },
+                        ViewerMode::Split => {
                             self.viewer_selected += half;
                         },
                     },
@@ -1502,9 +1554,38 @@ impl App {
                     self.viewer_selected = 0;
                 }
             },
+            ViewerMode::Split => {
+                let full_idx = self.split_unified_index(self.viewer_selected);
+                let hunk_view_idx = self.viewer_hunks.iter().enumerate().min_by_key(|(_, h)| h.abs_diff(full_idx)).map(|(i, _)| i).unwrap_or(0);
+                self.viewer_mode = ViewerMode::Hunks;
+                self.viewer_selected = hunk_view_idx;
+            },
         }
 
         self.viewer_scroll.set(self.viewer_selected);
+    }
+
+    pub fn on_toggle_split_diff_mode(&mut self) {
+        match self.viewer_mode {
+            ViewerMode::Split => {
+                let full_idx = self.split_unified_index(self.viewer_selected);
+                self.viewer_mode = ViewerMode::Full;
+                self.viewer_selected = full_idx.min(self.viewer_lines.len().saturating_sub(1));
+            },
+            ViewerMode::Full => {
+                let full_idx = self.viewer_selected;
+                self.viewer_mode = ViewerMode::Split;
+                self.viewer_selected = self.closest_split_row_for_unified(full_idx);
+            },
+            ViewerMode::Hunks => {
+                let full_idx = self.viewer_hunks.get(self.viewer_selected).copied().unwrap_or(0);
+                self.viewer_mode = ViewerMode::Split;
+                self.viewer_selected = self.closest_split_row_for_unified(full_idx);
+            },
+        }
+
+        self.viewer_scroll.set(self.viewer_selected);
+        self.save_layout();
     }
 
     pub fn on_scroll_to_beginning(&mut self) {

@@ -12,12 +12,21 @@ use crate::{
     helpers::{colors::ColorPicker, palette::*, spinner::Spinner},
 };
 use indexmap::IndexMap;
-use ratatui::{style::Style, text::Span};
+use ratatui::{style::Style, text::Span, widgets::ListItem};
 use std::{cell::RefCell, rc::Rc};
 
+#[derive(Clone)]
+pub struct SplitViewerRow {
+    pub left: ListItem<'static>,
+    pub right: ListItem<'static>,
+    pub unified_indices: Vec<usize>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ViewerMode {
     Full,
     Hunks,
+    Split,
 }
 
 impl Default for App {
@@ -62,9 +71,10 @@ impl Default for App {
             current_diff: Vec::new(),
             file_name: None,
             viewer_lines: Vec::new(),
+            viewer_split_rows: Vec::new(),
             viewer_edges: Vec::new(),      // line numbers where hunks start and end
             viewer_hunks: Vec::new(),      // indices of changed lines the belong to hunks
-            viewer_mode: ViewerMode::Full, // Viewer mode: Full or Hunks
+            viewer_mode: ViewerMode::Full, // Viewer mode: Full, Hunks, or Split
 
             // Interface
             layout: Layout::default(),

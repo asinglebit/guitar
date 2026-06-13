@@ -27,7 +27,7 @@ impl App {
         let total = match self.focus {
             Focus::Viewport => match self.viewport {
                 Viewport::Graph => self.oids.get_commit_count(),
-                Viewport::Viewer => self.viewer_lines.len(),
+                Viewport::Viewer => self.viewer_row_count(),
                 _ => 0,
             },
             Focus::StatusTop => {

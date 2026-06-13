@@ -1,4 +1,7 @@
-use crate::app::app::{App, Focus, Viewport};
+use crate::app::{
+    app::{App, Focus, Viewport},
+    app_default::ViewerMode,
+};
 use crate::helpers::layout::{LAYOUT_WIDTH_MIN_CENTER, LAYOUT_WIDTH_MIN_SIDE_PANE, add_scrollbar, extend_up, inset_bottom, inset_top, load_layout_config, save_layout_config, shrink_width};
 use ratatui::Frame;
 use ratatui::layout::Constraint;
@@ -23,6 +26,20 @@ fn divider_rect(active: bool, x: u16, y: u16, width: u16) -> Rect {
 
 fn vertical_divider_rect(active: bool, x: u16, y: u16, height: u16) -> Rect {
     if active && height > 0 { Rect { x, y, width: 1, height } } else { zero_rect() }
+}
+
+fn viewer_split_rects(active: bool, area: Rect, left_weight: u16, right_weight: u16) -> (Rect, Rect, Rect) {
+    if !active || area.width < 3 || area.height == 0 {
+        return (zero_rect(), zero_rect(), zero_rect());
+    }
+
+    let total_weight = left_weight.max(1).saturating_add(right_weight.max(1));
+    let chunks = RatatuiLayout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Ratio(left_weight.max(1) as u32, total_weight as u32), Constraint::Length(1), Constraint::Ratio(right_weight.max(1) as u32, total_weight as u32)])
+        .split(area);
+
+    (chunks[0], chunks[1], chunks[2])
 }
 
 fn side_pane_width(width: u16, total_width: u16, other_width: u16) -> u16 {
@@ -52,6 +69,8 @@ pub struct Layout {
     pub stashes_scrollbar: Rect,
     pub graph: Rect,
     pub graph_scrollbar: Rect,
+    pub viewer_split_left: Rect,
+    pub viewer_split_right: Rect,
     pub inspector: Rect,
     pub inspector_scrollbar: Rect,
     pub status_top: Rect,
@@ -65,6 +84,7 @@ pub struct Layout {
     pub divider_tags_stashes: Rect,
     pub divider_inspector_status: Rect,
     pub divider_status_files: Rect,
+    pub divider_viewer_split: Rect,
     pub statusbar_left: Rect,
     pub statusbar_right: Rect,
 }
@@ -77,6 +97,7 @@ impl App {
         let is_status = !is_settings && self.layout_config.is_status;
         let is_right_pane = is_inspector || is_status;
         let is_left_pane = (self.layout_config.is_branches || self.layout_config.is_tags || self.layout_config.is_stashes) && !is_settings;
+        let is_viewer_split = self.viewport == Viewport::Viewer && self.viewer_mode == ViewerMode::Split;
 
         // Split title, main area, and status bar before pane-specific decisions.
         let chunks_vertical = RatatuiLayout::default()
@@ -168,6 +189,8 @@ impl App {
         // The graph leaves one row for its header and one for the status line.
         let graph_scrollbar = chunks_horizontal[1];
         let graph = inset_bottom(inset_top(chunks_horizontal[1], 1), 1);
+        let (viewer_split_left, divider_viewer_split, viewer_split_right) =
+            viewer_split_rects(is_viewer_split, graph, self.layout_config.weight_viewer_split_left, self.layout_config.weight_viewer_split_right);
 
         // Inspector content starts below its header.
         let inspector_scrollbar = chunks_pane_right[0];
@@ -208,6 +231,26 @@ impl App {
             let zen = chunks_vertical[1];
             let zero = zero_rect();
 
+            let graph = if matches!(
+                self.focus,
+                Focus::Viewport
+                    | Focus::ModalCheckout
+                    | Focus::ModalSolo
+                    | Focus::ModalCommit
+                    | Focus::ModalCreateBranch
+                    | Focus::ModalDeleteBranch
+                    | Focus::ModalGrep
+                    | Focus::ModalTag
+                    | Focus::ModalDeleteTag
+                    | Focus::ModalError
+            ) {
+                zen
+            } else {
+                zero
+            };
+            let (viewer_split_left, divider_viewer_split, viewer_split_right) =
+                viewer_split_rects(is_viewer_split && graph.width > 0, graph, self.layout_config.weight_viewer_split_left, self.layout_config.weight_viewer_split_right);
+
             self.layout = Layout {
                 // Title and status keep their normal positions in zen mode.
                 app: zen,
@@ -229,23 +272,9 @@ impl App {
                 branches: if matches!(self.focus, Focus::Branches) { zen } else { zero },
                 tags: if matches!(self.focus, Focus::Tags) { zen } else { zero },
                 stashes: if matches!(self.focus, Focus::Stashes) { zen } else { zero },
-                graph: if matches!(
-                    self.focus,
-                    Focus::Viewport
-                        | Focus::ModalCheckout
-                        | Focus::ModalSolo
-                        | Focus::ModalCommit
-                        | Focus::ModalCreateBranch
-                        | Focus::ModalDeleteBranch
-                        | Focus::ModalGrep
-                        | Focus::ModalTag
-                        | Focus::ModalDeleteTag
-                        | Focus::ModalError
-                ) {
-                    zen
-                } else {
-                    zero
-                },
+                graph,
+                viewer_split_left,
+                viewer_split_right,
                 inspector: if matches!(self.focus, Focus::Inspector) { zen } else { zero },
                 status_top: if matches!(self.focus, Focus::StatusTop) { zen } else { zero },
                 status_bottom: if matches!(self.focus, Focus::StatusBottom) { zen } else { zero },
@@ -282,6 +311,7 @@ impl App {
                 divider_tags_stashes: zero,
                 divider_inspector_status: zero,
                 divider_status_files: zero,
+                divider_viewer_split,
             };
 
             return;
@@ -313,6 +343,8 @@ impl App {
             stashes_scrollbar,
             graph,
             graph_scrollbar,
+            viewer_split_left,
+            viewer_split_right,
             inspector,
             inspector_scrollbar,
             status_top,
@@ -326,6 +358,7 @@ impl App {
             divider_tags_stashes,
             divider_inspector_status,
             divider_status_files,
+            divider_viewer_split,
 
             // Bottom chrome.
             statusbar_left: chunks_status_bar[0],

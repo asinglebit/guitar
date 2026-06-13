@@ -54,6 +54,7 @@ pub enum Command {
 
     // Viewer
     ToggleHunkMode,
+    ToggleSplitDiffMode,
 
     // Git
     Drop,
@@ -201,6 +202,9 @@ fn default_navigation_keymap() -> IndexMap<KeyBinding, Command> {
 
     // 'm' to toggle viewer mode, between full and hunks only view
     map.insert(KeyBinding::new(Char('m'), KeyModifiers::NONE), Command::ToggleHunkMode);
+
+    // 'v' toggles the side-by-side diff viewer
+    map.insert(KeyBinding::new(Char('v'), KeyModifiers::NONE), Command::ToggleSplitDiffMode);
 
     // UI toggles
 
@@ -520,6 +524,19 @@ fn save_keymaps_to_disk(path: &Path, maps: &Keymaps) -> Result<(), Box<dyn std::
     Ok(())
 }
 
+fn add_default_binding(maps: &mut Keymaps, mode: InputMode, key: KeyBinding, command: Command) -> bool {
+    let Some(mode_map) = maps.get_mut(&mode) else {
+        return false;
+    };
+
+    if mode_map.values().any(|cmd| cmd == &command) || mode_map.contains_key(&key) {
+        return false;
+    }
+
+    mode_map.insert(key, command);
+    true
+}
+
 pub fn load_or_init_keymaps() -> Keymaps {
     let mut pathbuf = dirs::config_dir().unwrap();
     pathbuf.push("guitar");
@@ -527,7 +544,15 @@ pub fn load_or_init_keymaps() -> Keymaps {
     let path = pathbuf.as_path();
 
     match load_keymaps_from_disk(path) {
-        Ok(maps) => maps,
+        Ok(mut maps) => {
+            let mut changed = false;
+            changed |= add_default_binding(&mut maps, InputMode::Normal, KeyBinding::new(Char('v'), KeyModifiers::NONE), Command::ToggleSplitDiffMode);
+            changed |= add_default_binding(&mut maps, InputMode::Action, KeyBinding::new(Char('v'), KeyModifiers::NONE), Command::ToggleSplitDiffMode);
+            if changed {
+                let _ = save_keymaps_to_disk(path, &maps);
+            }
+            maps
+        },
         Err(_) => {
             let defaults = default_keymaps();
             let _ = save_keymaps_to_disk(path, &defaults);

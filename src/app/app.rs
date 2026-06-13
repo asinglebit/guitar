@@ -11,7 +11,10 @@ use crate::{
     },
 };
 use crate::{
-    app::{app_default::ViewerMode, app_layout::Layout},
+    app::{
+        app_default::{SplitViewerRow, ViewerMode},
+        app_layout::Layout,
+    },
     core::{
         branches::Branches,
         buffer::Buffer,
@@ -88,6 +91,7 @@ pub enum Direction {
 pub enum LayoutDrag {
     LeftPane,
     RightPane,
+    ViewerSplit,
     BranchesTags,
     BranchesStashes,
     TagsStashes,
@@ -130,6 +134,7 @@ pub struct App {
     pub current_diff: Vec<FileChange>,
     pub file_name: Option<String>,
     pub viewer_lines: Vec<ListItem<'static>>,
+    pub viewer_split_rows: Vec<SplitViewerRow>,
     pub viewer_edges: Vec<usize>,
     pub viewer_hunks: Vec<usize>,
     pub viewer_mode: ViewerMode,
@@ -356,6 +361,7 @@ impl App {
         self.heatmap = empty_heatmap();
         self.current_diff = Vec::new();
         self.viewer_lines = Vec::new();
+        self.viewer_split_rows = Vec::new();
         self.viewer_edges = Vec::new();
         self.viewer_hunks = Vec::new();
         self.branches = Branches::default();

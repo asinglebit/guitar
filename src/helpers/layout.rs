@@ -6,6 +6,7 @@ pub const LAYOUT_WIDTH_LEFT_PANE: u16 = 45;
 pub const LAYOUT_WIDTH_RIGHT_PANE: u16 = 46;
 pub const LAYOUT_WIDTH_MIN_CENTER: u16 = 20;
 pub const LAYOUT_WIDTH_MIN_SIDE_PANE: u16 = 16;
+pub const LAYOUT_WIDTH_MIN_SPLIT_PANE: u16 = 10;
 pub const LAYOUT_HEIGHT_MIN_STACKED_PANE: u16 = 3;
 pub const LAYOUT_WEIGHT_DEFAULT: u16 = 100;
 
@@ -71,6 +72,10 @@ pub struct LayoutConfig {
     pub weight_status_top: u16,
     #[facet(default = LAYOUT_WEIGHT_DEFAULT)]
     pub weight_status_bottom: u16,
+    #[facet(default = LAYOUT_WEIGHT_DEFAULT)]
+    pub weight_viewer_split_left: u16,
+    #[facet(default = LAYOUT_WEIGHT_DEFAULT)]
+    pub weight_viewer_split_right: u16,
 }
 
 impl Default for LayoutConfig {
@@ -93,6 +98,8 @@ impl Default for LayoutConfig {
             weight_status: LAYOUT_WEIGHT_DEFAULT,
             weight_status_top: LAYOUT_WEIGHT_DEFAULT,
             weight_status_bottom: LAYOUT_WEIGHT_DEFAULT,
+            weight_viewer_split_left: LAYOUT_WEIGHT_DEFAULT,
+            weight_viewer_split_right: LAYOUT_WEIGHT_DEFAULT,
         }
     }
 }
@@ -108,6 +115,8 @@ impl LayoutConfig {
         self.weight_status = self.weight_status.max(1);
         self.weight_status_top = self.weight_status_top.max(1);
         self.weight_status_bottom = self.weight_status_bottom.max(1);
+        self.weight_viewer_split_left = self.weight_viewer_split_left.max(1);
+        self.weight_viewer_split_right = self.weight_viewer_split_right.max(1);
         self
     }
 }
@@ -153,5 +162,7 @@ mod tests {
         assert_eq!(config.width_right_pane, LAYOUT_WIDTH_RIGHT_PANE);
         assert_eq!(config.weight_branches, LAYOUT_WEIGHT_DEFAULT);
         assert_eq!(config.weight_status_bottom, LAYOUT_WEIGHT_DEFAULT);
+        assert_eq!(config.weight_viewer_split_left, LAYOUT_WEIGHT_DEFAULT);
+        assert_eq!(config.weight_viewer_split_right, LAYOUT_WEIGHT_DEFAULT);
     }
 }

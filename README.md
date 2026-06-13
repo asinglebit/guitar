@@ -106,7 +106,7 @@ guitar --reset
 - Status panes that split staged and unstaged files on the uncommitted row.
 - Commit file list for the selected commit, compared with its first parent.
 - Commit inspector with commit SHA, parent SHAs, featured branches, author, committer, summary, and body.
-- File viewer for selected status/commit files, with line wrapping, line numbers, diff highlighting, and hunk-only mode.
+- File viewer for selected status/commit files, with line wrapping, line numbers, diff highlighting, hunk-only mode, and split diff mode.
 - Settings/help view with version, commit heatmap, config paths, Git identity, auth notes, theme selection, and active keymaps.
 - Zen mode for focusing one pane at a time.
 - Minimal chrome mode that hides the title and status bars.
@@ -134,8 +134,8 @@ guitar --reset
 - Vim-like default navigation with a customizable keymap.
 - Single-shot action mode for dangerous operations. Press the action-mode key first, then the action key.
 - Mouse wheel scrolling over panes.
-- Mouse dragging for side-pane widths and stacked-pane heights.
-- Persistent layout toggles, pane widths, and pane weights.
+- Mouse dragging for side-pane widths, stacked-pane heights, and the split diff divider.
+- Persistent layout toggles, pane widths, pane weights, and split diff divider position.
 - Persistent recent repository list.
 - Three built-in themes: classic, ANSI, and monochrome.
 
@@ -205,6 +205,7 @@ Dangerous actions live behind action mode. By default, press `Ctrl+a`, then pres
 | Scroll Up Commit | `[` |
 | Scroll Down Commit | `]` |
 | Toggle Hunk Mode | `m` |
+| Toggle Split Diff Mode | `v` |
 | Toggle Zen Mode | `z` |
 | Toggle Branches | `1` |
 | Toggle Tags | `2` |
