@@ -67,6 +67,7 @@ pub enum Command {
     Stage,
     Commit,
     ForcePush,
+    PushTags,
     SoloBranch,
     ToggleBranch,
     CreateBranch,
@@ -292,6 +293,9 @@ fn default_action_keymap() -> IndexMap<KeyBinding, Command> {
 
     // 'P' for force push (capital P to indicate DANGER)
     map.insert(KeyBinding::new(Char('P'), KeyModifiers::SHIFT), Command::ForcePush);
+
+    // 'V' for push tags ("versions"), guarded by action mode because tags are shared refs
+    map.insert(KeyBinding::new(Char('V'), KeyModifiers::SHIFT), Command::PushTags);
 
     // 'D' for delete branch (vim uses 'D' to delete to end of line)
     map.insert(KeyBinding::new(Char('D'), KeyModifiers::SHIFT), Command::DeleteBranch);

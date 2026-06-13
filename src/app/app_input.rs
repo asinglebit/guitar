@@ -12,7 +12,7 @@ use crate::{
             cherrypicking::cherry_pick_commit,
             committing::commit_staged,
             fetching::fetch_over_ssh,
-            pushing::push_over_ssh,
+            pushing::{push_over_ssh, push_tags_over_ssh},
             resetting::reset_to_commit,
             staging::{stage_all, stage_file, unstage_all, unstage_file},
             stashing::{pop, stash},
@@ -246,6 +246,7 @@ impl App {
                     Command::Stage => self.on_stage(),
                     Command::Commit => self.on_commit(),
                     Command::ForcePush => self.on_force_push(),
+                    Command::PushTags => self.on_push_tags(),
                     Command::CreateBranch => self.on_create_branch(),
                     Command::DeleteBranch => self.on_delete_branch(),
                     Command::Tag => self.on_tag(),
@@ -1692,6 +1693,26 @@ impl App {
                     let repo_path = self.path.as_deref().unwrap_or(".");
                     let branch = get_current_branch(repo).expect("Couldn't get current branch");
                     let handle = push_over_ssh(repo_path, "origin", branch.as_str(), true);
+                    match handle.join().expect("Thread panicked") {
+                        Ok(_) => {
+                            self.reload(None);
+                        },
+                        _ => {
+                            // TODO: Handle error
+                        },
+                    }
+                },
+            }
+        }
+    }
+
+    pub fn on_push_tags(&mut self) {
+        if self.repo.is_some() {
+            match self.viewport {
+                Viewport::Settings | Viewport::Viewer => {},
+                _ => {
+                    let repo_path = self.path.as_deref().unwrap_or(".");
+                    let handle = push_tags_over_ssh(repo_path, "origin");
                     match handle.join().expect("Thread panicked") {
                         Ok(_) => {
                             self.reload(None);
