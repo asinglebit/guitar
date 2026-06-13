@@ -128,6 +128,10 @@ impl Default for App {
             // Modal delete tag
             modal_delete_tag_selected: 0,
 
+            // Modal error
+            modal_error_message: String::new(),
+            modal_error_return_focus: Focus::Viewport,
+
             // Exit
             is_exit: false,
         }

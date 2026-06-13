@@ -195,6 +195,7 @@ impl App {
                         | Focus::ModalGrep
                         | Focus::ModalTag
                         | Focus::ModalDeleteTag
+                        | Focus::ModalError
                 ) {
                     zen
                 } else {
@@ -219,6 +220,7 @@ impl App {
                         | Focus::ModalGrep
                         | Focus::ModalTag
                         | Focus::ModalDeleteTag
+                        | Focus::ModalError
                 ) {
                     zen
                 } else {

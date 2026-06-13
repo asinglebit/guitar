@@ -2,24 +2,26 @@ use git2::{BranchType, Oid, Repository, build::CheckoutBuilder};
 use im::HashSet;
 use std::collections::HashMap;
 
-pub fn checkout_head(repo: &Repository, oid: Oid) {
+pub fn checkout_head(repo: &Repository, oid: Oid) -> Result<(), git2::Error> {
     // Find the commit object
-    let commit = repo.find_commit(oid).unwrap();
+    let commit = repo.find_commit(oid)?;
 
     // Set HEAD to the commit (detached)
-    repo.set_head_detached(commit.id()).unwrap();
+    repo.set_head_detached(commit.id())?;
 
     // Checkout the commit
     repo.checkout_head(Some(
         CheckoutBuilder::default().allow_conflicts(true).force(), // optional: force overwrite local changes
-    ))
-    .expect("Error checking out");
+    ))?;
+
+    Ok(())
 }
 
 pub fn checkout_branch(repo: &Repository, visible_branch_names: &mut HashSet<String>, local: &mut HashMap<u32, Vec<String>>, alias: u32, branch_name: &str) -> Result<(), git2::Error> {
     fn checkout(repo: &Repository, branch_name: &str) -> Result<(), git2::Error> {
         let branch = repo.find_branch(branch_name, BranchType::Local)?;
-        repo.set_head(branch.get().name().unwrap())?;
+        let reference_name = branch.get().name().ok_or_else(|| git2::Error::from_str("Branch reference name is not valid UTF-8"))?;
+        repo.set_head(reference_name)?;
         repo.checkout_head(Some(CheckoutBuilder::default().allow_conflicts(true).force()))
     }
 

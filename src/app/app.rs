@@ -75,6 +75,7 @@ pub enum Focus {
     ModalGrep,
     ModalTag,
     ModalDeleteTag,
+    ModalError,
 }
 
 #[derive(PartialEq, Eq)]
@@ -182,6 +183,10 @@ pub struct App {
 
     // Modal delete a tag
     pub modal_delete_tag_selected: i32,
+
+    // Modal error
+    pub modal_error_message: String,
+    pub modal_error_return_focus: Focus,
 
     // Exit
     pub is_exit: bool,
@@ -295,6 +300,9 @@ impl App {
                 },
                 Focus::ModalDeleteTag => {
                     self.draw_modal_delete_tag(frame);
+                },
+                Focus::ModalError => {
+                    self.draw_modal_error(frame);
                 },
                 Focus::ModalCommit => {
                     self.draw_modal_input(frame, STR_CREATE_COMMIT);

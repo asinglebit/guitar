@@ -9,6 +9,7 @@ mod app {
     pub mod app_draw_modal_checkout;
     pub mod app_draw_modal_delete_branch;
     pub mod app_draw_modal_delete_tag;
+    pub mod app_draw_modal_error;
     pub mod app_draw_modal_input;
     pub mod app_draw_modal_solo;
     pub mod app_draw_settings;

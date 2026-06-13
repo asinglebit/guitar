@@ -12,7 +12,7 @@ pub fn fetch_over_ssh(repo_path: &str, remote_name: &str) -> thread::JoinHandle<
         let mut remote = repo.find_remote(&remote_name)?;
 
         let mut callbacks = RemoteCallbacks::new();
-        callbacks.credentials(|_url, username_from_url, _| Cred::ssh_key_from_agent(username_from_url.unwrap()));
+        callbacks.credentials(|_url, username_from_url, _| Cred::ssh_key_from_agent(username_from_url.unwrap_or("git")));
 
         callbacks.transfer_progress(|_stats| {
             // println!("Received {}/{} objects", stats.received_objects(), stats.total_objects());

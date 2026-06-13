@@ -62,9 +62,30 @@ impl App {
         Ok(())
     }
 
+    pub fn show_error(&mut self, message: impl Into<String>) {
+        if self.focus != Focus::ModalError {
+            self.modal_error_return_focus = self.focus;
+        }
+        self.modal_error_message = message.into();
+        self.focus = Focus::ModalError;
+    }
+
+    fn close_error_modal(&mut self) {
+        self.focus = self.modal_error_return_focus;
+        self.modal_error_message.clear();
+    }
+
     pub fn handle_key_event(&mut self, key_event: KeyEvent) {
         let key_binding = KeyBinding::new(key_event.code, key_event.modifiers);
         let current_mode = self.mode;
+
+        if self.focus == Focus::ModalError {
+            if matches!(key_event.code, KeyCode::Enter | KeyCode::Esc) {
+                self.close_error_modal();
+            }
+            self.mode = InputMode::Normal;
+            return;
+        }
 
         // Handle text editing within modals
         match self.focus {
@@ -76,10 +97,14 @@ impl App {
                     },
                     KeyCode::Enter => {
                         if let Some(repo) = &self.repo {
-                            commit_staged(repo, self.modal_input.value(), &self.name, &self.email).expect("Error");
-                            self.modal_input.clear();
-                            self.reload(None);
-                            self.focus = Focus::Viewport;
+                            match commit_staged(repo, self.modal_input.value(), &self.name, &self.email) {
+                                Ok(_) => {
+                                    self.modal_input.clear();
+                                    self.reload(None);
+                                    self.focus = Focus::Viewport;
+                                },
+                                Err(error) => self.show_error(format!("Commit failed: {error}")),
+                            }
                         }
                     },
                     _ => {
@@ -103,9 +128,7 @@ impl App {
                                     self.reload(None);
                                     self.focus = Focus::Viewport;
                                 },
-                                Err(_) => {
-                                    // TODO
-                                },
+                                Err(error) => self.show_error(format!("Create branch failed: {error}")),
                             }
                         }
                     },
@@ -170,11 +193,14 @@ impl App {
                             let oid = self.oids.get_oid_by_idx(if self.graph_selected == 0 { 1 } else { self.graph_selected });
 
                             // Get the alias
-                            tag(repo, *oid, tag_name).unwrap();
-
-                            self.reload(None);
-                            self.modal_input.clear();
-                            self.focus = Focus::Viewport;
+                            match tag(repo, *oid, tag_name) {
+                                Ok(_) => {
+                                    self.reload(None);
+                                    self.modal_input.clear();
+                                    self.focus = Focus::Viewport;
+                                },
+                                Err(error) => self.show_error(format!("Create tag failed: {error}")),
+                            }
                         }
                     },
                     _ => {
@@ -369,11 +395,14 @@ impl App {
                     };
 
                     if let Some(branch_name) = visible_branch_names.get(self.modal_checkout_selected as usize) {
-                        checkout_branch(repo, &mut self.branches.visible_branch_names, &mut self.branches.local, alias, branch_name).expect("Failed to checkout branch");
-
-                        self.modal_checkout_selected = 0;
-                        self.focus = Focus::Viewport;
-                        self.reload(None);
+                        match checkout_branch(repo, &mut self.branches.visible_branch_names, &mut self.branches.local, alias, branch_name) {
+                            Ok(_) => {
+                                self.modal_checkout_selected = 0;
+                                self.focus = Focus::Viewport;
+                                self.reload(None);
+                            },
+                            Err(error) => self.show_error(format!("Checkout failed: {error}")),
+                        }
                     }
                 }
             },
@@ -427,9 +456,7 @@ impl App {
                                 self.focus = Focus::Viewport;
                                 self.reload(None);
                             },
-                            Err(_) => {
-                                // TODO: show error or notification
-                            },
+                            Err(error) => self.show_error(format!("Delete branch failed: {error}")),
                         }
                     }
                 }
@@ -438,11 +465,16 @@ impl App {
                 if let Some(repo) = &self.repo {
                     let alias = self.oids.get_alias_by_idx(self.graph_selected);
                     let tags = self.tags.local.get(&alias).cloned().unwrap_or_default();
-                    let tag = tags.get(self.modal_delete_tag_selected as usize).unwrap();
-                    untag(repo, tag).unwrap();
-                    self.modal_delete_tag_selected = 0;
-                    self.focus = Focus::Viewport;
-                    self.reload(None);
+                    if let Some(tag) = tags.get(self.modal_delete_tag_selected as usize) {
+                        match untag(repo, tag) {
+                            Ok(_) => {
+                                self.modal_delete_tag_selected = 0;
+                                self.focus = Focus::Viewport;
+                                self.reload(None);
+                            },
+                            Err(error) => self.show_error(format!("Delete tag failed: {error}")),
+                        }
+                    }
                 }
             },
             _ => {},
@@ -1411,56 +1443,74 @@ impl App {
     }
 
     pub fn on_drop(&mut self) {
-        if let Some(repo) = &self.repo
-            && self.viewport == Viewport::Graph
-            && self.focus == Focus::Viewport
-        {
+        if self.repo.is_some() && self.viewport == Viewport::Graph && self.focus == Focus::Viewport {
             let alias = self.oids.get_alias_by_idx(self.graph_selected);
             if !self.oids.stashes.contains(&alias) {
                 return;
             }
 
-            let path = repo.path().to_path_buf();
-            let mut repo = Repository::open(path).unwrap();
+            let Some(path) = self.repo.as_ref().map(|repo| repo.path().to_path_buf()) else {
+                return;
+            };
+            let mut repo = match Repository::open(path) {
+                Ok(repo) => repo,
+                Err(error) => {
+                    self.show_error(format!("Open repository failed: {error}"));
+                    return;
+                },
+            };
             let oid = self.oids.get_oid_by_alias(alias);
 
-            // Due to incosistnent git2 api, stashing requires mutalbe repo reference, im too lazy
-            pop(&mut repo, oid, false).unwrap();
-            self.reload(None);
+            match pop(&mut repo, oid, false) {
+                Ok(_) => self.reload(None),
+                Err(error) => self.show_error(format!("Drop stash failed: {error}")),
+            }
         }
     }
 
     pub fn on_pop(&mut self) {
-        if let Some(repo) = &self.repo
-            && self.viewport == Viewport::Graph
-            && self.focus == Focus::Viewport
-        {
+        if self.repo.is_some() && self.viewport == Viewport::Graph && self.focus == Focus::Viewport {
             let alias = self.oids.get_alias_by_idx(self.graph_selected);
             if !self.oids.stashes.contains(&alias) {
                 return;
             }
 
-            let path = repo.path().to_path_buf();
-            let mut repo = Repository::open(path).unwrap();
+            let Some(path) = self.repo.as_ref().map(|repo| repo.path().to_path_buf()) else {
+                return;
+            };
+            let mut repo = match Repository::open(path) {
+                Ok(repo) => repo,
+                Err(error) => {
+                    self.show_error(format!("Open repository failed: {error}"));
+                    return;
+                },
+            };
             let oid = self.oids.get_oid_by_alias(alias);
 
-            // Due to incosistnent git2 api, stashing requires mutalbe repo reference, im too lazy
-            pop(&mut repo, oid, true).unwrap();
-            self.reload(None);
+            match pop(&mut repo, oid, true) {
+                Ok(_) => self.reload(None),
+                Err(error) => self.show_error(format!("Pop stash failed: {error}")),
+            }
         }
     }
 
     pub fn on_stash(&mut self) {
-        if let Some(repo) = &self.repo
-            && self.viewport == Viewport::Graph
-            && self.focus == Focus::Viewport
-        {
-            let path = repo.path().to_path_buf();
-            let mut repo = Repository::open(path).unwrap();
+        if self.repo.is_some() && self.viewport == Viewport::Graph && self.focus == Focus::Viewport {
+            let Some(path) = self.repo.as_ref().map(|repo| repo.path().to_path_buf()) else {
+                return;
+            };
+            let mut repo = match Repository::open(path) {
+                Ok(repo) => repo,
+                Err(error) => {
+                    self.show_error(format!("Open repository failed: {error}"));
+                    return;
+                },
+            };
 
-            // Due to incosistnent git2 api, stashing requires mutalbe repo reference, im too lazy
-            stash(&mut repo).unwrap();
-            self.reload(None);
+            match stash(&mut repo) {
+                Ok(_) => self.reload(None),
+                Err(error) => self.show_error(format!("Stash failed: {error}")),
+            }
         }
     }
 
@@ -1474,13 +1524,12 @@ impl App {
         if self.viewport != Viewport::Settings {
             let repo_path = self.path.as_deref().unwrap_or(".");
             let handle = fetch_over_ssh(repo_path, "origin");
-            match handle.join().expect("Thread panicked") {
-                Ok(_) => {
+            match handle.join() {
+                Ok(Ok(_)) => {
                     self.reload(None);
                 },
-                _ => {
-                    // TODO: Handle error
-                },
+                Ok(Err(error)) => self.show_error(format!("Fetch failed: {error}")),
+                Err(_) => self.show_error("Fetch failed: worker thread panicked"),
             }
         }
     }
@@ -1491,22 +1540,26 @@ impl App {
         match self.focus {
             Focus::Branches => {
                 // Always allow checkout from branches view
-                let (alias, branch) = self.branches.sorted.get(self.branches_selected).unwrap();
+                let Some((alias, branch)) = self.branches.sorted.get(self.branches_selected).cloned() else {
+                    return;
+                };
 
-                checkout_branch(
+                match checkout_branch(
                     repo,
                     &mut self.branches.visible_branch_names, // HashSet of visible branches
                     &mut self.branches.local,                // Local branches map
-                    *alias,
-                    branch,
-                )
-                .expect("Error");
+                    alias,
+                    &branch,
+                ) {
+                    Ok(_) => {
+                        // Update graph selection to point to the alias
+                        self.graph_selected = self.oids.get_sorted_aliases().iter().position(|o| o == &alias).unwrap_or(0);
 
-                // Update graph selection to point to the alias
-                self.graph_selected = self.oids.get_sorted_aliases().iter().position(|o| o == alias).unwrap_or(0);
-
-                self.focus = Focus::Viewport;
-                self.reload(None);
+                        self.focus = Focus::Viewport;
+                        self.reload(None);
+                    },
+                    Err(error) => self.show_error(format!("Checkout failed: {error}")),
+                }
             },
 
             Focus::Viewport => {
@@ -1524,16 +1577,23 @@ impl App {
                 match branches_for_alias.len() {
                     0 => {
                         // No branch: checkout detached HEAD
-                        checkout_head(repo, *oid);
-                        self.focus = Focus::Viewport;
-                        self.reload(None);
+                        match checkout_head(repo, *oid) {
+                            Ok(_) => {
+                                self.focus = Focus::Viewport;
+                                self.reload(None);
+                            },
+                            Err(error) => self.show_error(format!("Checkout failed: {error}")),
+                        }
                     },
                     1 => {
                         // Exactly one branch: checkout immediately
-                        checkout_branch(repo, &mut self.branches.visible_branch_names, &mut self.branches.local, alias, &branches_for_alias[0]).expect("Error");
-
-                        self.focus = Focus::Viewport;
-                        self.reload(None);
+                        match checkout_branch(repo, &mut self.branches.visible_branch_names, &mut self.branches.local, alias, &branches_for_alias[0]) {
+                            Ok(_) => {
+                                self.focus = Focus::Viewport;
+                                self.reload(None);
+                            },
+                            Err(error) => self.show_error(format!("Checkout failed: {error}")),
+                        }
                     },
                     _ => {
                         // Multiple branches: open modal to select
@@ -1554,15 +1614,21 @@ impl App {
                         return;
                     }
                     let oid = self.oids.get_oid_by_idx(self.graph_selected);
-                    reset_to_commit(repo, *oid, git2::ResetType::Hard).expect("Couldn't hard reset");
-                    self.reload(None);
-                    self.focus = Focus::Viewport;
+                    match reset_to_commit(repo, *oid, git2::ResetType::Hard) {
+                        Ok(_) => {
+                            self.reload(None);
+                            self.focus = Focus::Viewport;
+                        },
+                        Err(error) => self.show_error(format!("Hard reset failed: {error}")),
+                    }
                 },
                 Focus::StatusTop | Focus::StatusBottom => {
                     if let Some(file_name) = self.get_selected_file_name() {
                         let path = Path::new(&file_name);
-                        let _ = reset_file(repo, path);
-                        self.reload(None);
+                        match reset_file(repo, path) {
+                            Ok(_) => self.reload(None),
+                            Err(error) => self.show_error(format!("Reset file failed: {error}")),
+                        }
                     }
                 },
                 _ => {},
@@ -1578,9 +1644,13 @@ impl App {
                 return;
             }
             let oid = self.oids.get_oid_by_idx(self.graph_selected);
-            reset_to_commit(repo, *oid, git2::ResetType::Mixed).expect("Couldn't mixed reset");
-            self.reload(None);
-            self.focus = Focus::Viewport;
+            match reset_to_commit(repo, *oid, git2::ResetType::Mixed) {
+                Ok(_) => {
+                    self.reload(None);
+                    self.focus = Focus::Viewport;
+                },
+                Err(error) => self.show_error(format!("Mixed reset failed: {error}")),
+            }
         }
     }
 
@@ -1592,8 +1662,10 @@ impl App {
                     match self.focus {
                         Focus::Viewport => {
                             if self.uncommitted.is_staged {
-                                unstage_all(repo).expect("Couldn't unstage all");
-                                self.reload(None);
+                                match unstage_all(repo) {
+                                    Ok(_) => self.reload(None),
+                                    Err(error) => self.show_error(format!("Unstage all failed: {error}")),
+                                }
                             }
                         },
                         Focus::StatusTop => {
@@ -1619,8 +1691,10 @@ impl App {
                                     }
                                 }
                             };
-                            unstage_file(repo, Path::new(&file)).expect("Couldn't unstage file");
-                            self.reload(None);
+                            match unstage_file(repo, Path::new(&file)) {
+                                Ok(_) => self.reload(None),
+                                Err(error) => self.show_error(format!("Unstage file failed: {error}")),
+                            }
                         },
                         _ => {},
                     }
@@ -1637,8 +1711,10 @@ impl App {
                     match self.focus {
                         Focus::Viewport => {
                             if self.uncommitted.is_unstaged {
-                                stage_all(repo).expect("Couldn't add all");
-                                self.reload(None);
+                                match stage_all(repo) {
+                                    Ok(_) => self.reload(None),
+                                    Err(error) => self.show_error(format!("Stage all failed: {error}")),
+                                }
                             }
                         },
                         Focus::StatusBottom => {
@@ -1664,8 +1740,10 @@ impl App {
                                     }
                                 }
                             };
-                            stage_file(repo, Path::new(&file)).expect("Couldn't add file");
-                            self.reload(None);
+                            match stage_file(repo, Path::new(&file)) {
+                                Ok(_) => self.reload(None),
+                                Err(error) => self.show_error(format!("Stage file failed: {error}")),
+                            }
                         },
                         _ => {},
                     }
@@ -1691,15 +1769,17 @@ impl App {
                 Viewport::Settings | Viewport::Viewer => {},
                 _ => {
                     let repo_path = self.path.as_deref().unwrap_or(".");
-                    let branch = get_current_branch(repo).expect("Couldn't get current branch");
+                    let Some(branch) = get_current_branch(repo) else {
+                        self.show_error("Push failed: detached HEAD has no current branch");
+                        return;
+                    };
                     let handle = push_over_ssh(repo_path, "origin", branch.as_str(), true);
-                    match handle.join().expect("Thread panicked") {
-                        Ok(_) => {
+                    match handle.join() {
+                        Ok(Ok(_)) => {
                             self.reload(None);
                         },
-                        _ => {
-                            // TODO: Handle error
-                        },
+                        Ok(Err(error)) => self.show_error(format!("Push failed: {error}")),
+                        Err(_) => self.show_error("Push failed: worker thread panicked"),
                     }
                 },
             }
@@ -1713,13 +1793,12 @@ impl App {
                 _ => {
                     let repo_path = self.path.as_deref().unwrap_or(".");
                     let handle = push_tags_over_ssh(repo_path, "origin");
-                    match handle.join().expect("Thread panicked") {
-                        Ok(_) => {
+                    match handle.join() {
+                        Ok(Ok(_)) => {
                             self.reload(None);
                         },
-                        _ => {
-                            // TODO: Handle error
-                        },
+                        Ok(Err(error)) => self.show_error(format!("Push tags failed: {error}")),
+                        Err(_) => self.show_error("Push tags failed: worker thread panicked"),
                     }
                 },
             }
@@ -1748,18 +1827,27 @@ impl App {
         match self.focus {
             Focus::Branches => {
                 // Get the selected branch
-                let branch = &self.branches.sorted.get(self.branches_selected).unwrap().1;
+                let Some((_, branch)) = self.branches.sorted.get(self.branches_selected).cloned() else {
+                    return;
+                };
 
                 // Only proceed if it's not the current branch
                 let proceed = match get_current_branch(repo) {
-                    Some(current) => current != *branch,
+                    Some(current) => current != branch,
                     None => true,
                 };
 
-                if proceed && delete_branch(repo, branch).is_ok() {
-                    // Remove it from visible set
-                    self.branches.visible_branch_names.remove(branch);
-                    self.reload(None);
+                if proceed {
+                    match delete_branch(repo, &branch) {
+                        Ok(_) => {
+                            // Remove it from visible set
+                            self.branches.visible_branch_names.remove(&branch);
+                            self.reload(None);
+                        },
+                        Err(error) => self.show_error(format!("Delete branch failed: {error}")),
+                    }
+                } else {
+                    self.show_error("Delete branch failed: cannot delete the current branch");
                 }
             },
 
@@ -1776,11 +1864,12 @@ impl App {
 
                 match visible_branches.len() {
                     0 => {}, // nothing to delete
-                    1 => {
-                        if delete_branch(repo, &visible_branches[0]).is_ok() {
+                    1 => match delete_branch(repo, &visible_branches[0]) {
+                        Ok(_) => {
                             self.branches.visible_branch_names.remove(&visible_branches[0]);
                             self.reload(None);
-                        }
+                        },
+                        Err(error) => self.show_error(format!("Delete branch failed: {error}")),
                     },
                     _ => {
                         // Multiple branches → show modal to select which one to delete
@@ -1810,9 +1899,13 @@ impl App {
                 Viewport::Settings | Viewport::Viewer => {},
                 _ => match self.focus {
                     Focus::Tags => {
-                        let tag = &self.tags.sorted.get(self.tags_selected).unwrap().1;
-                        untag(repo, tag).unwrap();
-                        self.reload(None);
+                        let Some((_, tag)) = self.tags.sorted.get(self.tags_selected).cloned() else {
+                            return;
+                        };
+                        match untag(repo, &tag) {
+                            Ok(_) => self.reload(None),
+                            Err(error) => self.show_error(format!("Delete tag failed: {error}")),
+                        }
                     },
                     Focus::Viewport => {
                         if self.graph_selected != 0 {
@@ -1820,9 +1913,9 @@ impl App {
                             if let Some(tag_names) = self.tags.local.get(&alias) {
                                 match tag_names.len() {
                                     0 => {},
-                                    1 => {
-                                        untag(repo, tag_names[0].as_str()).unwrap();
-                                        self.reload(None);
+                                    1 => match untag(repo, tag_names[0].as_str()) {
+                                        Ok(_) => self.reload(None),
+                                        Err(error) => self.show_error(format!("Delete tag failed: {error}")),
                                     },
                                     _ => {
                                         self.focus = Focus::ModalDeleteTag;
@@ -1847,10 +1940,10 @@ impl App {
             let oid = self.oids.get_oid_by_idx(idx);
 
             // Perform cherry-pick
-            cherry_pick_commit(repo, *oid, Some("message"), true).unwrap();
-
-            // Reload after operation
-            self.reload(None);
+            match cherry_pick_commit(repo, *oid, Some("message"), true) {
+                Ok(_) => self.reload(None),
+                Err(error) => self.show_error(format!("Cherry-pick failed: {error}")),
+            }
         }
     }
 
