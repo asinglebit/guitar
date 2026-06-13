@@ -1,5 +1,5 @@
 use crate::helpers::symbols::SYM_COMMIT_STASH;
-use crate::helpers::text::center_line;
+use crate::helpers::text::{center_line, empty_state_top_padding};
 use crate::{
     app::app::{App, Focus},
     helpers::text::truncate_with_ellipsis,
@@ -35,12 +35,17 @@ impl App {
             lines.push(Line::from(Span::styled(format!("{SYM_COMMIT_STASH} {truncated}"), Style::default().fg(color))));
         }
 
+        let visible_height = if self.layout_config.is_zen {
+            self.layout.stashes.height.saturating_sub(2) as usize
+        } else {
+            self.layout.stashes.height.saturating_sub(if self.layout_config.is_branches || self.layout_config.is_tags { 1 } else { 2 }) as usize
+        };
+
         // Empty state is part of the list so scrolling and borders still behave normally.
         let mut stashes_empty = false;
         if lines.is_empty() {
             stashes_empty = true;
-            let visible_height = if self.layout_config.is_zen { self.layout.stashes.height.saturating_sub(2) as usize } else { self.layout.stashes.height as usize };
-            let blank_lines_before = visible_height.saturating_sub(3) / 2;
+            let blank_lines_before = empty_state_top_padding(visible_height);
             for _ in 0..blank_lines_before {
                 lines.push(Line::default());
             }
@@ -49,11 +54,6 @@ impl App {
 
         // Shared pane list pattern: clamp selection, trap scroll, then slice visible rows.
         let total_lines = lines.len();
-        let visible_height = if self.layout_config.is_zen {
-            self.layout.stashes.height.saturating_sub(2) as usize
-        } else {
-            self.layout.stashes.height.saturating_sub(if self.layout_config.is_branches || self.layout_config.is_tags { 1 } else { 2 }) as usize
-        };
 
         if total_lines == 0 {
             self.stashes_selected = 0;
@@ -116,7 +116,7 @@ impl App {
         let mut scrollbar_state = ScrollbarState::new(scroll_range).position(self.stashes_scroll.get());
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
             .begin_symbol(Some(if self.layout_config.is_branches || self.layout_config.is_tags { "│" } else { "─" }))
-            .end_symbol(if self.layout_config.is_branches && self.layout_config.is_tags { Some("│") } else { Some("─") })
+            .end_symbol(Some("─"))
             .track_symbol(Some("│"))
             .thumb_symbol(if total_lines > visible_height { "▌" } else { "│" })
             .track_style(Style::default().fg(self.theme.COLOR_BORDER))

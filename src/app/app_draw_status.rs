@@ -29,6 +29,8 @@ impl App {
         // Width leaves room for the change symbol and a little border padding.
         let max_status_top_width = self.layout.status_top.width.saturating_sub(5) as usize;
         let max_status_bottom_width = self.layout.status_bottom.width.saturating_sub(5) as usize;
+        let visible_height_status_top = self.layout.status_top.height.saturating_sub(2) as usize;
+        let visible_height_status_bottom = self.layout.status_bottom.height.saturating_sub(2) as usize;
 
         // The pseudo-row splits uncommitted files into staged and unstaged panes.
         if is_showing_uncommitted {
@@ -54,8 +56,7 @@ impl App {
             // Empty states are vertically padded to stay centered in short panes.
             if lines_status_top.is_empty() {
                 status_top_empty = true;
-                let visible_height = if self.layout_config.is_zen { self.layout.status_bottom.height.saturating_sub(2) as usize } else { self.layout.status_bottom.height as usize };
-                let blank_lines_before = visible_height.saturating_sub(3) / 2;
+                let blank_lines_before = empty_state_top_padding(visible_height_status_top);
                 for _ in 0..blank_lines_before {
                     lines_status_top.push(Line::from(""));
                 }
@@ -89,8 +90,7 @@ impl App {
             // Empty states are vertically padded to stay centered in short panes.
             if lines_status_bottom.is_empty() {
                 status_bottom_empty = true;
-                let visible_height = if self.layout_config.is_zen { self.layout.status_top.height.saturating_sub(2) as usize } else { self.layout.status_top.height as usize };
-                let blank_lines_before = visible_height.saturating_sub(2) / 2;
+                let blank_lines_before = empty_state_top_padding(visible_height_status_bottom);
                 for _ in 0..blank_lines_before {
                     lines_status_bottom.push(Line::from(""));
                 }
@@ -118,8 +118,7 @@ impl App {
             // Empty commits and unresolved diff failures share the same quiet state.
             if lines_status_top.is_empty() {
                 status_top_empty = true;
-                let visible_height = if self.layout_config.is_zen { self.layout.status_top.height.saturating_sub(2) as usize } else { self.layout.status_top.height as usize };
-                let blank_lines_before = visible_height.saturating_sub(3) / 2;
+                let blank_lines_before = empty_state_top_padding(visible_height_status_top);
                 for _ in 0..blank_lines_before {
                     lines_status_top.push(Line::from(""));
                 }
@@ -136,7 +135,7 @@ impl App {
         {
             // Shared pane list pattern: clamp selection, trap scroll, then slice visible rows.
             let total_lines = lines_status_top.len();
-            let visible_height = self.layout.status_top.height.saturating_sub(2) as usize;
+            let visible_height = visible_height_status_top;
 
             if total_lines == 0 {
                 self.status_top_selected = 0;
@@ -209,7 +208,7 @@ impl App {
             if is_showing_uncommitted {
                 // Shared pane list pattern: clamp selection, trap scroll, then slice visible rows.
                 let total_lines = lines_status_bottom.len();
-                let visible_height = self.layout.status_bottom.height.saturating_sub(2) as usize;
+                let visible_height = visible_height_status_bottom;
 
                 if total_lines == 0 {
                     self.status_bottom_selected = 0;

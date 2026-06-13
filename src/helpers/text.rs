@@ -31,6 +31,10 @@ pub fn truncate_start_with_ellipsis(text: &str, max_width: usize) -> String {
     format!("...{truncated}")
 }
 
+pub fn empty_state_top_padding(visible_height: usize) -> usize {
+    visible_height.saturating_sub(1) / 2
+}
+
 // Wrap by character count for long tokens such as hashes or paths.
 pub fn wrap_chars(content: String, max_width: usize) -> Vec<String> {
     let mut wrapped_lines = Vec::new();

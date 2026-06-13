@@ -1,6 +1,6 @@
 use crate::{
     app::app::{App, Focus},
-    helpers::text::{center_line, truncate_with_ellipsis},
+    helpers::text::{center_line, empty_state_top_padding, truncate_with_ellipsis},
 };
 use ratatui::{
     Frame,
@@ -37,12 +37,13 @@ impl App {
             lines.push(Line::from(Span::styled(format!("{icon} {truncated}"), Style::default().fg(color))));
         }
 
+        let visible_height = self.layout.branches.height.saturating_sub(2) as usize;
+
         // Empty state is part of the list so scrolling and borders still behave normally.
         let mut branches_empty = false;
         if lines.is_empty() {
             branches_empty = true;
-            let visible_height = if self.layout_config.is_zen { self.layout.branches.height.saturating_sub(2) as usize } else { self.layout.branches.height as usize };
-            let blank_lines_before = visible_height.saturating_sub(3) / 2;
+            let blank_lines_before = empty_state_top_padding(visible_height);
             for _ in 0..blank_lines_before {
                 lines.push(Line::default());
             }
@@ -51,7 +52,6 @@ impl App {
 
         // Shared pane list pattern: clamp selection, trap scroll, then slice visible rows.
         let total_lines = lines.len();
-        let visible_height = self.layout.branches.height.saturating_sub(2) as usize;
 
         if total_lines == 0 {
             self.branches_selected = 0;

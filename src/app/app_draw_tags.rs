@@ -1,5 +1,5 @@
 use crate::helpers::symbols::SYM_TAG;
-use crate::helpers::text::center_line;
+use crate::helpers::text::{center_line, empty_state_top_padding};
 use crate::{
     app::app::{App, Focus},
     helpers::text::truncate_with_ellipsis,
@@ -31,12 +31,17 @@ impl App {
             lines.push(Line::from(Span::styled(format!("{SYM_TAG} {truncated}"), Style::default().fg(color))));
         }
 
+        let visible_height = if self.layout_config.is_zen {
+            self.layout.tags.height.saturating_sub(2) as usize
+        } else {
+            self.layout.tags.height.saturating_sub(if self.layout_config.is_branches { 1 } else { 2 }) as usize
+        };
+
         // Empty state is part of the list so scrolling and borders still behave normally.
         let mut tags_empty = false;
         if lines.is_empty() {
             tags_empty = true;
-            let visible_height = if self.layout_config.is_zen { self.layout.tags.height.saturating_sub(2) as usize } else { self.layout.tags.height as usize };
-            let blank_lines_before = visible_height.saturating_sub(3) / 2;
+            let blank_lines_before = empty_state_top_padding(visible_height);
             for _ in 0..blank_lines_before {
                 lines.push(Line::default());
             }
@@ -45,11 +50,6 @@ impl App {
 
         // Shared pane list pattern: clamp selection, trap scroll, then slice visible rows.
         let total_lines = lines.len();
-        let visible_height = if self.layout_config.is_zen {
-            self.layout.tags.height.saturating_sub(2) as usize
-        } else {
-            self.layout.tags.height.saturating_sub(if self.layout_config.is_branches { 1 } else { 2 }) as usize
-        };
 
         if total_lines == 0 {
             self.tags_selected = 0;
