@@ -27,7 +27,7 @@ use crate::{
     helpers::{colors::ColorPicker, heatmap::build_heatmap, keymap::InputMode, palette::*, spinner::Spinner},
 };
 use crossterm::{
-    event::{KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags},
+    event::{DisableMouseCapture, EnableMouseCapture, KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags},
     execute,
     terminal::{enable_raw_mode, supports_keyboard_enhancement},
 };
@@ -83,6 +83,18 @@ pub enum Direction {
     Down,
     Up,
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LayoutDrag {
+    LeftPane,
+    RightPane,
+    BranchesTags,
+    BranchesStashes,
+    TagsStashes,
+    InspectorStatus,
+    StatusFiles,
+}
+
 pub struct App {
     // Global application state and user-facing configuration.
     pub logo: Vec<Span<'static>>,
@@ -127,6 +139,7 @@ pub struct App {
 
     // Persistent layout switches and current interaction target.
     pub layout_config: LayoutConfig,
+    pub layout_drag: Option<LayoutDrag>,
     pub viewport: Viewport,
     pub focus: Focus,
 
@@ -201,6 +214,7 @@ impl App {
         if has_keyboard_enhancement {
             execute!(stdout(), PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES))?;
         }
+        execute!(stdout(), EnableMouseCapture)?;
 
         let run_result = (|| {
             // Load persisted state before the first repository scan.
@@ -225,11 +239,11 @@ impl App {
             Ok(())
         })();
 
-        if has_keyboard_enhancement {
-            let pop_result = execute!(stdout(), PopKeyboardEnhancementFlags);
-            if run_result.is_ok() {
-                pop_result?;
-            }
+        let pop_result = if has_keyboard_enhancement { execute!(stdout(), PopKeyboardEnhancementFlags) } else { Ok(()) };
+        let mouse_result = execute!(stdout(), DisableMouseCapture);
+        if run_result.is_ok() {
+            pop_result?;
+            mouse_result?;
         }
 
         run_result

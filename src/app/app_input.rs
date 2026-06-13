@@ -1,8 +1,11 @@
 use crate::git::actions::resetting::reset_file;
-use crate::helpers::keymap::{Command, KeyBinding, load_or_init_keymaps};
+use crate::helpers::{
+    keymap::{Command, KeyBinding, load_or_init_keymaps},
+    layout::{LAYOUT_HEIGHT_MIN_STACKED_PANE, LAYOUT_WIDTH_MIN_CENTER, LAYOUT_WIDTH_MIN_SIDE_PANE},
+};
 use crate::{
     app::{
-        app::{App, Direction, Focus, Viewport},
+        app::{App, Direction, Focus, LayoutDrag, Viewport},
         app_default::ViewerMode,
     },
     git::{
@@ -23,7 +26,10 @@ use crate::{
     helpers::{keymap::InputMode, palette::Theme},
 };
 use git2::{Oid, Repository};
-use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
+use ratatui::{
+    crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, MouseButton, MouseEvent, MouseEventKind},
+    layout::Rect,
+};
 use std::io;
 use std::path::Path;
 
@@ -57,9 +63,172 @@ impl App {
             Event::Key(key_event) if matches!(key_event.kind, KeyEventKind::Press) => {
                 self.handle_key_event(key_event);
             },
+            Event::Mouse(mouse_event) => {
+                self.handle_mouse_event(mouse_event);
+            },
             _ => {},
         };
         Ok(())
+    }
+
+    fn handle_mouse_event(&mut self, mouse_event: MouseEvent) {
+        match mouse_event.kind {
+            MouseEventKind::Down(MouseButton::Left) => {
+                self.layout_drag = self.layout_drag_at(mouse_event.column, mouse_event.row);
+            },
+            MouseEventKind::Drag(MouseButton::Left) => {
+                if let Some(drag) = self.layout_drag {
+                    self.apply_layout_drag(drag, mouse_event.column, mouse_event.row);
+                }
+            },
+            MouseEventKind::Up(MouseButton::Left) => {
+                if self.layout_drag.take().is_some() {
+                    self.save_layout();
+                }
+            },
+            _ => {},
+        }
+    }
+
+    fn layout_drag_at(&self, column: u16, row: u16) -> Option<LayoutDrag> {
+        if self.layout_config.is_zen || matches!(self.viewport, Viewport::Splash | Viewport::Settings) || self.is_modal_focus() {
+            return None;
+        }
+
+        if Self::rect_contains(self.layout.divider_left, column, row) {
+            return Some(LayoutDrag::LeftPane);
+        }
+        if Self::rect_contains(self.layout.divider_right, column, row) {
+            return Some(LayoutDrag::RightPane);
+        }
+        if Self::rect_contains(self.layout.divider_branches_tags, column, row) {
+            return Some(LayoutDrag::BranchesTags);
+        }
+        if Self::rect_contains(self.layout.divider_branches_stashes, column, row) {
+            return Some(LayoutDrag::BranchesStashes);
+        }
+        if Self::rect_contains(self.layout.divider_tags_stashes, column, row) {
+            return Some(LayoutDrag::TagsStashes);
+        }
+        if Self::rect_contains(self.layout.divider_inspector_status, column, row) {
+            return Some(LayoutDrag::InspectorStatus);
+        }
+        if Self::rect_contains(self.layout.divider_status_files, column, row) {
+            return Some(LayoutDrag::StatusFiles);
+        }
+
+        None
+    }
+
+    fn is_modal_focus(&self) -> bool {
+        matches!(
+            self.focus,
+            Focus::ModalCheckout
+                | Focus::ModalSolo
+                | Focus::ModalCommit
+                | Focus::ModalCreateBranch
+                | Focus::ModalDeleteBranch
+                | Focus::ModalGrep
+                | Focus::ModalTag
+                | Focus::ModalDeleteTag
+                | Focus::ModalError
+        )
+    }
+
+    fn rect_contains(rect: Rect, column: u16, row: u16) -> bool {
+        rect.width > 0 && rect.height > 0 && column >= rect.x && column < rect.x.saturating_add(rect.width) && row >= rect.y && row < rect.y.saturating_add(rect.height)
+    }
+
+    fn apply_layout_drag(&mut self, drag: LayoutDrag, column: u16, row: u16) {
+        match drag {
+            LayoutDrag::LeftPane => self.resize_left_pane(column),
+            LayoutDrag::RightPane => self.resize_right_pane(column),
+            LayoutDrag::BranchesTags => {
+                if let Some((branches, tags)) = Self::resized_pair_weights(row, self.layout.pane_branches, self.layout.pane_tags, self.layout_config.weight_branches, self.layout_config.weight_tags) {
+                    self.layout_config.weight_branches = branches;
+                    self.layout_config.weight_tags = tags;
+                }
+            },
+            LayoutDrag::BranchesStashes => {
+                if let Some((branches, stashes)) =
+                    Self::resized_pair_weights(row, self.layout.pane_branches, self.layout.pane_stashes, self.layout_config.weight_branches, self.layout_config.weight_stashes)
+                {
+                    self.layout_config.weight_branches = branches;
+                    self.layout_config.weight_stashes = stashes;
+                }
+            },
+            LayoutDrag::TagsStashes => {
+                if let Some((tags, stashes)) = Self::resized_pair_weights(row, self.layout.pane_tags, self.layout.pane_stashes, self.layout_config.weight_tags, self.layout_config.weight_stashes) {
+                    self.layout_config.weight_tags = tags;
+                    self.layout_config.weight_stashes = stashes;
+                }
+            },
+            LayoutDrag::InspectorStatus => {
+                if let Some((inspector, status)) =
+                    Self::resized_pair_weights(row, self.layout.pane_inspector, self.layout.pane_status, self.layout_config.weight_inspector, self.layout_config.weight_status)
+                {
+                    self.layout_config.weight_inspector = inspector;
+                    self.layout_config.weight_status = status;
+                }
+            },
+            LayoutDrag::StatusFiles => {
+                if let Some((top, bottom)) =
+                    Self::resized_pair_weights(row, self.layout.pane_status_top, self.layout.pane_status_bottom, self.layout_config.weight_status_top, self.layout_config.weight_status_bottom)
+                {
+                    self.layout_config.weight_status_top = top;
+                    self.layout_config.weight_status_bottom = bottom;
+                }
+            },
+        }
+    }
+
+    fn resize_left_pane(&mut self, column: u16) {
+        let total_width = self.layout.app.width;
+        let other_width = self.layout.pane_right.width;
+        let max_width = total_width.saturating_sub(other_width).saturating_sub(LAYOUT_WIDTH_MIN_CENTER);
+        if max_width < LAYOUT_WIDTH_MIN_SIDE_PANE {
+            return;
+        }
+
+        let desired_width = column.saturating_sub(self.layout.app.x);
+        self.layout_config.width_left_pane = desired_width.clamp(LAYOUT_WIDTH_MIN_SIDE_PANE, max_width);
+    }
+
+    fn resize_right_pane(&mut self, column: u16) {
+        let total_width = self.layout.app.width;
+        let other_width = self.layout.pane_left.width;
+        let max_width = total_width.saturating_sub(other_width).saturating_sub(LAYOUT_WIDTH_MIN_CENTER);
+        if max_width < LAYOUT_WIDTH_MIN_SIDE_PANE {
+            return;
+        }
+
+        let app_right = self.layout.app.x.saturating_add(self.layout.app.width);
+        let desired_width = app_right.saturating_sub(column.saturating_add(1));
+        self.layout_config.width_right_pane = desired_width.clamp(LAYOUT_WIDTH_MIN_SIDE_PANE, max_width);
+    }
+
+    fn resized_pair_weights(row: u16, first: Rect, second: Rect, first_weight: u16, second_weight: u16) -> Option<(u16, u16)> {
+        if first.height == 0 || second.height == 0 {
+            return None;
+        }
+
+        let pair_top = first.y;
+        let pair_bottom = second.y.saturating_add(second.height);
+        let pair_height = pair_bottom.saturating_sub(pair_top);
+        if pair_height < 2 {
+            return None;
+        }
+
+        let min_height = LAYOUT_HEIGHT_MIN_STACKED_PANE.min(pair_height / 2).max(1);
+        let max_first_height = pair_height.saturating_sub(min_height);
+        let first_height = row.saturating_sub(pair_top).saturating_add(1).clamp(min_height, max_first_height);
+        let total_weight = first_weight.max(1).saturating_add(second_weight.max(1));
+        if total_weight < 2 {
+            return None;
+        }
+
+        let first_weight = ((first_height as u32 * total_weight as u32) / pair_height as u32).clamp(1, total_weight.saturating_sub(1) as u32) as u16;
+        Some((first_weight, total_weight.saturating_sub(first_weight)))
     }
 
     pub fn show_error(&mut self, message: impl Into<String>) {

@@ -71,6 +71,7 @@ impl Default for App {
 
             // Focus
             layout_config: load_layout_config(),
+            layout_drag: None,
             viewport: Viewport::Splash,
             focus: Focus::Viewport,
 
