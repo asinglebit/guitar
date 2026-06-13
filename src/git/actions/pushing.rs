@@ -17,11 +17,9 @@ pub fn push_over_ssh(repo_path: &str, remote_name: &str, branch: &str, force: bo
         callbacks.credentials(|_url, username_from_url, _| Cred::ssh_key_from_agent(username_from_url.unwrap_or("git")));
 
         // Track progress
-        callbacks.push_update_reference(|_refname, status| {
-            if let Some(_err) = status {
-                // eprintln!("Failed to update {refname}: {err}");
-            } else {
-                // println!("Updated {refname}");
+        callbacks.push_update_reference(|refname, status| {
+            if let Some(err) = status {
+                return Err(git2::Error::from_str(&format!("Failed to update {refname}: {err}")));
             }
             Ok(())
         });
@@ -54,9 +52,16 @@ pub fn push_tags_over_ssh(repo_path: &str, remote_name: &str) -> thread::JoinHan
         let mut callbacks = RemoteCallbacks::new();
         callbacks.credentials(|_url, username_from_url, _| Cred::ssh_key_from_agent(username_from_url.unwrap_or("git")));
 
-        callbacks.push_update_reference(|_refname, status| {
-            if let Some(_err) = status {
-                // eprintln!("Failed to update {refname}: {err}");
+        callbacks.push_update_reference(|refname, status| {
+            if let Some(err) = status {
+                return Err(git2::Error::from_str(&format!("Failed to update {refname}: {err}")));
+            }
+            Ok(())
+        });
+
+        callbacks.push_update_reference(|refname, status| {
+            if let Some(err) = status {
+                return Err(git2::Error::from_str(&format!("Failed to update {refname}: {err}")));
             }
             Ok(())
         });
