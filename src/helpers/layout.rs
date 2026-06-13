@@ -51,6 +51,8 @@ pub struct LayoutConfig {
     pub is_branches: bool,
     pub is_tags: bool,
     pub is_stashes: bool,
+    #[facet(default = false)]
+    pub is_worktrees: bool,
     pub is_status: bool,
     pub is_inspector: bool,
     pub is_zen: bool,
@@ -64,6 +66,8 @@ pub struct LayoutConfig {
     pub weight_tags: u16,
     #[facet(default = LAYOUT_WEIGHT_DEFAULT)]
     pub weight_stashes: u16,
+    #[facet(default = LAYOUT_WEIGHT_DEFAULT)]
+    pub weight_worktrees: u16,
     #[facet(default = LAYOUT_WEIGHT_DEFAULT)]
     pub weight_inspector: u16,
     #[facet(default = LAYOUT_WEIGHT_DEFAULT)]
@@ -86,6 +90,7 @@ impl Default for LayoutConfig {
             is_branches: false,
             is_tags: false,
             is_stashes: false,
+            is_worktrees: false,
             is_status: false,
             is_inspector: false,
             is_zen: false,
@@ -94,6 +99,7 @@ impl Default for LayoutConfig {
             weight_branches: LAYOUT_WEIGHT_DEFAULT,
             weight_tags: LAYOUT_WEIGHT_DEFAULT,
             weight_stashes: LAYOUT_WEIGHT_DEFAULT,
+            weight_worktrees: LAYOUT_WEIGHT_DEFAULT,
             weight_inspector: LAYOUT_WEIGHT_DEFAULT,
             weight_status: LAYOUT_WEIGHT_DEFAULT,
             weight_status_top: LAYOUT_WEIGHT_DEFAULT,
@@ -111,6 +117,7 @@ impl LayoutConfig {
         self.weight_branches = self.weight_branches.max(1);
         self.weight_tags = self.weight_tags.max(1);
         self.weight_stashes = self.weight_stashes.max(1);
+        self.weight_worktrees = self.weight_worktrees.max(1);
         self.weight_inspector = self.weight_inspector.max(1);
         self.weight_status = self.weight_status.max(1);
         self.weight_status_top = self.weight_status_top.max(1);
@@ -158,10 +165,12 @@ mod tests {
         assert!(config.is_branches);
         assert!(config.is_tags);
         assert!(config.is_status);
+        assert!(!config.is_worktrees);
         assert_eq!(config.width_left_pane, LAYOUT_WIDTH_LEFT_PANE);
         assert_eq!(config.width_right_pane, LAYOUT_WIDTH_RIGHT_PANE);
         assert_eq!(config.weight_branches, LAYOUT_WEIGHT_DEFAULT);
         assert_eq!(config.weight_status_bottom, LAYOUT_WEIGHT_DEFAULT);
+        assert_eq!(config.weight_worktrees, LAYOUT_WEIGHT_DEFAULT);
         assert_eq!(config.weight_viewer_split_left, LAYOUT_WEIGHT_DEFAULT);
         assert_eq!(config.weight_viewer_split_right, LAYOUT_WEIGHT_DEFAULT);
     }

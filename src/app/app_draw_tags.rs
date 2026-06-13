@@ -112,7 +112,7 @@ impl App {
         let mut scrollbar_state = ScrollbarState::new(scroll_range).position(self.tags_scroll.get());
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
             .begin_symbol(Some(if self.layout_config.is_branches { "│" } else { "─" }))
-            .end_symbol(Some(if self.layout_config.is_stashes { "│" } else { "─" }))
+            .end_symbol(Some(if self.layout_config.is_stashes || self.layout_config.is_worktrees { "│" } else { "─" }))
             .track_symbol(Some("│"))
             .thumb_symbol(if total_lines > visible_height { "▌" } else { "│" })
             .track_style(Style::default().fg(self.theme.COLOR_BORDER))

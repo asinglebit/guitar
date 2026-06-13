@@ -1,3 +1,4 @@
+use crate::core::worktrees::Worktrees;
 use crate::helpers::keymap::{Command, KeyBinding, keycode_to_visual_string};
 use crate::helpers::text::truncate_with_ellipsis;
 use crate::{
@@ -24,7 +25,10 @@ use ratatui::{
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 // Render graph symbols for the visible alias range using precomputed lane snapshots.
-pub fn render_graph_range(theme: &Theme, oids: &Oids, all: &HashMap<u32, Vec<String>>, history: &Vector<Vector<Chunk>>, head_alias: u32, start: usize, end: usize) -> Vec<Line<'static>> {
+#[allow(clippy::too_many_arguments)]
+pub fn render_graph_range(
+    theme: &Theme, oids: &Oids, all: &HashMap<u32, Vec<String>>, worktrees: &Worktrees, history: &Vector<Vector<Chunk>>, head_alias: u32, start: usize, end: usize,
+) -> Vec<Line<'static>> {
     let mut layers = layers!(Rc::new(RefCell::new(ColorPicker::from_theme(theme))));
     let mut lines: Vec<Line> = Vec::new();
 
@@ -127,6 +131,8 @@ pub fn render_graph_range(theme: &Theme, oids: &Oids, all: &HashMap<u32, Vec<Str
                     layers.commit(SYM_MERGE, lane_idx);
                 } else if all.contains_key(alias) {
                     layers.commit(SYM_COMMIT_BRANCH, lane_idx);
+                } else if worktrees.has_detached_or_unlabeled_at(alias, all.contains_key(alias)) {
+                    layers.commit(SYM_WORKTREE, lane_idx);
                 } else if oids.stashes.contains(alias) {
                     layers.commit(SYM_COMMIT_STASH, lane_idx);
                 } else {
@@ -299,6 +305,8 @@ pub fn render_graph_range(theme: &Theme, oids: &Oids, all: &HashMap<u32, Vec<Str
         if !is_commit_found {
             if all.contains_key(alias) {
                 layers.commit(SYM_COMMIT_BRANCH, lane_idx);
+            } else if worktrees.has_detached_or_unlabeled_at(alias, all.contains_key(alias)) {
+                layers.commit(SYM_WORKTREE, lane_idx);
             } else {
                 layers.commit(SYM_COMMIT, lane_idx);
             };
@@ -427,8 +435,8 @@ pub fn render_sha_range(theme: &Theme, oids: &Oids, start: usize, end: usize) ->
 #[allow(clippy::too_many_arguments)]
 pub fn render_message_range(
     theme: &Theme, repo: &Repository, oids: &Oids, local: &HashMap<u32, Vec<String>>, all_branches: &HashMap<u32, Vec<String>>, visible_branch_names: &HashSet<String>,
-    tags: &HashMap<u32, Vec<String>>, branch_colors: &mut HashMap<u32, Color>, tag_colors: &mut HashMap<u32, Color>, stashes_colors: &mut HashMap<u32, Color>, start: usize, end: usize,
-    selected: usize, uncommitted: &UncommittedChanges,
+    tags: &HashMap<u32, Vec<String>>, worktrees: &Worktrees, branch_colors: &mut HashMap<u32, Color>, tag_colors: &mut HashMap<u32, Color>, stashes_colors: &mut HashMap<u32, Color>, start: usize,
+    end: usize, selected: usize, uncommitted: &UncommittedChanges,
 ) -> Vec<Line<'static>> {
     let mut lines: Vec<Line> = Vec::new();
 
@@ -461,6 +469,17 @@ pub fn render_message_range(
                         spans.push(Span::styled(format!("{} {} ", SYM_TAG, tag), Style::default().fg(if let Some(color) = tag_colors.get(&alias) { *color } else { theme.COLOR_TEXT })));
                     }
                 }
+            }
+
+            for worktree in worktrees.get_by_alias(&alias) {
+                let color = if !worktree.is_valid || worktree.locked_reason.is_some() {
+                    theme.COLOR_GREY_600
+                } else if worktree.is_current {
+                    theme.COLOR_GRASS
+                } else {
+                    theme.COLOR_TEAL
+                };
+                spans.push(Span::styled(format!("{SYM_WORKTREE} {} ", worktree.name), Style::default().fg(color)));
             }
 
             if oids.stashes.contains(&alias) {

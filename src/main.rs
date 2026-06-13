@@ -11,7 +11,9 @@ mod app {
     pub mod app_draw_modal_delete_tag;
     pub mod app_draw_modal_error;
     pub mod app_draw_modal_input;
+    pub mod app_draw_modal_remove_worktree;
     pub mod app_draw_modal_solo;
+    pub mod app_draw_modal_worktree_chooser;
     pub mod app_draw_settings;
     pub mod app_draw_splash;
     pub mod app_draw_stashes;
@@ -20,9 +22,15 @@ mod app {
     pub mod app_draw_tags;
     pub mod app_draw_title;
     pub mod app_draw_viewer;
+    pub mod app_draw_worktrees;
     pub mod app_input;
     pub mod app_layout;
     pub mod input;
+    pub mod input_events;
+    pub mod input_git;
+    pub mod input_modals;
+    pub mod input_navigation;
+    pub mod input_worktrees;
 }
 mod core {
     pub mod batcher;
@@ -35,6 +43,7 @@ mod core {
     pub mod stashes;
     pub mod tags;
     pub mod walker;
+    pub mod worktrees;
 }
 pub mod git {
     pub mod actions {
@@ -48,6 +57,7 @@ pub mod git {
         pub mod staging;
         pub mod stashing;
         pub mod tagging;
+        pub mod worktrees;
     }
     pub mod os {
         pub mod path;
@@ -56,6 +66,7 @@ pub mod git {
         pub mod commits;
         pub mod diffs;
         pub mod helpers;
+        pub mod worktrees;
     }
 }
 pub mod helpers {

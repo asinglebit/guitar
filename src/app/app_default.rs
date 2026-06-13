@@ -1,10 +1,13 @@
 use crate::helpers::heatmap::empty_heatmap;
 use crate::helpers::keymap::InputMode;
 use crate::helpers::layout::load_layout_config;
-use crate::{app::input::TextInput, core::stashes::Stashes};
+use crate::{
+    app::input::TextInput,
+    core::{stashes::Stashes, worktrees::Worktrees},
+};
 use crate::{
     app::{
-        app::{App, Focus, Viewport},
+        app::{App, Focus, Viewport, WorktreeModalAction},
         app_layout::Layout,
     },
     core::{branches::Branches, buffer::Buffer, oids::Oids, tags::Tags},
@@ -65,6 +68,7 @@ impl Default for App {
             branches: Branches::default(),
             tags: Tags::default(),
             stashes: Stashes::default(),
+            worktrees: Worktrees::default(),
             uncommitted: UncommittedChanges::default(),
 
             // Cache
@@ -96,6 +100,10 @@ impl Default for App {
             // Stashes
             stashes_selected: 0,
             stashes_scroll: 0.into(),
+
+            // Worktrees
+            worktrees_selected: 0,
+            worktrees_scroll: 0.into(),
 
             // Graph
             graph_selected: 0,
@@ -132,6 +140,12 @@ impl Default for App {
 
             // Modal editor
             modal_input: TextInput::default(),
+            modal_worktree_name: String::new(),
+            modal_worktree_selected: 0,
+            modal_worktree_candidates: Vec::new(),
+            modal_worktree_target: None,
+            modal_worktree_action: WorktreeModalAction::Open,
+            modal_worktree_return_focus: Focus::Viewport,
 
             // Modal delete branch
             modal_delete_branch_selected: 0,

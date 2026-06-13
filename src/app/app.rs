@@ -1,9 +1,13 @@
 use crate::{
     app::input::TextInput,
     core::stashes::Stashes,
-    git::{os::path::try_into_git_repo_root, queries::diffs::get_filenames_diff_at_oid},
+    core::worktrees::Worktrees,
+    git::{
+        os::path::try_into_git_repo_root,
+        queries::{diffs::get_filenames_diff_at_oid, worktrees::list_worktrees},
+    },
     helpers::{
-        copy::{STR_CREATE_BRANCH, STR_CREATE_COMMIT, STR_CREATE_TAG, STR_FIND_SHA},
+        copy::{STR_CREATE_BRANCH, STR_CREATE_COMMIT, STR_CREATE_TAG, STR_CREATE_WORKTREE_NAME, STR_CREATE_WORKTREE_PATH, STR_FIND_SHA, STR_LOCK_WORKTREE},
         heatmap::{DAYS, WEEKS, empty_heatmap},
         keymap::{Command, KeyBinding},
         layout::LayoutConfig,
@@ -70,15 +74,27 @@ pub enum Focus {
     Branches,
     Tags,
     Stashes,
+    Worktrees,
     ModalCheckout,
     ModalSolo,
     ModalCommit,
     ModalCreateBranch,
+    ModalCreateWorktreeName,
+    ModalCreateWorktreePath,
     ModalDeleteBranch,
+    ModalWorktreeChooser,
+    ModalRemoveWorktree,
+    ModalLockWorktree,
     ModalGrep,
     ModalTag,
     ModalDeleteTag,
     ModalError,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum WorktreeModalAction {
+    Open,
+    Remove,
 }
 
 #[derive(PartialEq, Eq)]
@@ -94,7 +110,10 @@ pub enum LayoutDrag {
     ViewerSplit,
     BranchesTags,
     BranchesStashes,
+    BranchesWorktrees,
     TagsStashes,
+    TagsWorktrees,
+    StashesWorktrees,
     InspectorStatus,
     StatusFiles,
 }
@@ -128,6 +147,7 @@ pub struct App {
     pub branches: Branches,
     pub tags: Tags,
     pub stashes: Stashes,
+    pub worktrees: Worktrees,
     pub uncommitted: UncommittedChanges,
 
     // Cached file and diff data for the currently selected graph or status row.
@@ -159,6 +179,10 @@ pub struct App {
     // Stashes
     pub stashes_selected: usize,
     pub stashes_scroll: Cell<usize>,
+
+    // Worktrees
+    pub worktrees_selected: usize,
+    pub worktrees_scroll: Cell<usize>,
 
     // Graph
     pub graph_selected: usize,
@@ -195,6 +219,12 @@ pub struct App {
 
     // Modal editor
     pub modal_input: TextInput,
+    pub modal_worktree_name: String,
+    pub modal_worktree_selected: i32,
+    pub modal_worktree_candidates: Vec<usize>,
+    pub modal_worktree_target: Option<usize>,
+    pub modal_worktree_action: WorktreeModalAction,
+    pub modal_worktree_return_focus: Focus,
 
     // Modal delete a branch
     pub modal_delete_branch_selected: i32,
@@ -304,6 +334,9 @@ impl App {
                     if self.layout_config.is_stashes {
                         self.draw_stashes(frame, repo);
                     }
+                    if self.layout_config.is_worktrees {
+                        self.draw_worktrees(frame);
+                    }
                     if self.layout_config.is_status {
                         self.draw_status(frame);
                     }
@@ -328,6 +361,12 @@ impl App {
                 Focus::ModalDeleteBranch => {
                     self.draw_modal_delete_branch(frame, repo);
                 },
+                Focus::ModalWorktreeChooser => {
+                    self.draw_modal_worktree_chooser(frame);
+                },
+                Focus::ModalRemoveWorktree => {
+                    self.draw_modal_remove_worktree(frame);
+                },
                 Focus::ModalDeleteTag => {
                     self.draw_modal_delete_tag(frame);
                 },
@@ -339,6 +378,15 @@ impl App {
                 },
                 Focus::ModalCreateBranch => {
                     self.draw_modal_input(frame, STR_CREATE_BRANCH);
+                },
+                Focus::ModalCreateWorktreeName => {
+                    self.draw_modal_input(frame, STR_CREATE_WORKTREE_NAME);
+                },
+                Focus::ModalCreateWorktreePath => {
+                    self.draw_modal_input(frame, STR_CREATE_WORKTREE_PATH);
+                },
+                Focus::ModalLockWorktree => {
+                    self.draw_modal_input(frame, STR_LOCK_WORKTREE);
                 },
                 Focus::ModalGrep => {
                     self.draw_modal_input(frame, STR_FIND_SHA);
@@ -367,6 +415,7 @@ impl App {
         self.branches = Branches::default();
         self.tags = Tags::default();
         self.stashes = Stashes::default();
+        self.worktrees = Worktrees::default();
 
         self.branches.visible_branch_names = visible_branch_names;
 
@@ -393,6 +442,9 @@ impl App {
 
         // Repository-specific state starts only after Repository::open succeeds.
         if let Some(repo) = &self.repo {
+            let current_path = PathBuf::from(&absolute_path);
+            self.worktrees = Worktrees::from_entries(list_worktrees(repo, Some(current_path.as_path())).unwrap_or_default());
+
             // Recent paths are append-only here; the splash screen controls selection.
             if !self.recent.iter().any(|v| v == &absolute_path) {
                 self.recent.push(absolute_path.clone());
@@ -495,6 +547,7 @@ impl App {
 
             // Swap all walker-owned data together so panes stay in sync.
             self.oids = result.oids;
+            self.worktrees.refresh_aliases(&self.oids);
 
             self.buffer = result.buffer;
 

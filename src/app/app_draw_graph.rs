@@ -54,7 +54,7 @@ impl App {
         // SHA, graph, and message columns are rendered independently, then joined as rows.
         let sha_range = if self.layout_config.is_shas { Some(render_sha_range(&self.theme, &self.oids, start, end)) } else { None };
 
-        let graph_range = render_graph_range(&self.theme, &self.oids, &self.branches.all, &buffer.history, head_oid_alias, start, end);
+        let graph_range = render_graph_range(&self.theme, &self.oids, &self.branches.all, &self.worktrees, &buffer.history, head_oid_alias, start, end);
 
         let message_range = render_message_range(
             &self.theme,
@@ -64,6 +64,7 @@ impl App {
             &self.branches.all,
             &self.branches.visible_branch_names,
             &self.tags.local,
+            &self.worktrees,
             &mut self.branches.colors,
             &mut self.tags.colors,
             &mut self.stashes.colors,

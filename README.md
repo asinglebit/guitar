@@ -90,7 +90,7 @@ guitar --reset
 #### Repository Graph
 
 - Incremental history loading in a background walker. Large repositories become usable while history continues loading in batches.
-- Graph rendering for commits, branches, merges, tags, stashes, and the synthetic uncommitted-work row.
+- Graph rendering for commits, branches, merges, tags, stashes, worktree HEAD badges, and the synthetic uncommitted-work row.
 - Optional abbreviated SHA column.
 - Branch visibility filters and one-branch solo mode.
 - Navigation by row, page, half page, list midpoint, first/last row, branch labels, and first-parent commit relationships.
@@ -103,6 +103,7 @@ guitar --reset
 - Branch pane with local/remote and visible/hidden indicators.
 - Tag pane for local tags.
 - Stash pane showing stash commits alongside normal history.
+- Worktree pane showing main and linked worktrees, current/locked/invalid state, branch or detached HEAD, and dirty markers.
 - Status panes that split staged and unstaged files on the uncommitted row.
 - Commit file list for the selected commit, compared with its first parent.
 - Commit inspector with commit SHA, parent SHAs, featured branches, author, committer, summary, and body.
@@ -123,6 +124,9 @@ guitar --reset
 - Create a branch at the selected commit.
 - Delete a local branch, or delete a remote branch over SSH when the selected branch is remote.
 - Create and delete lightweight local tags.
+- Create linked worktrees from the selected commit, using the new worktree name as the new local branch name.
+- Open a selected valid worktree from the worktree pane, or press `Enter` on a graph worktree badge.
+- Lock, unlock, prune, and guarded-remove linked worktrees from the pane or graph badge.
 - Stash current work, including untracked files.
 - Pop or drop a selected stash.
 - Hard reset or mixed reset to the selected commit.
@@ -153,7 +157,7 @@ Saved files live under your platform config directory in a `guitar` folder, for 
 - There is no pull UI.
 - Merge, rebase, and conflict-resolution workflows are not implemented.
 - Cherry-pick is still rough: it auto-commits, has no conflict-resolution UI, and does not provide a message editor for the resulting commit.
-- Git worktrees are not supported yet.
+- Worktree move/repair and custom separate worktree branch names are not implemented.
 - Bare repositories are not supported.
 - Submodules are ignored in commit diffs.
 - Merge commit file lists and file diffs are compared to the first parent only.
@@ -167,7 +171,7 @@ Saved files live under your platform config directory in a `guitar` folder, for 
 
 ### Roadmap
 
-Planned or desired features include jujutsu integration, Git worktrees, conflict mode, merging, rebasing, and more.
+Planned or desired features include jujutsu integration, richer worktree management, conflict mode, merging, rebasing, and more.
 
 Follow the project board for current work:
 
@@ -213,6 +217,7 @@ Dangerous actions live behind action mode. By default, press `Ctrl+a`, then pres
 | Toggle Status | `4` |
 | Toggle Inspector | `5` |
 | Toggle SHAs | `6` |
+| Toggle Worktrees | `7` |
 | Toggle Help / Settings | `?` |
 | Action Mode | `Ctrl+a` |
 | Minimize | `.` |
@@ -223,6 +228,7 @@ Dangerous actions live behind action mode. By default, press `Ctrl+a`, then pres
 | Commit | `c` |
 | Fetch All | `f` |
 | Create Branch | `b` |
+| Create Worktree | `w` |
 | Tag | `t` |
 | Toggle Branch | `Shift+T` |
 | Solo Branch | `Space` |
@@ -240,6 +246,8 @@ Dangerous actions live behind action mode. By default, press `Ctrl+a`, then pres
 | Force Push | `Shift+P` |
 | Push Tags | `Shift+V` |
 | Delete Branch | `Shift+D` |
+| Remove Worktree | `Shift+W` |
+| Toggle Worktree Lock | `Shift+L` |
 | Untag | `Shift+U` |
 | Cherrypick | `y` |
 

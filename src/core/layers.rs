@@ -73,14 +73,12 @@ impl LayersContext {
             for layer in [LayerTypes::Commits, LayerTypes::Merges, LayerTypes::Pipes] {
                 if let Some(tokens) = self.builder.layers.get(&layer)
                     && token_index < tokens.len()
+                    && let Some((_symbol, _color)) = tokens.get(token_index)
+                    && _symbol.trim() != ""
                 {
-                    if let Some((_symbol, _color)) = tokens.get(token_index)
-                        && _symbol.trim() != ""
-                    {
-                        symbol = _symbol;
-                        color = *_color;
-                        break;
-                    }
+                    symbol = _symbol;
+                    color = *_color;
+                    break;
                 }
             }
             spans.push(Span::styled(symbol.to_string(), Style::default().fg(color)));

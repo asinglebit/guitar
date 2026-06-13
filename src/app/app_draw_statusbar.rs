@@ -39,6 +39,7 @@ impl App {
             },
             Focus::StatusBottom => self.uncommitted.unstaged.modified.len() + self.uncommitted.unstaged.added.len() + self.uncommitted.unstaged.deleted.len(),
             Focus::Branches => self.branches.sorted.len(),
+            Focus::Worktrees => self.worktrees.entries.len(),
             _ => 0,
         };
 
@@ -60,6 +61,7 @@ impl App {
                         self.branches.visible_branch_names.len()
                     }
                 },
+                Focus::Worktrees => self.worktrees_selected + 1,
                 _ => 0,
             }
         };

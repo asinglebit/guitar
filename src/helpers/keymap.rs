@@ -26,6 +26,7 @@ pub enum Command {
     ToggleBranches,
     ToggleTags,
     ToggleStashes,
+    ToggleWorktrees,
     ToggleStatus,
     ToggleInspector,
     ToggleShas,
@@ -76,6 +77,9 @@ pub enum Command {
     Tag,
     Untag,
     Cherrypick,
+    CreateWorktree,
+    RemoveWorktree,
+    ToggleWorktreeLock,
     Reload,
 }
 
@@ -216,6 +220,7 @@ fn default_navigation_keymap() -> IndexMap<KeyBinding, Command> {
     map.insert(KeyBinding::new(Char('4'), KeyModifiers::NONE), Command::ToggleStatus);
     map.insert(KeyBinding::new(Char('5'), KeyModifiers::NONE), Command::ToggleInspector);
     map.insert(KeyBinding::new(Char('6'), KeyModifiers::NONE), Command::ToggleShas);
+    map.insert(KeyBinding::new(Char('7'), KeyModifiers::NONE), Command::ToggleWorktrees);
 
     // Help and settings
     map.insert(KeyBinding::new(Char('?'), KeyModifiers::NONE), Command::ToggleHelp);
@@ -258,6 +263,9 @@ fn default_normal_keymap() -> IndexMap<KeyBinding, Command> {
 
     // 't' for tag (create tag)
     map.insert(KeyBinding::new(Char('t'), KeyModifiers::NONE), Command::Tag);
+
+    // 'w' for worktree creation
+    map.insert(KeyBinding::new(Char('w'), KeyModifiers::NONE), Command::CreateWorktree);
 
     // 'T' for toggle branch visibility in graph
     map.insert(KeyBinding::new(Char('T'), KeyModifiers::SHIFT), Command::ToggleBranch);
@@ -307,6 +315,12 @@ fn default_action_keymap() -> IndexMap<KeyBinding, Command> {
 
     // 'y' for cherrypick (vim uses 'y' for yank here yank/copy a commit to current branch)
     map.insert(KeyBinding::new(Char('y'), KeyModifiers::NONE), Command::Cherrypick);
+
+    // 'W' removes/prunes a selected worktree.
+    map.insert(KeyBinding::new(Char('W'), KeyModifiers::SHIFT), Command::RemoveWorktree);
+
+    // 'L' toggles a selected linked worktree lock.
+    map.insert(KeyBinding::new(Char('L'), KeyModifiers::SHIFT), Command::ToggleWorktreeLock);
 
     map
 }
@@ -537,6 +551,19 @@ fn add_default_binding(maps: &mut Keymaps, mode: InputMode, key: KeyBinding, com
     true
 }
 
+fn migrate_default_bindings(maps: &mut Keymaps) -> bool {
+    let mut changed = false;
+    changed |= add_default_binding(maps, InputMode::Normal, KeyBinding::new(Char('v'), KeyModifiers::NONE), Command::ToggleSplitDiffMode);
+    changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('v'), KeyModifiers::NONE), Command::ToggleSplitDiffMode);
+    changed |= add_default_binding(maps, InputMode::Normal, KeyBinding::new(Char('7'), KeyModifiers::NONE), Command::ToggleWorktrees);
+    changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('7'), KeyModifiers::NONE), Command::ToggleWorktrees);
+    changed |= add_default_binding(maps, InputMode::Normal, KeyBinding::new(Char('w'), KeyModifiers::NONE), Command::CreateWorktree);
+    changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('w'), KeyModifiers::NONE), Command::CreateWorktree);
+    changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('W'), KeyModifiers::SHIFT), Command::RemoveWorktree);
+    changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('L'), KeyModifiers::SHIFT), Command::ToggleWorktreeLock);
+    changed
+}
+
 pub fn load_or_init_keymaps() -> Keymaps {
     let mut pathbuf = dirs::config_dir().unwrap();
     pathbuf.push("guitar");
@@ -545,9 +572,7 @@ pub fn load_or_init_keymaps() -> Keymaps {
 
     match load_keymaps_from_disk(path) {
         Ok(mut maps) => {
-            let mut changed = false;
-            changed |= add_default_binding(&mut maps, InputMode::Normal, KeyBinding::new(Char('v'), KeyModifiers::NONE), Command::ToggleSplitDiffMode);
-            changed |= add_default_binding(&mut maps, InputMode::Action, KeyBinding::new(Char('v'), KeyModifiers::NONE), Command::ToggleSplitDiffMode);
+            let changed = migrate_default_bindings(&mut maps);
             if changed {
                 let _ = save_keymaps_to_disk(path, &maps);
             }
@@ -558,5 +583,31 @@ pub fn load_or_init_keymaps() -> Keymaps {
             let _ = save_keymaps_to_disk(path, &defaults);
             defaults
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn migration_adds_worktree_defaults_without_overwriting_existing_keys() {
+        let mut maps = IndexMap::new();
+        let mut normal = IndexMap::new();
+        normal.insert(KeyBinding::new(Char('7'), KeyModifiers::NONE), Command::ToggleTags);
+        let mut action = IndexMap::new();
+        action.insert(KeyBinding::new(Char('x'), KeyModifiers::NONE), Command::Drop);
+        maps.insert(InputMode::Normal, normal);
+        maps.insert(InputMode::Action, action);
+
+        assert!(migrate_default_bindings(&mut maps));
+
+        let normal = maps.get(&InputMode::Normal).unwrap();
+        let action = maps.get(&InputMode::Action).unwrap();
+
+        assert_eq!(normal.get(&KeyBinding::new(Char('7'), KeyModifiers::NONE)), Some(&Command::ToggleTags));
+        assert_eq!(normal.get(&KeyBinding::new(Char('w'), KeyModifiers::NONE)), Some(&Command::CreateWorktree));
+        assert_eq!(action.get(&KeyBinding::new(Char('W'), KeyModifiers::SHIFT)), Some(&Command::RemoveWorktree));
+        assert_eq!(action.get(&KeyBinding::new(Char('L'), KeyModifiers::SHIFT)), Some(&Command::ToggleWorktreeLock));
     }
 }

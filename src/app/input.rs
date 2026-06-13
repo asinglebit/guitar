@@ -20,6 +20,17 @@ impl TextInput {
     pub fn clear(&mut self) {
         self.value.clear();
         self.cursor = 0;
+        self.scroll = 0;
+    }
+
+    pub fn set_value(&mut self, value: impl Into<String>) {
+        self.value = value.into();
+        self.cursor = self.value.len();
+        if self.max_width == 0 {
+            self.scroll = 0;
+        } else {
+            self.update_scroll(self.max_width);
+        }
     }
 
     pub fn set_max_width(&mut self, max_width: usize) {
