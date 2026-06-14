@@ -35,6 +35,7 @@ impl App {
             MouseEventKind::Up(MouseButton::Left) => {
                 if self.layout_drag.take().is_some() {
                     self.save_layout();
+                    self.mark_viewer_layout_dirty();
                 }
             },
             MouseEventKind::ScrollUp => {

@@ -79,6 +79,8 @@ impl Default for App {
             viewer_edges: Vec::new(),      // line numbers where hunks start and end
             viewer_hunks: Vec::new(),      // indices of changed lines the belong to hunks
             viewer_mode: ViewerMode::Full, // Viewer mode: Full, Hunks, or Split
+            is_viewer_layout_dirty: false,
+            viewer_layout_signature: None,
 
             // Interface
             layout: Layout::default(),

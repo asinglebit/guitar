@@ -1090,6 +1090,7 @@ impl App {
             },
         }
 
+        self.mark_viewer_layout_dirty();
         self.viewer_scroll.set(self.viewer_selected);
         self.save_layout();
     }
@@ -1329,6 +1330,7 @@ impl App {
 
     pub fn on_minimize(&mut self) {
         self.layout_config.is_minimal = !self.layout_config.is_minimal;
+        self.mark_viewer_layout_dirty();
         self.save_layout();
     }
 
@@ -1341,11 +1343,13 @@ impl App {
 
     pub fn on_toggle_zen_mode(&mut self) {
         self.layout_config.is_zen = !self.layout_config.is_zen;
+        self.mark_viewer_layout_dirty();
         self.save_layout();
     }
 
     pub fn on_toggle_branches(&mut self) {
         self.layout_config.is_branches = !self.layout_config.is_branches;
+        self.mark_viewer_layout_dirty();
         if self.viewport == Viewport::Settings {
             return;
         }
@@ -1359,6 +1363,7 @@ impl App {
 
     pub fn on_toggle_tags(&mut self) {
         self.layout_config.is_tags = !self.layout_config.is_tags;
+        self.mark_viewer_layout_dirty();
         if self.viewport == Viewport::Settings {
             return;
         }
@@ -1372,6 +1377,7 @@ impl App {
 
     pub fn on_toggle_stashes(&mut self) {
         self.layout_config.is_stashes = !self.layout_config.is_stashes;
+        self.mark_viewer_layout_dirty();
         if self.viewport == Viewport::Settings {
             return;
         }
@@ -1385,6 +1391,7 @@ impl App {
 
     pub fn on_toggle_worktrees(&mut self) {
         self.layout_config.is_worktrees = !self.layout_config.is_worktrees;
+        self.mark_viewer_layout_dirty();
         if self.viewport == Viewport::Settings {
             return;
         }
@@ -1398,6 +1405,7 @@ impl App {
 
     pub fn on_toggle_status(&mut self) {
         self.layout_config.is_status = !self.layout_config.is_status;
+        self.mark_viewer_layout_dirty();
         if !self.layout_config.is_status && (self.focus == Focus::StatusTop || self.focus == Focus::StatusBottom) {
             self.focus = Focus::Viewport;
         }
@@ -1406,6 +1414,7 @@ impl App {
 
     pub fn on_toggle_inspector(&mut self) {
         self.layout_config.is_inspector = !self.layout_config.is_inspector;
+        self.mark_viewer_layout_dirty();
         if !self.layout_config.is_inspector && self.focus == Focus::Inspector {
             if self.layout_config.is_status {
                 self.focus = Focus::StatusTop;

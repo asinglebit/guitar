@@ -1,5 +1,5 @@
 use crate::{
-    git::queries::helpers::{FileChange, FileStatus, Hunk, UncommittedChanges, deduplicate, diff_to_hunks, walk_tree},
+    git::queries::helpers::{ConflictFile, FileChange, FileStatus, Hunk, UncommittedChanges, deduplicate, diff_to_hunks, walk_tree},
     helpers::text::{decode, sanitize},
 };
 use git2::{Delta, DiffOptions, Error, Oid, Repository, StatusOptions};
@@ -205,6 +205,27 @@ pub fn get_file_at_workdir(repo: &Repository, filename: &str) -> Vec<String> {
     std::fs::read_to_string(full_path).map(|s| s.lines().map(|l| l.to_string()).collect()).unwrap_or_default()
 }
 
+pub fn get_conflict_file(repo: &Repository, filename: &str) -> Result<Option<ConflictFile>, git2::Error> {
+    let index = repo.index()?;
+    let conflict = match index.conflict_get(Path::new(filename)) {
+        Ok(conflict) => conflict,
+        Err(error) if error.code() == git2::ErrorCode::NotFound => return Ok(None),
+        Err(error) => return Err(error),
+    };
+
+    Ok(Some(ConflictFile {
+        ancestor: conflict.ancestor.as_ref().map(|entry| read_index_entry_lines(repo, entry)).transpose()?.unwrap_or_default(),
+        ours: conflict.our.as_ref().map(|entry| read_index_entry_lines(repo, entry)).transpose()?.unwrap_or_default(),
+        theirs: conflict.their.as_ref().map(|entry| read_index_entry_lines(repo, entry)).transpose()?.unwrap_or_default(),
+        workdir: get_file_at_workdir(repo, filename),
+    }))
+}
+
+fn read_index_entry_lines(repo: &Repository, entry: &git2::IndexEntry) -> Result<Vec<String>, git2::Error> {
+    let blob = repo.find_blob(entry.id)?;
+    Ok(sanitize(decode(blob.content())).lines().map(|s| s.to_string()).collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -278,6 +299,13 @@ mod tests {
         assert!(changes.is_unstaged);
         assert_eq!(changes.conflict_count, 1);
         assert_eq!(changes.conflicts, vec!["file.txt".to_string()]);
+
+        let conflict = get_conflict_file(&repo, "file.txt").unwrap().unwrap();
+        assert!(!conflict.ours.is_empty());
+        assert!(!conflict.theirs.is_empty());
+        assert!(conflict.workdir.iter().any(|line| line.starts_with("<<<<<<<")));
+        assert!(conflict.workdir.iter().any(|line| line.starts_with("=======")));
+        assert!(conflict.workdir.iter().any(|line| line.starts_with(">>>>>>>")));
 
         let _ = fs::remove_dir_all(path);
     }

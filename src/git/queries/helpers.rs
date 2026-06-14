@@ -67,6 +67,15 @@ pub struct HunkHeader {
     pub raw_header: String, // Full header, including optional function context.
 }
 
+// Contents for a conflicted path, read from index conflict stages and workdir.
+#[derive(Debug, Default, Clone)]
+pub struct ConflictFile {
+    pub ancestor: Vec<String>,
+    pub ours: Vec<String>,
+    pub theirs: Vec<String>,
+    pub workdir: Vec<String>,
+}
+
 // Count unique filenames across staged and unstaged buckets.
 pub fn deduplicate(a: &[String], b: &[String]) -> usize {
     a.iter().chain(b).collect::<HashSet<_>>().len()

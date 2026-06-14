@@ -1,11 +1,11 @@
 use crate::{
     app::{
-        app::{App, Focus, Viewport},
+        app::{App, Focus, ViewerLayoutSignature, Viewport},
         app_default::{SplitViewerRow, ViewerMode},
     },
     git::queries::{
-        diffs::{get_file_at_oid, get_file_at_workdir, get_file_diff_at_oid, get_file_diff_at_workdir},
-        helpers::Hunk,
+        diffs::{get_conflict_file, get_file_at_oid, get_file_at_workdir, get_file_diff_at_oid, get_file_diff_at_workdir},
+        helpers::{ConflictFile, Hunk},
     },
     helpers::text::wrap_words,
 };
@@ -24,7 +24,41 @@ struct SplitCell {
     text: String,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ConflictSection {
+    Normal,
+    Ancestor,
+    Ours,
+    Theirs,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ConflictMarker {
+    Start,
+    Ancestor,
+    Separator,
+    End,
+}
+
+fn conflict_marker(line: &str) -> Option<ConflictMarker> {
+    if line.starts_with("<<<<<<<") {
+        Some(ConflictMarker::Start)
+    } else if line.starts_with("|||||||") {
+        Some(ConflictMarker::Ancestor)
+    } else if line.starts_with("=======") {
+        Some(ConflictMarker::Separator)
+    } else if line.starts_with(">>>>>>>") {
+        Some(ConflictMarker::End)
+    } else {
+        None
+    }
+}
+
 impl App {
+    pub fn current_viewer_layout_signature(&self) -> ViewerLayoutSignature {
+        ViewerLayoutSignature { graph_width: self.layout.graph.width, split_left_width: self.layout.viewer_split_left.width, split_right_width: self.layout.viewer_split_right.width }
+    }
+
     pub fn viewer_row_count(&self) -> usize {
         match self.viewer_mode {
             ViewerMode::Full => self.viewer_lines.len(),
@@ -269,9 +303,49 @@ impl App {
         }
     }
 
+    pub fn refresh_viewer_for_layout_change(&mut self) {
+        if self.viewport != Viewport::Viewer || self.file_name.is_none() {
+            return;
+        }
+        let Some(repo) = self.repo.clone() else {
+            return;
+        };
+
+        let old_mode = self.viewer_mode;
+        let old_unified_idx = match old_mode {
+            ViewerMode::Full => self.viewer_selected,
+            ViewerMode::Hunks => self.viewer_hunks.get(self.viewer_selected).copied().unwrap_or(0),
+            ViewerMode::Split => self.split_unified_index(self.viewer_selected),
+        };
+        let oid = if self.graph_selected != 0 { *self.oids.get_oid_by_idx(self.graph_selected) } else { Oid::zero() };
+
+        self.update_viewer(oid, &repo);
+        self.viewer_mode = old_mode;
+        self.viewer_selected = match old_mode {
+            ViewerMode::Full => old_unified_idx.min(self.viewer_lines.len().saturating_sub(1)),
+            ViewerMode::Hunks => self.viewer_hunks.iter().enumerate().min_by_key(|(_, h)| h.abs_diff(old_unified_idx)).map(|(idx, _)| idx).unwrap_or(0),
+            ViewerMode::Split => self.closest_split_row_for_unified(old_unified_idx),
+        };
+        self.viewer_scroll.set(self.viewer_selected);
+    }
+
+    pub fn mark_viewer_layout_dirty(&mut self) {
+        if self.viewport == Viewport::Viewer {
+            self.is_viewer_layout_dirty = true;
+        }
+    }
+
     pub fn update_viewer(&mut self, oid: Oid, repo: &git2::Repository) {
         // The selected filename is owned by App so viewer reloads can reuse it.
         let filename = self.file_name.clone().unwrap();
+
+        if oid == Oid::zero()
+            && self.uncommitted.conflicts.iter().any(|path| path == &filename)
+            && let Ok(Some(conflict)) = get_conflict_file(repo, &filename)
+        {
+            self.update_conflict_viewer(conflict);
+            return;
+        }
 
         // Oid::zero represents the uncommitted pseudo-row and reads from the working tree.
         let (original_lines, hunks) = if oid == Oid::zero() {
@@ -380,6 +454,144 @@ impl App {
 
         self.build_split_viewer_rows(&original_lines, &hunks);
         self.viewer_selected = self.viewer_edges.first().copied().unwrap_or(0);
+    }
+
+    fn update_conflict_viewer(&mut self, conflict: ConflictFile) {
+        self.viewer_lines.clear();
+        self.viewer_split_rows.clear();
+        self.viewer_edges.clear();
+        self.viewer_hunks.clear();
+
+        let mut section = ConflictSection::Normal;
+        for (idx, line) in conflict.workdir.iter().enumerate() {
+            let marker = conflict_marker(line);
+            let origin = match marker {
+                Some(ConflictMarker::Start) => {
+                    section = ConflictSection::Ours;
+                    '!'
+                },
+                Some(ConflictMarker::Ancestor) => {
+                    section = ConflictSection::Ancestor;
+                    '!'
+                },
+                Some(ConflictMarker::Separator) => {
+                    section = ConflictSection::Theirs;
+                    '!'
+                },
+                Some(ConflictMarker::End) => {
+                    section = ConflictSection::Normal;
+                    '!'
+                },
+                None => match section {
+                    ConflictSection::Ours => '+',
+                    ConflictSection::Theirs => '-',
+                    ConflictSection::Ancestor | ConflictSection::Normal => ' ',
+                },
+            };
+
+            if origin != ' ' {
+                self.viewer_hunks.push(self.viewer_lines.len());
+            }
+            if marker.is_some() {
+                self.viewer_edges.push(self.viewer_lines.len());
+            }
+
+            self.push_conflict_unified_line(idx + 1, origin, line);
+        }
+
+        self.build_conflict_split_rows(&conflict);
+        self.viewer_selected = self.viewer_edges.first().copied().unwrap_or(0);
+    }
+
+    fn push_conflict_unified_line(&mut self, number: usize, origin: char, text: &str) {
+        let (style, prefix, number_fg, text_fg) = match origin {
+            '!' => (Style::default().fg(self.theme.COLOR_ORANGE), "! ", self.theme.COLOR_ORANGE, self.theme.COLOR_ORANGE),
+            '-' => (Style::default().bg(self.theme.COLOR_DARK_RED).fg(self.theme.COLOR_RED), "- ", self.theme.COLOR_RED, self.theme.COLOR_RED),
+            '+' => (Style::default().bg(self.theme.COLOR_LIGHT_GREEN_900).fg(self.theme.COLOR_GREEN), "+ ", self.theme.COLOR_GREEN, self.theme.COLOR_GREEN),
+            _ => (Style::default(), "", self.theme.COLOR_BORDER, self.theme.COLOR_GREY_500),
+        };
+
+        let wrapped = wrap_words(format!("{}{}", prefix, text), (self.layout.graph.width as usize).saturating_sub(9));
+        for (idx, line_wrapped) in wrapped.into_iter().enumerate() {
+            self.viewer_lines.push(
+                ListItem::new(Line::from(vec![
+                    Span::styled(if idx == 0 { format!("{:3}  ", number) } else { "     ".to_string() }, Style::default().fg(number_fg)),
+                    Span::styled(line_wrapped, Style::default().fg(text_fg)),
+                ]))
+                .style(style),
+            );
+        }
+    }
+
+    fn build_conflict_split_rows(&mut self, conflict: &ConflictFile) {
+        let (left_width, right_width) = self.split_pane_text_widths();
+        let mut section = ConflictSection::Normal;
+        let mut ours_line = 1;
+        let mut theirs_line = 1;
+        let mut rendered_marker = false;
+
+        for (idx, line) in conflict.workdir.iter().enumerate() {
+            let source_idx = idx.min(self.viewer_lines.len().saturating_sub(1));
+            match conflict_marker(line) {
+                Some(ConflictMarker::Start) => {
+                    rendered_marker = true;
+                    section = ConflictSection::Ours;
+                    let marker = SplitCell { number: idx + 1, origin: '!', text: line.clone() };
+                    self.push_split_pair(Some(marker.clone()), Some(marker), left_width, right_width, vec![source_idx]);
+                },
+                Some(ConflictMarker::Ancestor) => {
+                    rendered_marker = true;
+                    section = ConflictSection::Ancestor;
+                    let marker = SplitCell { number: idx + 1, origin: '!', text: line.clone() };
+                    self.push_split_pair(Some(marker.clone()), Some(marker), left_width, right_width, vec![source_idx]);
+                },
+                Some(ConflictMarker::Separator) => {
+                    rendered_marker = true;
+                    section = ConflictSection::Theirs;
+                    let marker = SplitCell { number: idx + 1, origin: '!', text: line.clone() };
+                    self.push_split_pair(Some(marker.clone()), Some(marker), left_width, right_width, vec![source_idx]);
+                },
+                Some(ConflictMarker::End) => {
+                    rendered_marker = true;
+                    section = ConflictSection::Normal;
+                    let marker = SplitCell { number: idx + 1, origin: '!', text: line.clone() };
+                    self.push_split_pair(Some(marker.clone()), Some(marker), left_width, right_width, vec![source_idx]);
+                },
+                None => match section {
+                    ConflictSection::Normal => {
+                        let left = SplitCell { number: idx + 1, origin: ' ', text: line.clone() };
+                        let right = SplitCell { number: idx + 1, origin: ' ', text: line.clone() };
+                        self.push_split_pair(Some(left), Some(right), left_width, right_width, vec![source_idx]);
+                    },
+                    ConflictSection::Ancestor => {
+                        let ancestor = SplitCell { number: idx + 1, origin: '!', text: line.clone() };
+                        self.push_split_pair(Some(ancestor.clone()), Some(ancestor), left_width, right_width, vec![source_idx]);
+                    },
+                    ConflictSection::Ours => {
+                        let left = SplitCell { number: ours_line, origin: '-', text: line.clone() };
+                        self.push_split_pair(Some(left), None, left_width, right_width, vec![source_idx]);
+                        ours_line += 1;
+                    },
+                    ConflictSection::Theirs => {
+                        let right = SplitCell { number: theirs_line, origin: '+', text: line.clone() };
+                        self.push_split_pair(None, Some(right), left_width, right_width, vec![source_idx]);
+                        theirs_line += 1;
+                    },
+                },
+            }
+        }
+
+        if rendered_marker || conflict.ours.is_empty() || conflict.theirs.is_empty() {
+            return;
+        }
+
+        let rows = conflict.ours.len().max(conflict.theirs.len()).max(1);
+        for row in 0..rows {
+            let source_idx = row.min(self.viewer_lines.len().saturating_sub(1));
+            let left = conflict.ours.get(row).map(|text| SplitCell { number: row + 1, origin: '-', text: text.clone() });
+            let right = conflict.theirs.get(row).map(|text| SplitCell { number: row + 1, origin: '+', text: text.clone() });
+            self.push_split_pair(left, right, left_width, right_width, vec![source_idx]);
+        }
     }
 
     fn build_split_viewer_rows(&mut self, original_lines: &[String], hunks: &[Hunk]) {
@@ -550,6 +762,7 @@ impl App {
         match origin {
             '-' => "- ",
             '+' => "+ ",
+            '!' => "! ",
             _ => "",
         }
     }
@@ -559,16 +772,19 @@ impl App {
         let item_style = match origin {
             '-' => Style::default().bg(self.theme.COLOR_DARK_RED).fg(self.theme.COLOR_RED),
             '+' => Style::default().bg(self.theme.COLOR_LIGHT_GREEN_900).fg(self.theme.COLOR_GREEN),
+            '!' => Style::default().fg(self.theme.COLOR_ORANGE),
             _ => Style::default(),
         };
         let number_fg = match origin {
             '-' => self.theme.COLOR_RED,
             '+' => self.theme.COLOR_GREEN,
+            '!' => self.theme.COLOR_ORANGE,
             _ => self.theme.COLOR_BORDER,
         };
         let text_fg = match origin {
             '-' => self.theme.COLOR_RED,
             '+' => self.theme.COLOR_GREEN,
+            '!' => self.theme.COLOR_ORANGE,
             _ => self.theme.COLOR_GREY_500,
         };
         let number = if show_number { cell.map(|cell| format!("{:3}  ", cell.number)).unwrap_or_else(|| "     ".to_string()) } else { "     ".to_string() };

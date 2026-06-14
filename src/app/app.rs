@@ -102,6 +102,13 @@ pub enum PendingRebaseAction {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub struct ViewerLayoutSignature {
+    pub graph_width: u16,
+    pub split_left_width: u16,
+    pub split_right_width: u16,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum WorktreeModalAction {
     Open,
     Remove,
@@ -168,6 +175,8 @@ pub struct App {
     pub viewer_edges: Vec<usize>,
     pub viewer_hunks: Vec<usize>,
     pub viewer_mode: ViewerMode,
+    pub is_viewer_layout_dirty: bool,
+    pub viewer_layout_signature: Option<ViewerLayoutSignature>,
 
     // Last computed terminal rectangles.
     pub layout: Layout,
@@ -302,6 +311,17 @@ impl App {
     pub fn draw(&mut self, frame: &mut Frame) {
         // Layout must be recomputed every frame because terminal size and focus can change.
         self.layout(frame);
+        if self.viewport == Viewport::Viewer {
+            let signature = self.current_viewer_layout_signature();
+            if self.viewer_layout_signature != Some(signature) {
+                self.is_viewer_layout_dirty = true;
+            }
+            self.viewer_layout_signature = Some(signature);
+        }
+        if self.is_viewer_layout_dirty {
+            self.refresh_viewer_for_layout_change();
+            self.is_viewer_layout_dirty = false;
+        }
 
         let is_splash = self.viewport == Viewport::Splash;
 
