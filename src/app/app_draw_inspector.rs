@@ -29,13 +29,13 @@ impl App {
         if is_showing_uncommitted && self.uncommitted.has_conflicts {
             lines = vec![
                 Line::from(Span::styled("repository state:", Style::default().fg(self.theme.COLOR_GREY_500))),
-                Line::from(Span::styled("rebase conflicts", Style::default().fg(self.theme.COLOR_ORANGE))),
+                Line::from(Span::styled("operation conflicts", Style::default().fg(self.theme.COLOR_ORANGE))),
                 Line::default(),
                 Line::from(Span::styled("conflicted files:", Style::default().fg(self.theme.COLOR_GREY_500))),
                 Line::from(Span::styled(self.uncommitted.conflict_count.to_string(), Style::default().fg(self.theme.COLOR_ORANGE))),
                 Line::default(),
                 Line::from(Span::styled("next action:", Style::default().fg(self.theme.COLOR_GREY_500))),
-                Line::from(Span::styled("resolve files externally, then continue rebase", Style::default().fg(self.theme.COLOR_TEXT))),
+                Line::from(Span::styled("resolve files externally, then action+Shift+C", Style::default().fg(self.theme.COLOR_TEXT))),
             ];
         } else if !is_showing_uncommitted {
             // Commit metadata is read lazily for the selected graph row.

@@ -276,6 +276,9 @@ impl App {
                     | Focus::ModalGrep
                     | Focus::ModalTag
                     | Focus::ModalDeleteTag
+                    | Focus::ModalOperationProgress
+                    | Focus::ModalOperationConflict
+                    | Focus::ModalOperationSuccess
                     | Focus::ModalError
             ) {
                 zen
@@ -337,6 +340,9 @@ impl App {
                         | Focus::ModalGrep
                         | Focus::ModalTag
                         | Focus::ModalDeleteTag
+                        | Focus::ModalOperationProgress
+                        | Focus::ModalOperationConflict
+                        | Focus::ModalOperationSuccess
                         | Focus::ModalError
                 ) {
                     zen

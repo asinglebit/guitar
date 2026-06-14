@@ -133,8 +133,8 @@ guitar --reset
 - Discard changes for a selected status file by resetting it to `HEAD`.
 - Cherry-pick a selected commit after confirming or editing the resulting commit message.
 - Rebase the current local branch onto the selected graph commit.
-- Continue or abort an in-progress rebase from action mode.
-- Conflict-aware rebase flow: conflicts are surfaced in a modal, marked in the graph/status/inspector panes, and can be viewed in unified or split diff mode while you resolve them externally.
+- Continue or abort an in-progress rebase or cherry-pick from action mode.
+- Conflict-aware rebase and cherry-pick flows: conflicts are surfaced in a modal, marked in the graph/status/inspector panes, and can be viewed in unified or split diff mode while you resolve them externally.
 
 #### Input, Layout, and Persistence
 
@@ -159,11 +159,9 @@ Saved files live under your platform config directory in a `guitar` folder, for 
 - There is no normal non-force branch push command yet. The current branch push command is force push only.
 - There is no pull UI.
 - Merge workflows are not implemented.
-- Conflict resolution editing is external; guitar detects conflicts, displays conflicted files, and continues rebases after you resolve files in another editor.
+- Conflict resolution editing is external; guitar detects conflicts, displays conflicted files, and continues rebases or cherry-picks after you resolve files in another editor.
 - Rebasing requires a checked-out local branch. Detached `HEAD` rebases are intentionally refused.
-- Cherry-pick is still rough: it auto-commits after the message prompt and has no conflict-resolution UI.
 - Worktree move/repair and custom separate worktree branch names are not implemented.
-- Bare repositories are not supported.
 - Submodules are ignored in commit diffs.
 - Merge commit file lists and file diffs are compared to the first parent only.
 - The graph renderer models ordinary two-parent merges; octopus merges are not a first-class display target.
@@ -255,8 +253,9 @@ Dangerous actions live behind action mode. By default, press `Ctrl+a`, then pres
 | Toggle Worktree Lock | `Shift+L` |
 | Untag | `Shift+U` |
 | Cherrypick | `y` |
-| Rebase / Continue Rebase | `r` |
-| Abort Rebase | `Shift+R` |
+| Rebase | `r` |
+| Continue Rebase/Cherrypick | `Shift+C` |
+| Abort Rebase/Cherrypick | `Shift+A` |
 
 ### Screenshots
 

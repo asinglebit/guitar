@@ -52,6 +52,7 @@ pub mod git {
         pub mod checkout;
         pub mod cherrypicking;
         pub mod committing;
+        pub mod conflicts;
         pub mod fetching;
         pub mod pushing;
         pub mod rebasing;

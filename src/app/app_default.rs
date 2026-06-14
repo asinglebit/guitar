@@ -7,7 +7,7 @@ use crate::{
 };
 use crate::{
     app::{
-        app::{App, Focus, Viewport, WorktreeModalAction},
+        app::{App, Focus, OperationKind, Viewport, WorktreeModalAction},
         app_layout::Layout,
     },
     core::{branches::Branches, buffer::Buffer, oids::Oids, tags::Tags},
@@ -159,8 +159,9 @@ impl Default for App {
             // Modal error
             modal_error_message: String::new(),
             modal_error_return_focus: Focus::Viewport,
-            modal_rebase_message: String::new(),
-            pending_rebase_action: None,
+            modal_operation_kind: OperationKind::Rebase,
+            modal_operation_message: String::new(),
+            pending_operation_action: None,
 
             // Exit
             is_exit: false,

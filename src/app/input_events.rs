@@ -169,9 +169,9 @@ impl App {
                 | Focus::ModalGrep
                 | Focus::ModalTag
                 | Focus::ModalDeleteTag
-                | Focus::ModalRebaseProgress
-                | Focus::ModalRebaseConflict
-                | Focus::ModalRebaseSuccess
+                | Focus::ModalOperationProgress
+                | Focus::ModalOperationConflict
+                | Focus::ModalOperationSuccess
                 | Focus::ModalError
         )
     }

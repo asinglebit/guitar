@@ -1,9 +1,10 @@
 use crate::{
-    app::app::{App, Focus, PendingRebaseAction, Viewport},
+    app::app::{App, Focus, OperationKind, PendingOperationAction, Viewport},
     git::{
         actions::{
             branching::delete_branch,
             checkout::{checkout_branch, checkout_head},
+            cherrypicking::{CherrypickOutcome, abort_cherrypick, continue_cherrypick, is_cherrypick_in_progress},
             fetching::fetch_over_ssh,
             pushing::{push_over_ssh, push_tags_over_ssh},
             rebasing::{RebaseOutcome, abort_rebase, continue_rebase, is_rebase_in_progress, start_rebase},
@@ -15,17 +16,17 @@ use crate::{
         queries::commits::get_current_branch,
     },
 };
-use git2::Repository;
+use git2::{Repository, RepositoryState};
 use std::path::Path;
 
 impl App {
-    pub fn run_pending_rebase_action(&mut self) {
-        let Some(action) = self.pending_rebase_action.take() else {
+    pub fn run_pending_operation_action(&mut self) {
+        let Some(action) = self.pending_operation_action.take() else {
             return;
         };
         let Some(path) = self.repo.as_ref().map(|repo| repo.path().to_path_buf()) else {
             self.focus = Focus::Viewport;
-            self.show_error("Rebase failed: no repository is open");
+            self.show_error("Git operation failed: no repository is open");
             return;
         };
 
@@ -38,33 +39,96 @@ impl App {
             },
         };
 
-        let result = match action {
-            PendingRebaseAction::Start(oid) => start_rebase(&repo, oid),
-            PendingRebaseAction::Continue => continue_rebase(&repo),
-            PendingRebaseAction::Abort => abort_rebase(&repo),
-        };
+        match action {
+            PendingOperationAction::Start(oid) => self.handle_rebase_result(start_rebase(&repo, oid)),
+            PendingOperationAction::Continue => self.continue_active_operation(&repo),
+            PendingOperationAction::Abort => self.abort_active_operation(&repo),
+        }
+    }
 
+    fn handle_rebase_result(&mut self, result: Result<RebaseOutcome, git2::Error>) {
+        self.modal_operation_kind = OperationKind::Rebase;
         match result {
             Ok(RebaseOutcome::Completed { applied }) => {
-                self.modal_rebase_message = if applied == 1 { "Rebase completed after applying 1 commit.".to_string() } else { format!("Rebase completed after applying {applied} commits.") };
-                self.focus = Focus::ModalRebaseSuccess;
+                self.modal_operation_message = if applied == 1 { "Rebase completed after applying 1 commit.".to_string() } else { format!("Rebase completed after applying {applied} commits.") };
+                self.focus = Focus::ModalOperationSuccess;
                 self.reload(None);
             },
             Ok(RebaseOutcome::Conflict) => {
-                self.modal_rebase_message = "Rebase stopped because conflicts need to be resolved.".to_string();
-                self.focus = Focus::ModalRebaseConflict;
-                self.reload(None);
+                self.show_operation_conflict(OperationKind::Rebase, "Rebase stopped because conflicts need to be resolved.");
             },
             Ok(RebaseOutcome::Aborted) => {
-                self.modal_rebase_message = "Rebase aborted.".to_string();
-                self.focus = Focus::ModalRebaseSuccess;
+                self.modal_operation_message = "Rebase aborted.".to_string();
+                self.focus = Focus::ModalOperationSuccess;
                 self.reload(None);
             },
             Err(error) => {
-                self.modal_rebase_message.clear();
+                self.modal_operation_message.clear();
                 self.focus = Focus::Viewport;
                 self.show_error(format!("Rebase failed: {error}"));
                 self.reload(None);
+            },
+        }
+    }
+
+    fn handle_cherrypick_result(&mut self, result: Result<CherrypickOutcome, git2::Error>) {
+        self.modal_operation_kind = OperationKind::Cherrypick;
+        match result {
+            Ok(CherrypickOutcome::Committed { .. }) => {
+                self.modal_operation_message = "Cherry-pick completed.".to_string();
+                self.focus = Focus::ModalOperationSuccess;
+                self.reload(None);
+            },
+            Ok(CherrypickOutcome::Conflict) => {
+                self.show_operation_conflict(OperationKind::Cherrypick, "Cherry-pick stopped because conflicts need to be resolved.");
+            },
+            Ok(CherrypickOutcome::Aborted) => {
+                self.modal_operation_message = "Cherry-pick aborted.".to_string();
+                self.focus = Focus::ModalOperationSuccess;
+                self.reload(None);
+            },
+            Err(error) => {
+                self.modal_operation_message.clear();
+                self.focus = Focus::Viewport;
+                self.show_error(format!("Cherry-pick failed: {error}"));
+                self.reload(None);
+            },
+        }
+    }
+
+    pub fn show_operation_conflict(&mut self, kind: OperationKind, message: impl Into<String>) {
+        self.modal_operation_kind = kind;
+        self.modal_operation_message = message.into();
+        self.focus = Focus::ModalOperationConflict;
+        self.reload(None);
+    }
+
+    fn active_operation_kind(repo: &Repository) -> Option<OperationKind> {
+        match repo.state() {
+            RepositoryState::Rebase | RepositoryState::RebaseInteractive | RepositoryState::RebaseMerge | RepositoryState::ApplyMailboxOrRebase => Some(OperationKind::Rebase),
+            RepositoryState::CherryPick | RepositoryState::CherryPickSequence => Some(OperationKind::Cherrypick),
+            _ => None,
+        }
+    }
+
+    fn continue_active_operation(&mut self, repo: &Repository) {
+        match Self::active_operation_kind(repo) {
+            Some(OperationKind::Rebase) => self.handle_rebase_result(continue_rebase(repo)),
+            Some(OperationKind::Cherrypick) => self.handle_cherrypick_result(continue_cherrypick(repo)),
+            None => {
+                self.focus = Focus::Viewport;
+                self.show_error("Continue failed: no rebase or cherry-pick in progress");
+            },
+        }
+    }
+
+    fn abort_active_operation(&mut self, repo: &Repository) {
+        match Self::active_operation_kind(repo) {
+            Some(OperationKind::Rebase) => self.handle_rebase_result(abort_rebase(repo)),
+            Some(OperationKind::Cherrypick) => self.handle_cherrypick_result(abort_cherrypick(repo)),
+            None => {
+                self.focus = Focus::Viewport;
+                self.show_error("Abort failed: no rebase or cherry-pick in progress");
             },
         }
     }
@@ -293,7 +357,7 @@ impl App {
                                 let mut idx = self.status_top_selected;
                                 let conflicts = &self.uncommitted.conflicts;
                                 if idx < conflicts.len() {
-                                    self.show_error("Unstage file failed: resolve conflicts in your editor, then continue the rebase");
+                                    self.show_error("Unstage file failed: resolve conflicts in your editor, then continue the active operation");
                                     return;
                                 }
                                 idx -= conflicts.len();
@@ -348,7 +412,7 @@ impl App {
                                 let mut idx = self.status_bottom_selected;
                                 let conflicts = &self.uncommitted.conflicts;
                                 if idx < conflicts.len() {
-                                    self.show_error("Stage file failed: resolve conflicts in your editor, then continue the rebase");
+                                    self.show_error("Stage file failed: resolve conflicts in your editor, then continue the active operation");
                                     return;
                                 }
                                 idx -= conflicts.len();
@@ -591,10 +655,8 @@ impl App {
             return;
         }
 
-        if is_rebase_in_progress(repo) {
-            self.pending_rebase_action = Some(PendingRebaseAction::Continue);
-            self.modal_rebase_message = "Continuing rebase...".to_string();
-            self.focus = Focus::ModalRebaseProgress;
+        if is_rebase_in_progress(repo) || is_cherrypick_in_progress(repo) {
+            self.on_continue_operation();
             return;
         }
 
@@ -603,20 +665,36 @@ impl App {
         }
 
         let oid = *self.oids.get_oid_by_idx(self.graph_selected);
-        self.pending_rebase_action = Some(PendingRebaseAction::Start(oid));
-        self.modal_rebase_message = "Rebasing the current branch onto the selected commit...".to_string();
-        self.focus = Focus::ModalRebaseProgress;
+        self.pending_operation_action = Some(PendingOperationAction::Start(oid));
+        self.modal_operation_kind = OperationKind::Rebase;
+        self.modal_operation_message = "Rebasing the current branch onto the selected commit...".to_string();
+        self.focus = Focus::ModalOperationProgress;
     }
 
-    pub fn on_abort_rebase(&mut self) {
+    pub fn on_continue_operation(&mut self) {
         let Some(repo) = &self.repo else { return };
-        if matches!(self.viewport, Viewport::Settings | Viewport::Viewer) || self.focus != Focus::Viewport || !is_rebase_in_progress(repo) {
+        if matches!(self.viewport, Viewport::Settings | Viewport::Viewer) || self.focus != Focus::Viewport || Self::active_operation_kind(repo).is_none() {
             return;
         }
 
-        self.pending_rebase_action = Some(PendingRebaseAction::Abort);
-        self.modal_rebase_message = "Aborting rebase...".to_string();
-        self.focus = Focus::ModalRebaseProgress;
+        let kind = Self::active_operation_kind(repo).unwrap();
+        self.pending_operation_action = Some(PendingOperationAction::Continue);
+        self.modal_operation_kind = kind;
+        self.modal_operation_message = format!("Continuing {}...", kind.label());
+        self.focus = Focus::ModalOperationProgress;
+    }
+
+    pub fn on_abort_operation(&mut self) {
+        let Some(repo) = &self.repo else { return };
+        if matches!(self.viewport, Viewport::Settings | Viewport::Viewer) || self.focus != Focus::Viewport || Self::active_operation_kind(repo).is_none() {
+            return;
+        }
+
+        let kind = Self::active_operation_kind(repo).unwrap();
+        self.pending_operation_action = Some(PendingOperationAction::Abort);
+        self.modal_operation_kind = kind;
+        self.modal_operation_message = format!("Aborting {}...", kind.label());
+        self.focus = Focus::ModalOperationProgress;
     }
 }
 

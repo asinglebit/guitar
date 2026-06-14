@@ -89,14 +89,29 @@ pub enum Focus {
     ModalGrep,
     ModalTag,
     ModalDeleteTag,
-    ModalRebaseProgress,
-    ModalRebaseConflict,
-    ModalRebaseSuccess,
+    ModalOperationProgress,
+    ModalOperationConflict,
+    ModalOperationSuccess,
     ModalError,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum PendingRebaseAction {
+pub enum OperationKind {
+    Rebase,
+    Cherrypick,
+}
+
+impl OperationKind {
+    pub fn label(self) -> &'static str {
+        match self {
+            OperationKind::Rebase => "rebase",
+            OperationKind::Cherrypick => "cherrypick",
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum PendingOperationAction {
     Start(Oid),
     Continue,
     Abort,
@@ -257,9 +272,10 @@ pub struct App {
     pub modal_error_message: String,
     pub modal_error_return_focus: Focus,
 
-    // Modal rebase
-    pub modal_rebase_message: String,
-    pub pending_rebase_action: Option<PendingRebaseAction>,
+    // Modal git operation
+    pub modal_operation_kind: OperationKind,
+    pub modal_operation_message: String,
+    pub pending_operation_action: Option<PendingOperationAction>,
 
     // Main loop shutdown flag.
     pub is_exit: bool,
@@ -294,7 +310,7 @@ impl App {
                 }
 
                 terminal.draw(|frame| self.draw(frame))?;
-                self.run_pending_rebase_action();
+                self.run_pending_operation_action();
             }
 
             Ok(())
@@ -407,7 +423,7 @@ impl App {
                 Focus::ModalDeleteTag => {
                     self.draw_modal_delete_tag(frame);
                 },
-                Focus::ModalRebaseProgress | Focus::ModalRebaseConflict | Focus::ModalRebaseSuccess => {
+                Focus::ModalOperationProgress | Focus::ModalOperationConflict | Focus::ModalOperationSuccess => {
                     self.draw_modal_rebase(frame);
                 },
                 Focus::ModalError => {

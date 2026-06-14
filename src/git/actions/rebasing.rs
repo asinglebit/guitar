@@ -1,6 +1,8 @@
-use crate::git::queries::commits::get_current_branch;
-use git2::{Error, Oid, Rebase, RebaseOptions, Repository, RepositoryState, StatusOptions, build::CheckoutBuilder};
-use std::path::{Path, PathBuf};
+use crate::git::{
+    actions::conflicts::{ensure_clean_workdir, mark_conflicts_resolved_from_workdir},
+    queries::commits::get_current_branch,
+};
+use git2::{Error, Oid, Rebase, RebaseOptions, Repository, RepositoryState, build::CheckoutBuilder};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RebaseOutcome {
@@ -24,56 +26,6 @@ fn rebase_options<'a>() -> RebaseOptions<'a> {
     let mut opts = RebaseOptions::new();
     opts.checkout_options(checkout);
     opts
-}
-
-fn ensure_clean_workdir(repo: &Repository) -> Result<(), Error> {
-    let index = repo.index()?;
-    if index.has_conflicts() {
-        return Err(Error::from_str("repository has unresolved conflicts"));
-    }
-
-    let mut options = StatusOptions::new();
-    options.include_untracked(true).show(git2::StatusShow::IndexAndWorkdir).renames_head_to_index(false).renames_index_to_workdir(false);
-    let statuses = repo.statuses(Some(&mut options))?;
-    if statuses.is_empty() { Ok(()) } else { Err(Error::from_str("working tree must be clean before rebasing")) }
-}
-
-fn conflict_path(entry: &git2::IndexEntry) -> Option<PathBuf> {
-    std::str::from_utf8(&entry.path).ok().map(PathBuf::from)
-}
-
-fn collect_conflict_paths(repo: &Repository) -> Result<Vec<PathBuf>, Error> {
-    let index = repo.index()?;
-    let mut paths = Vec::new();
-
-    for conflict in index.conflicts()? {
-        let conflict = conflict?;
-        let path = conflict.our.as_ref().and_then(conflict_path).or_else(|| conflict.their.as_ref().and_then(conflict_path)).or_else(|| conflict.ancestor.as_ref().and_then(conflict_path));
-        if let Some(path) = path
-            && !paths.iter().any(|existing| existing == &path)
-        {
-            paths.push(path);
-        }
-    }
-
-    Ok(paths)
-}
-
-fn mark_conflicts_resolved_from_workdir(repo: &Repository) -> Result<(), Error> {
-    let workdir = repo.workdir().ok_or_else(|| Error::from_str("bare repositories are not supported"))?.to_path_buf();
-    let paths = collect_conflict_paths(repo)?;
-    let mut index = repo.index()?;
-
-    for path in paths {
-        if workdir.join(&path).exists() {
-            index.add_path(Path::new(&path))?;
-        } else {
-            index.remove_path(Path::new(&path))?;
-        }
-    }
-
-    index.write()?;
-    Ok(())
 }
 
 fn drive_rebase(repo: &Repository, rebase: &mut Rebase<'_>, mut applied: usize) -> Result<RebaseOutcome, Error> {
@@ -110,7 +62,7 @@ pub fn start_rebase(repo: &Repository, upstream_oid: Oid) -> Result<RebaseOutcom
         return Err(Error::from_str("selected commit is already HEAD"));
     }
 
-    ensure_clean_workdir(repo)?;
+    ensure_clean_workdir(repo, "rebasing")?;
 
     let upstream = repo.find_annotated_commit(upstream_oid)?;
     let mut opts = rebase_options();
@@ -158,7 +110,7 @@ mod tests {
     use git2::{Repository, Signature};
     use std::{
         fs,
-        path::Path,
+        path::{Path, PathBuf},
         time::{SystemTime, UNIX_EPOCH},
     };
 

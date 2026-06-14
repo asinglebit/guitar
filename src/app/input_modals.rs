@@ -2,7 +2,7 @@ use crate::{
     app::app::{App, Focus},
     git::actions::{
         branching::create_branch,
-        cherrypicking::cherry_pick_commit,
+        cherrypicking::{CherrypickOutcome, start_cherrypick},
         committing::commit_staged,
         tagging::tag,
         worktrees::{create_worktree, is_valid_worktree_name, lock_worktree},
@@ -34,16 +34,16 @@ impl App {
             return true;
         }
 
-        if matches!(self.focus, Focus::ModalRebaseConflict | Focus::ModalRebaseSuccess) {
+        if matches!(self.focus, Focus::ModalOperationConflict | Focus::ModalOperationSuccess) {
             if matches!(key_event.code, KeyCode::Enter | KeyCode::Esc) {
-                self.modal_rebase_message.clear();
+                self.modal_operation_message.clear();
                 self.focus = Focus::Viewport;
                 self.reload(None);
             }
             return true;
         }
 
-        if self.focus == Focus::ModalRebaseProgress {
+        if self.focus == Focus::ModalOperationProgress {
             return true;
         }
 
@@ -103,14 +103,19 @@ impl App {
                             return true;
                         }
 
-                        // Cherry-pick reloads because it creates a new HEAD commit.
-                        match cherry_pick_commit(repo, oid, Some(&message), true) {
-                            Ok(_) => {
+                        match start_cherrypick(repo, oid, &message) {
+                            Ok(CherrypickOutcome::Committed { .. }) => {
                                 self.modal_input.clear();
                                 self.pending_cherrypick_oid = None;
                                 self.reload(None);
                                 self.focus = Focus::Viewport;
                             },
+                            Ok(CherrypickOutcome::Conflict) => {
+                                self.modal_input.clear();
+                                self.pending_cherrypick_oid = None;
+                                self.show_operation_conflict(crate::app::app::OperationKind::Cherrypick, "Cherry-pick stopped because conflicts need to be resolved.");
+                            },
+                            Ok(CherrypickOutcome::Aborted) => {},
                             Err(error) => self.show_error(format!("Cherry-pick failed: {error}")),
                         }
                     },

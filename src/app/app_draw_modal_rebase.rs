@@ -13,15 +13,15 @@ use ratatui::{
 impl App {
     pub fn draw_modal_rebase(&mut self, frame: &mut Frame) {
         let (title, hint) = match self.focus {
-            Focus::ModalRebaseProgress => ("rebase", "working..."),
-            Focus::ModalRebaseConflict => ("rebase conflict", "resolve conflicts in your editor, then press (Enter)"),
-            Focus::ModalRebaseSuccess => ("rebase complete", "press (Enter)"),
-            _ => ("rebase", "press Enter"),
+            Focus::ModalOperationProgress => (self.modal_operation_kind.label().to_string(), "working..."),
+            Focus::ModalOperationConflict => (format!("{} conflict", self.modal_operation_kind.label()), "resolve conflicts in your editor, then press Enter and action+Shift+C"),
+            Focus::ModalOperationSuccess => (format!("{} complete", self.modal_operation_kind.label()), "press (Enter)"),
+            _ => (self.modal_operation_kind.label().to_string(), "press Enter"),
         };
 
         let max_modal_width = (frame.area().width as f32 * 0.8) as usize;
         let text_width = max_modal_width.saturating_sub(10).clamp(1, 70);
-        let wrapped_message = wrap_words(self.modal_rebase_message.clone(), text_width);
+        let wrapped_message = wrap_words(self.modal_operation_message.clone(), text_width);
         let mut lines = Vec::new();
         lines.push(Line::default());
         lines.push(Line::default());
@@ -41,9 +41,9 @@ impl App {
 
         frame.render_widget(Clear, modal_area);
 
-        let border_color = if self.focus == Focus::ModalRebaseConflict { self.theme.COLOR_ORANGE } else { self.theme.COLOR_BORDER };
+        let border_color = if self.focus == Focus::ModalOperationConflict { self.theme.COLOR_ORANGE } else { self.theme.COLOR_BORDER };
         let modal_block = Block::default()
-            .title(Span::styled(format!(" {title} "), Style::default().fg(if self.focus == Focus::ModalRebaseConflict { self.theme.COLOR_ORANGE } else { self.theme.COLOR_TEXT })))
+            .title(Span::styled(format!(" {title} "), Style::default().fg(if self.focus == Focus::ModalOperationConflict { self.theme.COLOR_ORANGE } else { self.theme.COLOR_TEXT })))
             .title_alignment(Alignment::Center)
             .borders(Borders::ALL)
             .border_type(ratatui::widgets::BorderType::Rounded)
