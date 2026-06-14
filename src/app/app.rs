@@ -7,7 +7,7 @@ use crate::{
         queries::{diffs::get_filenames_diff_at_oid, worktrees::list_worktrees},
     },
     helpers::{
-        copy::{STR_CREATE_BRANCH, STR_CREATE_COMMIT, STR_CREATE_TAG, STR_CREATE_WORKTREE_NAME, STR_CREATE_WORKTREE_PATH, STR_FIND_SHA, STR_LOCK_WORKTREE},
+        copy::{STR_CHERRYPICK_COMMIT, STR_CREATE_BRANCH, STR_CREATE_COMMIT, STR_CREATE_TAG, STR_CREATE_WORKTREE_NAME, STR_CREATE_WORKTREE_PATH, STR_FIND_SHA, STR_LOCK_WORKTREE},
         heatmap::{DAYS, WEEKS, empty_heatmap},
         keymap::{Command, KeyBinding},
         layout::LayoutConfig,
@@ -78,6 +78,7 @@ pub enum Focus {
     ModalCheckout,
     ModalSolo,
     ModalCommit,
+    ModalCherrypick,
     ModalCreateBranch,
     ModalCreateWorktreeName,
     ModalCreateWorktreePath,
@@ -238,6 +239,7 @@ pub struct App {
 
     // Modal editor
     pub modal_input: TextInput,
+    pub pending_cherrypick_oid: Option<Oid>,
     pub modal_worktree_name: String,
     pub modal_worktree_selected: i32,
     pub modal_worktree_candidates: Vec<usize>,
@@ -413,6 +415,9 @@ impl App {
                 },
                 Focus::ModalCommit => {
                     self.draw_modal_input(frame, STR_CREATE_COMMIT);
+                },
+                Focus::ModalCherrypick => {
+                    self.draw_modal_input(frame, STR_CHERRYPICK_COMMIT);
                 },
                 Focus::ModalCreateBranch => {
                     self.draw_modal_input(frame, STR_CREATE_BRANCH);

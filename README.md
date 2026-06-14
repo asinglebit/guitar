@@ -131,7 +131,7 @@ guitar --reset
 - Pop or drop a selected stash.
 - Hard reset or mixed reset to the selected commit.
 - Discard changes for a selected status file by resetting it to `HEAD`.
-- Cherry-pick a selected commit in a basic happy-path flow.
+- Cherry-pick a selected commit after confirming or editing the resulting commit message.
 - Rebase the current local branch onto the selected graph commit.
 - Continue or abort an in-progress rebase from action mode.
 - Conflict-aware rebase flow: conflicts are surfaced in a modal, marked in the graph/status/inspector panes, and can be viewed in unified or split diff mode while you resolve them externally.
@@ -161,7 +161,7 @@ Saved files live under your platform config directory in a `guitar` folder, for 
 - Merge workflows are not implemented.
 - Conflict resolution editing is external; guitar detects conflicts, displays conflicted files, and continues rebases after you resolve files in another editor.
 - Rebasing requires a checked-out local branch. Detached `HEAD` rebases are intentionally refused.
-- Cherry-pick is still rough: it auto-commits, has no conflict-resolution UI, and does not provide a message editor for the resulting commit.
+- Cherry-pick is still rough: it auto-commits after the message prompt and has no conflict-resolution UI.
 - Worktree move/repair and custom separate worktree branch names are not implemented.
 - Bare repositories are not supported.
 - Submodules are ignored in commit diffs.

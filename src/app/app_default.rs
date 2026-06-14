@@ -142,6 +142,7 @@ impl Default for App {
 
             // Modal editor
             modal_input: TextInput::default(),
+            pending_cherrypick_oid: None,
             modal_worktree_name: String::new(),
             modal_worktree_selected: 0,
             modal_worktree_candidates: Vec::new(),

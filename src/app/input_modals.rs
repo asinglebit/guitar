@@ -2,6 +2,7 @@ use crate::{
     app::app::{App, Focus},
     git::actions::{
         branching::create_branch,
+        cherrypicking::cherry_pick_commit,
         committing::commit_staged,
         tagging::tag,
         worktrees::{create_worktree, is_valid_worktree_name, lock_worktree},
@@ -74,6 +75,43 @@ impl App {
                                 },
                                 Err(error) => self.show_error(format!("Commit failed: {error}")),
                             }
+                        }
+                    },
+                    _ => {
+                        self.modal_input.on_key(key_event);
+                    },
+                }
+                true
+            },
+            Focus::ModalCherrypick => {
+                match key_event.code {
+                    KeyCode::Esc => {
+                        self.focus = Focus::Viewport;
+                        self.modal_input.clear();
+                        self.pending_cherrypick_oid = None;
+                    },
+                    KeyCode::Enter => {
+                        let Some(repo) = &self.repo else {
+                            return true;
+                        };
+                        let Some(oid) = self.pending_cherrypick_oid else {
+                            self.show_error("Cherry-pick failed: no commit is pending");
+                            return true;
+                        };
+                        let message = self.modal_input.value().trim().to_string();
+                        if message.is_empty() {
+                            return true;
+                        }
+
+                        // Cherry-pick reloads because it creates a new HEAD commit.
+                        match cherry_pick_commit(repo, oid, Some(&message), true) {
+                            Ok(_) => {
+                                self.modal_input.clear();
+                                self.pending_cherrypick_oid = None;
+                                self.reload(None);
+                                self.focus = Focus::Viewport;
+                            },
+                            Err(error) => self.show_error(format!("Cherry-pick failed: {error}")),
                         }
                     },
                     _ => {

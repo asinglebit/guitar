@@ -1252,6 +1252,12 @@ impl App {
     pub fn on_back(&mut self) {
         match self.focus {
             Focus::ModalCommit => {
+                self.modal_input.clear();
+                self.focus = Focus::Viewport;
+            },
+            Focus::ModalCherrypick => {
+                self.modal_input.clear();
+                self.pending_cherrypick_oid = None;
                 self.focus = Focus::Viewport;
             },
             Focus::ModalCreateWorktreeName | Focus::ModalCreateWorktreePath => {
@@ -1321,7 +1327,16 @@ impl App {
                 self.clear_worktree_modal_state();
                 self.focus = Focus::Viewport;
             },
-            Focus::ModalCheckout | Focus::ModalCommit | Focus::ModalCreateWorktreeName | Focus::ModalCreateWorktreePath | Focus::ModalLockWorktree => {
+            Focus::ModalCherrypick => {
+                self.modal_input.clear();
+                self.pending_cherrypick_oid = None;
+                self.focus = Focus::Viewport;
+            },
+            Focus::ModalCommit | Focus::ModalCreateWorktreeName | Focus::ModalCreateWorktreePath | Focus::ModalLockWorktree => {
+                self.modal_input.clear();
+                self.focus = Focus::Viewport;
+            },
+            Focus::ModalCheckout => {
                 self.focus = Focus::Viewport;
             },
             _ => {},

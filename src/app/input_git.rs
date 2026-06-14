@@ -4,7 +4,6 @@ use crate::{
         actions::{
             branching::delete_branch,
             checkout::{checkout_branch, checkout_head},
-            cherrypicking::cherry_pick_commit,
             fetching::fetch_over_ssh,
             pushing::{push_over_ssh, push_tags_over_ssh},
             rebasing::{RebaseOutcome, abort_rebase, continue_rebase, is_rebase_in_progress, start_rebase},
@@ -568,11 +567,19 @@ impl App {
             && let Some(repo) = &self.repo
         {
             let idx = if self.graph_selected == 0 { 1 } else { self.graph_selected };
-            let oid = self.oids.get_oid_by_idx(idx);
+            let oid = *self.oids.get_oid_by_idx(idx);
 
-            // Cherry-pick reloads because it creates a new HEAD commit.
-            match cherry_pick_commit(repo, *oid, Some("message"), true) {
-                Ok(_) => self.reload(None),
+            let original_message = match repo.find_commit(oid) {
+                Ok(commit) => Ok(commit.summary().unwrap_or("Cherry-pick commit").to_string()),
+                Err(error) => Err(error),
+            };
+
+            match original_message {
+                Ok(original_message) => {
+                    self.pending_cherrypick_oid = Some(oid);
+                    self.modal_input.set_value(format!("cherrypicked: {original_message}"));
+                    self.focus = Focus::ModalCherrypick;
+                },
                 Err(error) => self.show_error(format!("Cherry-pick failed: {error}")),
             }
         }
@@ -610,5 +617,62 @@ impl App {
         self.pending_rebase_action = Some(PendingRebaseAction::Abort);
         self.modal_rebase_message = "Aborting rebase...".to_string();
         self.focus = Focus::ModalRebaseProgress;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::chunk::NONE;
+    use git2::Signature;
+    use std::{
+        fs,
+        path::Path,
+        rc::Rc,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    fn temp_repo(name: &str) -> (std::path::PathBuf, Repository) {
+        let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let path = std::env::temp_dir().join(format!("guitar-input-git-{name}-{id}"));
+        fs::create_dir_all(&path).unwrap();
+        let repo = Repository::init(&path).unwrap();
+        {
+            let mut config = repo.config().unwrap();
+            config.set_str("user.name", "Test User").unwrap();
+            config.set_str("user.email", "test@example.com").unwrap();
+        }
+        (path, repo)
+    }
+
+    fn commit(repo: &Repository, file: &str, message: &str) -> git2::Oid {
+        let workdir = repo.workdir().unwrap().to_path_buf();
+        fs::write(workdir.join(file), "content\n").unwrap();
+
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new(file)).unwrap();
+        index.write().unwrap();
+        let tree_oid = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_oid).unwrap();
+        let sig = Signature::now("Test User", "test@example.com").unwrap();
+        let parent = repo.head().ok().and_then(|head| head.peel_to_commit().ok());
+        let parents: Vec<&git2::Commit<'_>> = parent.iter().collect();
+        repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents).unwrap()
+    }
+
+    #[test]
+    fn cherrypick_opens_message_modal_with_prefilled_summary() {
+        let (_path, repo) = temp_repo("cherrypick-modal");
+        let oid = commit(&repo, "file.txt", "original summary\n\nbody");
+
+        let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, graph_selected: 1, ..Default::default() };
+        let alias = app.oids.get_alias_by_oid(oid);
+        app.oids.sorted_aliases = vec![NONE, alias];
+
+        app.on_cherrypick();
+
+        assert_eq!(app.focus, Focus::ModalCherrypick);
+        assert_eq!(app.pending_cherrypick_oid, Some(oid));
+        assert_eq!(app.modal_input.value(), "cherrypicked: original summary");
     }
 }

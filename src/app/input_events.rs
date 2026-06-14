@@ -158,6 +158,7 @@ impl App {
             Focus::ModalCheckout
                 | Focus::ModalSolo
                 | Focus::ModalCommit
+                | Focus::ModalCherrypick
                 | Focus::ModalCreateBranch
                 | Focus::ModalCreateWorktreeName
                 | Focus::ModalCreateWorktreePath
