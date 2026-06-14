@@ -4,7 +4,7 @@ use ratatui::{
     layout::{Alignment, Rect},
     style::Style,
     text::{Line, Span, Text},
-    widgets::{Block, Borders, Clear, Padding, Paragraph, Widget},
+    widgets::{Block, Borders, Padding, Paragraph, Widget},
 };
 
 impl App {
@@ -34,7 +34,7 @@ impl App {
         let y = frame.area().y + (frame.area().height.saturating_sub(modal_height)) / 2;
         let modal_area = Rect::new(x, y, modal_width, modal_height);
 
-        frame.render_widget(Clear, modal_area);
+        self.theme.clear_area(modal_area, frame.buffer_mut());
 
         // The title on the right doubles as the close affordance.
         let modal_block = Block::default()

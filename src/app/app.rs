@@ -360,6 +360,8 @@ impl App {
             self.is_viewer_layout_dirty = false;
         }
 
+        frame.render_widget(Block::default().style(self.theme.background_style()), frame.area());
+
         let is_splash = self.viewport == Viewport::Splash;
 
         frame.render_widget(
@@ -665,5 +667,23 @@ impl App {
 
     pub fn exit(&mut self) {
         self.is_exit = true;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::{Terminal, backend::TestBackend, style::Color};
+
+    #[test]
+    fn default_splash_draw_has_no_reset_backgrounds() {
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut app = App::default();
+
+        terminal.draw(|frame| app.draw(frame)).unwrap();
+
+        let buffer = terminal.backend().buffer();
+        assert!(buffer.content().iter().all(|cell| cell.bg != Color::Reset));
     }
 }

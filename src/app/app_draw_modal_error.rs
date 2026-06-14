@@ -4,7 +4,7 @@ use ratatui::{
     layout::{Alignment, Rect},
     style::Style,
     text::{Line, Span, Text},
-    widgets::{Block, Borders, Clear, Paragraph, Widget},
+    widgets::{Block, Borders, Paragraph, Widget},
 };
 
 impl App {
@@ -33,7 +33,7 @@ impl App {
         // Paint a plain overlay before clearing the modal rectangle.
         let bg_block = Block::default().style(Style::default().fg(self.theme.COLOR_BORDER));
         bg_block.render(frame.area(), frame.buffer_mut());
-        frame.render_widget(Clear, modal_area);
+        self.theme.clear_area(modal_area, frame.buffer_mut());
 
         let modal_block = Block::default()
             .borders(Borders::ALL)

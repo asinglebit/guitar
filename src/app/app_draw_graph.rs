@@ -95,9 +95,9 @@ impl App {
 
                 // Selection highlighting is focus-sensitive so inactive panes stay quiet.
                 if idx + start == self.graph_selected && self.focus == Focus::Viewport {
-                    row = row.style(Style::default().bg(self.theme.COLOR_GREY_800));
+                    row = row.style(Style::default().bg(self.theme.background_or_default(self.theme.COLOR_GREY_800)));
                 } else if (idx + start).is_multiple_of(2) {
-                    row = row.style(Style::default().bg(self.theme.COLOR_GREY_900));
+                    row = row.style(Style::default().bg(self.theme.background_or_default(self.theme.COLOR_GREY_900)));
                 }
 
                 rows.push(row);

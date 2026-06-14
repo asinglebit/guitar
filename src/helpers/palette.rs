@@ -1,6 +1,10 @@
 #![allow(non_snake_case)]
 
-use ratatui::style::Color;
+use ratatui::{
+    buffer::Buffer,
+    layout::Rect,
+    style::{Color, Style},
+};
 
 #[derive(PartialEq, Eq)]
 pub enum ThemeNames {
@@ -39,6 +43,7 @@ pub struct Theme {
     pub COLOR_GREY_700: Color,
     pub COLOR_GREY_800: Color,
     pub COLOR_GREY_900: Color,
+    pub COLOR_GREY_950: Color,
     pub COLOR_BORDER: Color,
     pub COLOR_TEXT: Color,
     pub COLOR_TEXT_SELECTED: Color,
@@ -51,6 +56,36 @@ impl Default for Theme {
 }
 
 impl Theme {
+    pub const fn background_color(&self) -> Color {
+        self.COLOR_GREY_950
+    }
+
+    pub const fn background_style(&self) -> Style {
+        Style::new().bg(self.background_color())
+    }
+
+    pub const fn background_or_default(&self, color: Color) -> Color {
+        match color {
+            Color::Reset => self.background_color(),
+            _ => color,
+        }
+    }
+
+    pub fn clear_area(&self, area: Rect, buf: &mut Buffer) {
+        let area = area.intersection(*buf.area());
+        if area.is_empty() {
+            return;
+        }
+
+        for x in area.left()..area.right() {
+            for y in area.top()..area.bottom() {
+                let cell = &mut buf[(x, y)];
+                cell.reset();
+                cell.set_bg(self.background_color());
+            }
+        }
+    }
+
     pub const fn classic() -> Self {
         Self {
             name: ThemeNames::Classic,
@@ -82,6 +117,7 @@ impl Theme {
             COLOR_GREY_700: Color::Rgb(97, 97, 97),
             COLOR_GREY_800: Color::Rgb(66, 66, 66),
             COLOR_GREY_900: Color::Rgb(33, 33, 33),
+            COLOR_GREY_950: Color::Rgb(30, 30, 30),
             COLOR_BORDER: Color::Rgb(66, 66, 66),
             COLOR_TEXT: Color::Rgb(97, 97, 97),
             COLOR_TEXT_SELECTED: Color::Rgb(224, 224, 224),
@@ -117,7 +153,8 @@ impl Theme {
             COLOR_GREY_600: Color::DarkGray,
             COLOR_GREY_700: Color::DarkGray,
             COLOR_GREY_800: Color::DarkGray,
-            COLOR_GREY_900: Color::Reset,
+            COLOR_GREY_900: Color::Black,
+            COLOR_GREY_950: Color::Rgb(30, 30, 30),
             COLOR_BORDER: Color::DarkGray,
             COLOR_TEXT: Color::White,
             COLOR_TEXT_SELECTED: Color::Reset,
@@ -153,10 +190,50 @@ impl Theme {
             COLOR_GREY_600: Color::DarkGray,
             COLOR_GREY_700: Color::DarkGray,
             COLOR_GREY_800: Color::DarkGray,
-            COLOR_GREY_900: Color::Reset,
+            COLOR_GREY_900: Color::Black,
+            COLOR_GREY_950: Color::Rgb(30, 30, 30),
             COLOR_BORDER: Color::DarkGray,
             COLOR_TEXT: Color::White,
             COLOR_TEXT_SELECTED: Color::Reset,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn background_or_default_preserves_real_colors() {
+        let theme = Theme::classic();
+
+        assert_eq!(theme.COLOR_GREY_950, Color::Rgb(30, 30, 30));
+        assert_eq!(theme.background_or_default(Color::Red), Color::Red);
+        assert_eq!(theme.background_or_default(theme.COLOR_GREY_900), theme.COLOR_GREY_900);
+    }
+
+    #[test]
+    fn background_or_default_replaces_reset() {
+        let theme = Theme::ansi();
+
+        assert_eq!(theme.background_or_default(Color::Reset), theme.COLOR_GREY_950);
+    }
+
+    #[test]
+    fn clear_area_erases_symbols_and_paints_theme_background() {
+        let theme = Theme::classic();
+        let mut buffer = Buffer::with_lines(["abcde", "fghij", "klmno"]);
+        let area = Rect::new(1, 1, 3, 1);
+
+        theme.clear_area(area, &mut buffer);
+
+        for x in 1..4 {
+            let cell = &buffer[(x, 1)];
+            assert_eq!(cell.symbol(), " ");
+            assert_eq!(cell.bg, theme.COLOR_GREY_950);
+        }
+
+        assert_eq!(buffer[(0, 1)].symbol(), "f");
+        assert_eq!(buffer[(4, 1)].symbol(), "j");
     }
 }

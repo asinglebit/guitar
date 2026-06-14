@@ -123,7 +123,7 @@ impl App {
             .map(|(i, line)| {
                 if start + i == self.inspector_selected && self.focus == Focus::Inspector {
                     let spans: Vec<Span> = line.iter().map(|span| Span::styled(span.content.clone(), span.style.fg(self.theme.COLOR_GREY_500))).collect();
-                    ListItem::new(Line::from(spans)).style(Style::default().bg(self.theme.COLOR_GREY_800).fg(self.theme.COLOR_GREY_500))
+                    ListItem::new(Line::from(spans)).style(Style::default().bg(self.theme.background_or_default(self.theme.COLOR_GREY_800)).fg(self.theme.COLOR_GREY_500))
                 } else {
                     ListItem::new(line.clone())
                 }

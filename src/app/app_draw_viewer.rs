@@ -117,7 +117,7 @@ impl App {
                 let absolute_idx = start + i;
                 let mut item = (*line).clone();
                 if absolute_idx == self.viewer_selected && self.focus == Focus::Viewport {
-                    item = item.style(Style::default().bg(self.theme.COLOR_GREY_800));
+                    item = item.style(Style::default().bg(self.theme.background_or_default(self.theme.COLOR_GREY_800)));
                 }
                 item
             })
@@ -188,7 +188,7 @@ impl App {
             let mut left = row.left.clone();
             let mut right = row.right.clone();
             if absolute_idx == self.viewer_selected && self.focus == Focus::Viewport {
-                let selected = Style::default().bg(self.theme.COLOR_GREY_800);
+                let selected = Style::default().bg(self.theme.background_or_default(self.theme.COLOR_GREY_800));
                 left = left.style(selected);
                 right = right.style(selected);
             }
@@ -398,8 +398,20 @@ impl App {
 
                 // Line origin controls prefix, color, and which side's counter advances.
                 let (style, prefix, side, fg, count) = match line.origin {
-                    '-' => (Style::default().bg(self.theme.COLOR_DARK_RED).fg(self.theme.COLOR_RED), "- ".to_string(), self.theme.COLOR_RED, self.theme.COLOR_RED, current_line_old + 1),
-                    '+' => (Style::default().bg(self.theme.COLOR_LIGHT_GREEN_900).fg(self.theme.COLOR_GREEN), "+ ".to_string(), self.theme.COLOR_GREEN, self.theme.COLOR_GREEN, current_line + 1),
+                    '-' => (
+                        Style::default().bg(self.theme.background_or_default(self.theme.COLOR_DARK_RED)).fg(self.theme.COLOR_RED),
+                        "- ".to_string(),
+                        self.theme.COLOR_RED,
+                        self.theme.COLOR_RED,
+                        current_line_old + 1,
+                    ),
+                    '+' => (
+                        Style::default().bg(self.theme.background_or_default(self.theme.COLOR_LIGHT_GREEN_900)).fg(self.theme.COLOR_GREEN),
+                        "+ ".to_string(),
+                        self.theme.COLOR_GREEN,
+                        self.theme.COLOR_GREEN,
+                        current_line + 1,
+                    ),
                     ' ' => (Style::default(), "".to_string(), self.theme.COLOR_BORDER, self.theme.COLOR_GREY_500, current_line + 1),
                     _ => (Style::default(), "".to_string(), self.theme.COLOR_BORDER, self.theme.COLOR_GREY_500, 0),
                 };
@@ -506,8 +518,8 @@ impl App {
     fn push_conflict_unified_line(&mut self, number: usize, origin: char, text: &str) {
         let (style, prefix, number_fg, text_fg) = match origin {
             '!' => (Style::default().fg(self.theme.COLOR_ORANGE), "! ", self.theme.COLOR_ORANGE, self.theme.COLOR_ORANGE),
-            '-' => (Style::default().bg(self.theme.COLOR_DARK_RED).fg(self.theme.COLOR_RED), "- ", self.theme.COLOR_RED, self.theme.COLOR_RED),
-            '+' => (Style::default().bg(self.theme.COLOR_LIGHT_GREEN_900).fg(self.theme.COLOR_GREEN), "+ ", self.theme.COLOR_GREEN, self.theme.COLOR_GREEN),
+            '-' => (Style::default().bg(self.theme.background_or_default(self.theme.COLOR_DARK_RED)).fg(self.theme.COLOR_RED), "- ", self.theme.COLOR_RED, self.theme.COLOR_RED),
+            '+' => (Style::default().bg(self.theme.background_or_default(self.theme.COLOR_LIGHT_GREEN_900)).fg(self.theme.COLOR_GREEN), "+ ", self.theme.COLOR_GREEN, self.theme.COLOR_GREEN),
             _ => (Style::default(), "", self.theme.COLOR_BORDER, self.theme.COLOR_GREY_500),
         };
 
@@ -770,8 +782,8 @@ impl App {
     fn split_list_item(&self, cell: Option<&SplitCell>, text: &str, show_number: bool) -> ListItem<'static> {
         let origin = cell.map(|cell| cell.origin).unwrap_or(' ');
         let item_style = match origin {
-            '-' => Style::default().bg(self.theme.COLOR_DARK_RED).fg(self.theme.COLOR_RED),
-            '+' => Style::default().bg(self.theme.COLOR_LIGHT_GREEN_900).fg(self.theme.COLOR_GREEN),
+            '-' => Style::default().bg(self.theme.background_or_default(self.theme.COLOR_DARK_RED)).fg(self.theme.COLOR_RED),
+            '+' => Style::default().bg(self.theme.background_or_default(self.theme.COLOR_LIGHT_GREEN_900)).fg(self.theme.COLOR_GREEN),
             '!' => Style::default().fg(self.theme.COLOR_ORANGE),
             _ => Style::default(),
         };

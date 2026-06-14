@@ -7,7 +7,7 @@ use ratatui::{
     layout::Alignment,
     style::Style,
     text::{Line, Span, Text},
-    widgets::{Block, Borders, Clear, Paragraph, Widget},
+    widgets::{Block, Borders, Paragraph, Widget},
 };
 
 impl App {
@@ -39,7 +39,7 @@ impl App {
         let y = frame.area().y + (frame.area().height.saturating_sub(modal_height)) / 2;
         let modal_area = ratatui::layout::Rect::new(x, y, modal_width, modal_height);
 
-        frame.render_widget(Clear, modal_area);
+        self.theme.clear_area(modal_area, frame.buffer_mut());
 
         let border_color = if self.focus == Focus::ModalOperationConflict { self.theme.COLOR_ORANGE } else { self.theme.COLOR_BORDER };
         let modal_block = Block::default()

@@ -4,7 +4,7 @@ use ratatui::{
     layout::{Alignment, Rect},
     style::Style,
     text::{Line, Span, Text},
-    widgets::{Block, Borders, Clear, Paragraph, Widget},
+    widgets::{Block, Borders, Paragraph, Widget},
 };
 
 impl App {
@@ -45,7 +45,7 @@ impl App {
         let x = frame.area().x + (frame.area().width.saturating_sub(modal_width)) / 2;
         let y = frame.area().y + (frame.area().height.saturating_sub(modal_height)) / 2;
         let modal_area = Rect::new(x, y, modal_width, modal_height);
-        frame.render_widget(Clear, modal_area);
+        self.theme.clear_area(modal_area, frame.buffer_mut());
 
         // Padding keeps branch names away from rounded borders.
         let padding = ratatui::widgets::Padding { left: 3, right: 3, top: 1, bottom: 1 };

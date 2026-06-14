@@ -84,9 +84,9 @@ impl App {
             .map(|(idx, line)| {
                 if start + idx == self.worktrees_selected && self.focus == Focus::Worktrees && !worktrees_empty {
                     let spans: Vec<Span> = line.iter().map(|span| Span::styled(span.content.clone(), span.style)).collect();
-                    ListItem::new(Line::from(spans)).style(Style::default().bg(self.theme.COLOR_GREY_800))
+                    ListItem::new(Line::from(spans)).style(Style::default().bg(self.theme.background_or_default(self.theme.COLOR_GREY_800)))
                 } else if (idx + start).is_multiple_of(2) && !worktrees_empty {
-                    ListItem::new(Line::from(line.clone().spans)).style(Style::default().bg(self.theme.COLOR_GREY_900))
+                    ListItem::new(Line::from(line.clone().spans)).style(Style::default().bg(self.theme.background_or_default(self.theme.COLOR_GREY_900)))
                 } else {
                     ListItem::new(line.clone())
                 }

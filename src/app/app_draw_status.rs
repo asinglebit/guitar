@@ -167,9 +167,13 @@ impl App {
                 .map(|(idx, line)| {
                     if is_staged_changes && start + idx == self.status_top_selected && self.focus == Focus::StatusTop {
                         let spans: Vec<Span> = line.iter().map(|span| Span::styled(span.content.clone(), span.style.fg(self.theme.COLOR_GREY_500))).collect();
-                        ListItem::new(Line::from(spans)).style(Style::default().bg(self.theme.COLOR_GREY_800).fg(self.theme.COLOR_GREY_500))
+                        ListItem::new(Line::from(spans)).style(Style::default().bg(self.theme.background_or_default(self.theme.COLOR_GREY_800)).fg(self.theme.COLOR_GREY_500))
                     } else if !status_top_empty {
-                        if (idx + start).is_multiple_of(2) { ListItem::new(Line::from(line.clone().spans)).style(Style::default().bg(self.theme.COLOR_GREY_900)) } else { ListItem::new(line.clone()) }
+                        if (idx + start).is_multiple_of(2) {
+                            ListItem::new(Line::from(line.clone().spans)).style(Style::default().bg(self.theme.background_or_default(self.theme.COLOR_GREY_900)))
+                        } else {
+                            ListItem::new(line.clone())
+                        }
                     } else {
                         ListItem::new(line.clone())
                     }
@@ -240,10 +244,10 @@ impl App {
                     .map(|(idx, line)| {
                         if is_unstaged_changes && start + idx == self.status_bottom_selected && self.focus == Focus::StatusBottom {
                             let spans: Vec<Span> = line.iter().map(|span| Span::styled(span.content.clone(), span.style.fg(self.theme.COLOR_GREY_500))).collect();
-                            ListItem::new(Line::from(spans)).style(Style::default().bg(self.theme.COLOR_GREY_800).fg(self.theme.COLOR_GREY_500))
+                            ListItem::new(Line::from(spans)).style(Style::default().bg(self.theme.background_or_default(self.theme.COLOR_GREY_800)).fg(self.theme.COLOR_GREY_500))
                         } else if !status_bottom_empty {
                             if (idx + start).is_multiple_of(2) {
-                                ListItem::new(Line::from(line.clone().spans)).style(Style::default().bg(self.theme.COLOR_GREY_900))
+                                ListItem::new(Line::from(line.clone().spans)).style(Style::default().bg(self.theme.background_or_default(self.theme.COLOR_GREY_900)))
                             } else {
                                 ListItem::new(line.clone())
                             }

@@ -53,7 +53,11 @@ impl App {
 
         lines.push(Line::default());
         lines.push(
-            Line::from(Span::styled(fill_width(" version:", format!("{} ", VERSION).as_str(), heatmap_width), Style::default().fg(self.theme.COLOR_TEXT).bg(self.theme.COLOR_GREY_900))).centered(),
+            Line::from(Span::styled(
+                fill_width(" version:", format!("{} ", VERSION).as_str(), heatmap_width),
+                Style::default().fg(self.theme.COLOR_TEXT).bg(self.theme.background_or_default(self.theme.COLOR_GREY_900)),
+            ))
+            .centered(),
         );
         self.settings_selections.push(lines.len().saturating_sub(1));
 
@@ -74,8 +78,11 @@ impl App {
         pathbuf.push("guitar");
         let path = pathbuf.as_path().to_str().unwrap();
         lines.push(
-            Line::from(Span::styled(fill_width(" keymap:", format!(" {}/keymap.json ", path).as_str(), heatmap_width), Style::default().fg(self.theme.COLOR_TEXT).bg(self.theme.COLOR_GREY_900)))
-                .centered(),
+            Line::from(Span::styled(
+                fill_width(" keymap:", format!(" {}/keymap.json ", path).as_str(), heatmap_width),
+                Style::default().fg(self.theme.COLOR_TEXT).bg(self.theme.background_or_default(self.theme.COLOR_GREY_900)),
+            ))
+            .centered(),
         );
         self.settings_selections.push(lines.len().saturating_sub(1));
         lines.push(Line::from(Span::styled(fill_width(" layout:", format!(" {}/layout.json ", path).as_str(), heatmap_width), Style::default().fg(self.theme.COLOR_TEXT))).centered());
@@ -83,7 +90,7 @@ impl App {
         lines.push(
             Line::from(Span::styled(
                 fill_width(" recent repositories:", format!(" {}/recent.json ", path).as_str(), heatmap_width),
-                Style::default().fg(self.theme.COLOR_TEXT).bg(self.theme.COLOR_GREY_900),
+                Style::default().fg(self.theme.COLOR_TEXT).bg(self.theme.background_or_default(self.theme.COLOR_GREY_900)),
             ))
             .centered(),
         );
@@ -94,7 +101,11 @@ impl App {
         lines.push(Line::from(vec![Span::styled(fill_width(" credentials:", "", heatmap_width), Style::default().fg(self.theme.COLOR_TEXT))]).centered());
         lines.push(Line::default());
         lines.push(
-            Line::from(Span::styled(fill_width(" name:", format!("{} ", name.unwrap()).as_str(), heatmap_width), Style::default().fg(self.theme.COLOR_TEXT).bg(self.theme.COLOR_GREY_900))).centered(),
+            Line::from(Span::styled(
+                fill_width(" name:", format!("{} ", name.unwrap()).as_str(), heatmap_width),
+                Style::default().fg(self.theme.COLOR_TEXT).bg(self.theme.background_or_default(self.theme.COLOR_GREY_900)),
+            ))
+            .centered(),
         );
 
         // Selectable rows are recorded immediately after being pushed.
@@ -102,7 +113,13 @@ impl App {
         lines.push(Line::from(Span::styled(fill_width(" email:", format!("{} ", email.unwrap()).as_str(), heatmap_width), Style::default().fg(self.theme.COLOR_TEXT))).centered());
 
         self.settings_selections.push(lines.len().saturating_sub(1));
-        lines.push(Line::from(Span::styled(fill_width(" authorization:", "external ssh agent ", heatmap_width), Style::default().fg(self.theme.COLOR_TEXT).bg(self.theme.COLOR_GREY_900))).centered());
+        lines.push(
+            Line::from(Span::styled(
+                fill_width(" authorization:", "external ssh agent ", heatmap_width),
+                Style::default().fg(self.theme.COLOR_TEXT).bg(self.theme.background_or_default(self.theme.COLOR_GREY_900)),
+            ))
+            .centered(),
+        );
 
         self.settings_selections.push(lines.len().saturating_sub(1));
         lines.push(Line::default());
@@ -111,7 +128,7 @@ impl App {
         lines.push(
             Line::from(Span::styled(
                 fill_width(" classic", format!("({}) ", if self.theme.name == ThemeNames::Classic { "*" } else { " " }).as_str(), heatmap_width),
-                Style::default().fg(self.theme.COLOR_TEXT).bg(self.theme.COLOR_GREY_900),
+                Style::default().fg(self.theme.COLOR_TEXT).bg(self.theme.background_or_default(self.theme.COLOR_GREY_900)),
             ))
             .centered(),
         );
@@ -129,7 +146,7 @@ impl App {
         lines.push(
             Line::from(Span::styled(
                 fill_width(" monochrome", format!("({}) ", if self.theme.name == ThemeNames::Monochrome { "*" } else { " " }).as_str(), heatmap_width),
-                Style::default().fg(self.theme.COLOR_TEXT).bg(self.theme.COLOR_GREY_900),
+                Style::default().fg(self.theme.COLOR_TEXT).bg(self.theme.background_or_default(self.theme.COLOR_GREY_900)),
             ))
             .centered(),
         );
@@ -149,7 +166,7 @@ impl App {
                     .map(|span| {
                         let mut style = span.style;
                         if idx % 2 == 0 {
-                            style = style.bg(self.theme.COLOR_GREY_900);
+                            style = style.bg(self.theme.background_or_default(self.theme.COLOR_GREY_900));
                         }
                         Span::styled(span.content.clone(), style)
                     })
@@ -174,7 +191,7 @@ impl App {
                     .map(|span| {
                         let mut style = span.style;
                         if idx % 2 == 0 {
-                            style = style.bg(self.theme.COLOR_GREY_900);
+                            style = style.bg(self.theme.background_or_default(self.theme.COLOR_GREY_900));
                         }
                         Span::styled(span.content.clone(), style)
                     })
@@ -233,7 +250,7 @@ impl App {
                         .iter()
                         .map(|span| {
                             let mut style = span.style;
-                            style = style.bg(self.theme.COLOR_GREY_800);
+                            style = style.bg(self.theme.background_or_default(self.theme.COLOR_GREY_800));
                             Span::styled(span.content.clone(), style)
                         })
                         .collect();
