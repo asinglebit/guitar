@@ -53,6 +53,10 @@ impl Worktrees {
         Self { entries, by_alias: HashMap::new() }
     }
 
+    pub fn current_name(&self) -> Option<&str> {
+        self.entries.iter().find(|entry| entry.is_current).map(|entry| entry.name.as_str())
+    }
+
     pub fn refresh_aliases(&mut self, oids: &Oids) {
         self.by_alias.clear();
 

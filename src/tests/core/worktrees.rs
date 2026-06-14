@@ -1,10 +1,10 @@
 use super::*;
 
-fn linked_entry(current: bool, locked: Option<&str>) -> WorktreeEntry {
+fn named_entry(name: &str, current: bool, locked: Option<&str>) -> WorktreeEntry {
     WorktreeEntry {
-        name: "feature".into(),
-        path: PathBuf::from("/tmp/feature"),
-        branch: Some("feature".into()),
+        name: name.into(),
+        path: PathBuf::from(format!("/tmp/{name}")),
+        branch: Some(name.into()),
         head: None,
         alias: None,
         kind: WorktreeKind::Linked,
@@ -14,6 +14,10 @@ fn linked_entry(current: bool, locked: Option<&str>) -> WorktreeEntry {
         locked_reason: locked.map(str::to_string),
         is_dirty: false,
     }
+}
+
+fn linked_entry(current: bool, locked: Option<&str>) -> WorktreeEntry {
+    named_entry("feature", current, locked)
 }
 
 #[test]
@@ -33,4 +37,13 @@ fn guards_current_main_and_locked_removal() {
 
     let removable = linked_entry(false, None);
     assert!(removable.can_remove());
+}
+
+#[test]
+fn current_name_returns_the_current_worktree() {
+    let worktrees = Worktrees::from_entries(vec![named_entry("main", false, None), named_entry("feature", true, None)]);
+    assert_eq!(worktrees.current_name(), Some("feature"));
+
+    let worktrees = Worktrees::from_entries(vec![named_entry("main", false, None)]);
+    assert_eq!(worktrees.current_name(), None);
 }

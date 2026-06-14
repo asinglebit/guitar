@@ -1,7 +1,7 @@
 use crate::{
     app::app::{App, Focus, Viewport},
     git::queries::commits::get_current_branch,
-    helpers::keymap::InputMode,
+    helpers::{keymap::InputMode, symbols::SYM_WORKTREE},
 };
 use ratatui::{
     Frame,
@@ -12,13 +12,18 @@ use ratatui::{
 
 impl App {
     pub fn draw_statusbar(&mut self, frame: &mut Frame, repo: &git2::Repository) {
-        let lines = match get_current_branch(repo) {
-            Some(branch) => Line::from(vec![Span::styled(format!("  ● {}", branch), Style::default().fg(self.theme.COLOR_GRASS))]),
-            None => match repo.head().ok().and_then(|h| h.target()) {
-                Some(oid) => Line::from(vec![Span::styled(format!("  detached head: #{:.6}", oid), Style::default().fg(self.theme.COLOR_TEXT))]),
-                None => Line::from(vec![Span::styled("  no head (no commits yet)", Style::default().fg(self.theme.COLOR_TEXT))]),
-            },
+        let mut left_spans: Vec<Span> = match self.worktrees.current_name() {
+            Some(name) => vec![Span::styled(format!("  {SYM_WORKTREE} {name} "), Style::default().fg(self.theme.COLOR_GRASS))],
+            None => vec![Span::raw("  ")],
         };
+        match get_current_branch(repo) {
+            Some(branch) => left_spans.push(Span::styled(format!("● {}", branch), Style::default().fg(self.theme.COLOR_GRASS))),
+            None => match repo.head().ok().and_then(|h| h.target()) {
+                Some(oid) => left_spans.push(Span::styled(format!("detached head: #{:.6}", oid), Style::default().fg(self.theme.COLOR_TEXT))),
+                None => left_spans.push(Span::styled("no head (no commits yet)", Style::default().fg(self.theme.COLOR_TEXT))),
+            },
+        }
+        let lines = Line::from(left_spans);
 
         let status_paragraph = ratatui::widgets::Paragraph::new(Text::from(lines)).left_aligned().block(Block::default());
 
