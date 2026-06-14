@@ -21,7 +21,7 @@ impl App {
         lines.push(Line::from(vec![Span::styled(line_text, Style::default().fg(self.theme.COLOR_TEXT))]));
         lines.push(Line::default());
 
-        let color = self.branches.colors.get(&alias).unwrap();
+        let color = self.branches.colors.get(&alias).copied().unwrap_or(self.theme.COLOR_TEXT);
         // Modal choices mirror the branches currently selectable from the graph row.
         let branches = self.graph_branch_choices(alias);
 
@@ -31,7 +31,7 @@ impl App {
             length = (10 + branch.len()).max(length);
             lines.push(Line::from(Span::styled(
                 format!("{} {} ", if is_local { "●" } else { "◆" }, branch),
-                Style::default().fg(if idx == self.modal_solo_selected as usize { *color } else { self.theme.COLOR_TEXT }),
+                Style::default().fg(if idx == self.modal_solo_selected as usize { color } else { self.theme.COLOR_TEXT }),
             )));
         });
 

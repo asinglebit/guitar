@@ -20,14 +20,14 @@ impl App {
         lines.push(Line::default());
 
         // Tag choices come from the selected commit alias.
-        let color = self.tags.colors.get(&alias).unwrap();
-        let tags = self.tags.local.get(&alias).unwrap();
+        let color = self.tags.colors.get(&alias).copied().unwrap_or(self.theme.COLOR_TEXT);
+        let tags = self.tags.local.get(&alias).cloned().unwrap_or_default();
         tags.iter().enumerate().for_each(|(idx, tag)| {
             height += 1;
             let line_text = format!("{} {} ", SYM_TAG, tag);
             length = length.max(line_text.len());
 
-            lines.push(Line::from(Span::styled(line_text, Style::default().fg(if idx == self.modal_delete_tag_selected as usize { *color } else { self.theme.COLOR_TEXT }))));
+            lines.push(Line::from(Span::styled(line_text, Style::default().fg(if idx == self.modal_delete_tag_selected as usize { color } else { self.theme.COLOR_TEXT }))));
         });
 
         // Paint a plain overlay before clearing the modal rectangle.

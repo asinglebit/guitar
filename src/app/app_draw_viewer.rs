@@ -5,7 +5,7 @@ use crate::{
     },
     git::queries::{
         diffs::{get_conflict_file, get_file_at_oid, get_file_at_workdir, get_file_diff_at_oid, get_file_diff_at_workdir},
-        helpers::{ConflictFile, Hunk},
+        helpers::{ConflictFile, FileChanges, Hunk},
     },
     helpers::text::wrap_words,
 };
@@ -250,48 +250,55 @@ impl App {
                     // Commit status rows come from current_diff.
                     Some(self.current_diff.get(self.status_top_selected)?.filename.to_string())
                 } else if self.graph_selected == 0 && self.uncommitted.is_staged {
-                    // Staged uncommitted rows are grouped conflicts, modified, added, then deleted.
-                    let conflict_len = self.uncommitted.conflicts.len();
-                    let modified_len = self.uncommitted.staged.modified.len();
-                    let added_len = self.uncommitted.staged.added.len();
-                    let index = self.status_top_selected;
-
-                    if index < conflict_len {
-                        self.uncommitted.conflicts.get(index).cloned()
-                    } else if index < conflict_len + modified_len {
-                        self.uncommitted.staged.modified.get(index - conflict_len).cloned()
-                    } else if index < conflict_len + modified_len + added_len {
-                        self.uncommitted.staged.added.get(index - conflict_len - modified_len).cloned()
-                    } else {
-                        self.uncommitted.staged.deleted.get(index - conflict_len - modified_len - added_len).cloned()
-                    }
+                    self.selected_staged_status_file_name()
                 } else {
                     None
                 }
             },
             Focus::StatusBottom => {
                 if self.graph_selected == 0 && self.uncommitted.is_unstaged {
-                    // Unstaged rows use the same grouping as staged rows.
-                    let conflict_len = self.uncommitted.conflicts.len();
-                    let modified_len = self.uncommitted.unstaged.modified.len();
-                    let added_len = self.uncommitted.unstaged.added.len();
-                    let index = self.status_bottom_selected;
-
-                    if index < conflict_len {
-                        self.uncommitted.conflicts.get(index).cloned()
-                    } else if index < conflict_len + modified_len {
-                        self.uncommitted.unstaged.modified.get(index - conflict_len).cloned()
-                    } else if index < conflict_len + modified_len + added_len {
-                        self.uncommitted.unstaged.added.get(index - conflict_len - modified_len).cloned()
-                    } else {
-                        self.uncommitted.unstaged.deleted.get(index - conflict_len - modified_len - added_len).cloned()
-                    }
+                    self.selected_unstaged_status_file_name()
                 } else {
                     None
                 }
             },
             _ => None,
         }
+    }
+
+    fn selected_uncommitted_file_name(conflicts: &[String], changes: &FileChanges, index: usize) -> Option<String> {
+        if index < conflicts.len() {
+            return conflicts.get(index).cloned();
+        }
+
+        let index = index - conflicts.len();
+        if index < changes.modified.len() {
+            return changes.modified.get(index).cloned();
+        }
+
+        let index = index - changes.modified.len();
+        if index < changes.added.len() {
+            return changes.added.get(index).cloned();
+        }
+
+        let index = index - changes.added.len();
+        changes.deleted.get(index).cloned()
+    }
+
+    pub(crate) fn selected_staged_status_file_name(&self) -> Option<String> {
+        Self::selected_uncommitted_file_name(&self.uncommitted.conflicts, &self.uncommitted.staged, self.status_top_selected)
+    }
+
+    pub(crate) fn selected_unstaged_status_file_name(&self) -> Option<String> {
+        Self::selected_uncommitted_file_name(&self.uncommitted.conflicts, &self.uncommitted.unstaged, self.status_bottom_selected)
+    }
+
+    pub(crate) fn selected_staged_status_file_is_conflict(&self) -> bool {
+        self.status_top_selected < self.uncommitted.conflicts.len()
+    }
+
+    pub(crate) fn selected_unstaged_status_file_is_conflict(&self) -> bool {
+        self.status_bottom_selected < self.uncommitted.conflicts.len()
     }
 
     pub fn open_viewer(&mut self, repo: &git2::Repository) {
@@ -802,5 +809,36 @@ impl App {
         let number = if show_number { cell.map(|cell| format!("{:3}  ", cell.number)).unwrap_or_else(|| "     ".to_string()) } else { "     ".to_string() };
 
         ListItem::new(Line::from(vec![Span::styled(number, Style::default().fg(number_fg)), Span::styled(text.to_string(), Style::default().fg(text_fg))])).style(item_style)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::git::queries::helpers::FileChanges;
+
+    #[test]
+    fn selected_status_file_helpers_match_rendered_group_order() {
+        let mut app = App::default();
+        app.uncommitted.conflicts = vec!["conflict.txt".to_string()];
+        app.uncommitted.staged = FileChanges { modified: vec!["staged-modified.txt".to_string()], added: vec!["staged-added.txt".to_string()], deleted: vec!["staged-deleted.txt".to_string()] };
+        app.uncommitted.unstaged =
+            FileChanges { modified: vec!["unstaged-modified.txt".to_string()], added: vec!["unstaged-added.txt".to_string()], deleted: vec!["unstaged-deleted.txt".to_string()] };
+
+        app.status_top_selected = 0;
+        assert!(app.selected_staged_status_file_is_conflict());
+        assert_eq!(app.selected_staged_status_file_name().as_deref(), Some("conflict.txt"));
+
+        app.status_top_selected = 2;
+        assert!(!app.selected_staged_status_file_is_conflict());
+        assert_eq!(app.selected_staged_status_file_name().as_deref(), Some("staged-added.txt"));
+
+        app.status_bottom_selected = 0;
+        assert!(app.selected_unstaged_status_file_is_conflict());
+        assert_eq!(app.selected_unstaged_status_file_name().as_deref(), Some("conflict.txt"));
+
+        app.status_bottom_selected = 3;
+        assert!(!app.selected_unstaged_status_file_is_conflict());
+        assert_eq!(app.selected_unstaged_status_file_name().as_deref(), Some("unstaged-deleted.txt"));
     }
 }

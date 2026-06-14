@@ -17,9 +17,17 @@ use crate::{
     },
 };
 use git2::{Repository, RepositoryState};
-use std::path::Path;
+use std::{path::Path, thread::JoinHandle};
 
 impl App {
+    fn finish_threaded_git_action(&mut self, label: &str, handle: JoinHandle<Result<(), git2::Error>>) {
+        match handle.join() {
+            Ok(Ok(_)) => self.reload(None),
+            Ok(Err(error)) => self.show_error(format!("{label} failed: {error}")),
+            Err(_) => self.show_error(format!("{label} failed: worker thread panicked")),
+        }
+    }
+
     pub fn run_pending_operation_action(&mut self) {
         let Some(action) = self.pending_operation_action.take() else {
             return;
@@ -215,13 +223,7 @@ impl App {
         if self.viewport != Viewport::Settings {
             let repo_path = self.path.as_deref().unwrap_or(".");
             let handle = fetch_over_ssh(repo_path, "origin");
-            match handle.join() {
-                Ok(Ok(_)) => {
-                    self.reload(None);
-                },
-                Ok(Err(error)) => self.show_error(format!("Fetch failed: {error}")),
-                Err(_) => self.show_error("Fetch failed: worker thread panicked"),
-            }
+            self.finish_threaded_git_action("Fetch", handle);
         }
     }
 
@@ -257,7 +259,7 @@ impl App {
                 let oid = self.oids.get_oid_by_alias(alias);
 
                 // Ambiguous commits are checked out through a branch-selection modal.
-                let branches_for_alias: Vec<String> = self.branches.all.get(&alias).cloned().unwrap_or_default();
+                let branches_for_alias = self.graph_branch_choices(alias);
 
                 match branches_for_alias.len() {
                     0 => {
@@ -342,52 +344,29 @@ impl App {
         if let Some(repo) = &self.repo {
             match self.viewport {
                 Viewport::Settings => {},
-                _ => {
-                    match self.focus {
-                        Focus::Viewport => {
-                            if self.uncommitted.is_staged {
-                                match unstage_all(repo) {
-                                    Ok(_) => self.reload(None),
-                                    Err(error) => self.show_error(format!("Unstage all failed: {error}")),
-                                }
-                            }
-                        },
-                        Focus::StatusTop => {
-                            let file: String = {
-                                let mut idx = self.status_top_selected;
-                                let conflicts = &self.uncommitted.conflicts;
-                                if idx < conflicts.len() {
-                                    self.show_error("Unstage file failed: resolve conflicts in your editor, then continue the active operation");
-                                    return;
-                                }
-                                idx -= conflicts.len();
-                                let modified = &self.uncommitted.staged.modified;
-                                let added = &self.uncommitted.staged.added;
-                                let deleted = &self.uncommitted.staged.deleted;
-                                if idx < modified.len() {
-                                    modified[idx].clone()
-                                } else {
-                                    idx -= modified.len();
-                                    if idx < added.len() {
-                                        added[idx].clone()
-                                    } else {
-                                        idx -= added.len();
-                                        if idx < deleted.len() {
-                                            deleted[idx].clone()
-                                        } else {
-                                            // Selection drifted beyond the staged lists; ignore the command.
-                                            return;
-                                        }
-                                    }
-                                }
-                            };
-                            match unstage_file(repo, Path::new(&file)) {
+                _ => match self.focus {
+                    Focus::Viewport => {
+                        if self.uncommitted.is_staged {
+                            match unstage_all(repo) {
                                 Ok(_) => self.reload(None),
-                                Err(error) => self.show_error(format!("Unstage file failed: {error}")),
+                                Err(error) => self.show_error(format!("Unstage all failed: {error}")),
                             }
-                        },
-                        _ => {},
-                    }
+                        }
+                    },
+                    Focus::StatusTop => {
+                        if self.selected_staged_status_file_is_conflict() {
+                            self.show_error("Unstage file failed: resolve conflicts in your editor, then continue the active operation");
+                            return;
+                        }
+                        let Some(file) = self.selected_staged_status_file_name() else {
+                            return;
+                        };
+                        match unstage_file(repo, Path::new(&file)) {
+                            Ok(_) => self.reload(None),
+                            Err(error) => self.show_error(format!("Unstage file failed: {error}")),
+                        }
+                    },
+                    _ => {},
                 },
             }
         }
@@ -397,52 +376,29 @@ impl App {
         if let Some(repo) = &self.repo {
             match self.viewport {
                 Viewport::Settings => {},
-                _ => {
-                    match self.focus {
-                        Focus::Viewport => {
-                            if self.uncommitted.is_unstaged {
-                                match stage_all(repo) {
-                                    Ok(_) => self.reload(None),
-                                    Err(error) => self.show_error(format!("Stage all failed: {error}")),
-                                }
-                            }
-                        },
-                        Focus::StatusBottom => {
-                            let file: String = {
-                                let mut idx = self.status_bottom_selected;
-                                let conflicts = &self.uncommitted.conflicts;
-                                if idx < conflicts.len() {
-                                    self.show_error("Stage file failed: resolve conflicts in your editor, then continue the active operation");
-                                    return;
-                                }
-                                idx -= conflicts.len();
-                                let modified = &self.uncommitted.unstaged.modified;
-                                let added = &self.uncommitted.unstaged.added;
-                                let deleted = &self.uncommitted.unstaged.deleted;
-                                if idx < modified.len() {
-                                    modified[idx].clone()
-                                } else {
-                                    idx -= modified.len();
-                                    if idx < added.len() {
-                                        added[idx].clone()
-                                    } else {
-                                        idx -= added.len();
-                                        if idx < deleted.len() {
-                                            deleted[idx].clone()
-                                        } else {
-                                            // Selection drifted beyond the unstaged lists; ignore the command.
-                                            return;
-                                        }
-                                    }
-                                }
-                            };
-                            match stage_file(repo, Path::new(&file)) {
+                _ => match self.focus {
+                    Focus::Viewport => {
+                        if self.uncommitted.is_unstaged {
+                            match stage_all(repo) {
                                 Ok(_) => self.reload(None),
-                                Err(error) => self.show_error(format!("Stage file failed: {error}")),
+                                Err(error) => self.show_error(format!("Stage all failed: {error}")),
                             }
-                        },
-                        _ => {},
-                    }
+                        }
+                    },
+                    Focus::StatusBottom => {
+                        if self.selected_unstaged_status_file_is_conflict() {
+                            self.show_error("Stage file failed: resolve conflicts in your editor, then continue the active operation");
+                            return;
+                        }
+                        let Some(file) = self.selected_unstaged_status_file_name() else {
+                            return;
+                        };
+                        match stage_file(repo, Path::new(&file)) {
+                            Ok(_) => self.reload(None),
+                            Err(error) => self.show_error(format!("Stage file failed: {error}")),
+                        }
+                    },
+                    _ => {},
                 },
             }
         }
@@ -470,13 +426,7 @@ impl App {
                         return;
                     };
                     let handle = push_over_ssh(repo_path, "origin", branch.as_str(), true);
-                    match handle.join() {
-                        Ok(Ok(_)) => {
-                            self.reload(None);
-                        },
-                        Ok(Err(error)) => self.show_error(format!("Push failed: {error}")),
-                        Err(_) => self.show_error("Push failed: worker thread panicked"),
-                    }
+                    self.finish_threaded_git_action("Push", handle);
                 },
             }
         }
@@ -489,13 +439,7 @@ impl App {
                 _ => {
                     let repo_path = self.path.as_deref().unwrap_or(".");
                     let handle = push_tags_over_ssh(repo_path, "origin");
-                    match handle.join() {
-                        Ok(Ok(_)) => {
-                            self.reload(None);
-                        },
-                        Ok(Err(error)) => self.show_error(format!("Push tags failed: {error}")),
-                        Err(_) => self.show_error("Push tags failed: worker thread panicked"),
-                    }
+                    self.finish_threaded_git_action("Push tags", handle);
                 },
             }
         }
@@ -576,7 +520,7 @@ impl App {
                 let current = get_current_branch(repo);
 
                 // Current branch is excluded so graph deletion cannot remove checked-out HEAD.
-                let visible_branches: Vec<_> = self.branches.all.get(&alias).cloned().unwrap_or_default().into_iter().filter(|b| current.as_ref() != Some(b)).collect();
+                let visible_branches = self.graph_deletable_branch_choices(alias, current.as_deref());
 
                 match visible_branches.len() {
                     0 => {},

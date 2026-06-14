@@ -18,20 +18,15 @@ impl App {
         lines.push(Line::from(vec![Span::styled(line_text, Style::default().fg(self.theme.COLOR_TEXT))]));
         lines.push(Line::default());
 
-        let color = self.branches.colors.get(&alias).unwrap();
-        // Modal choices respect the active branch filter unless no filter is active.
-        let branches: Vec<String> = if self.branches.visible_branch_names.is_empty() {
-            self.branches.all.get(&alias).cloned().unwrap_or_default()
-        } else {
-            self.branches.visible_branch_names.iter().filter(|b| self.branches.all.get(&alias).is_some_and(|all| all.contains(b))).cloned().collect()
-        };
+        let color = self.branches.colors.get(&alias).copied().unwrap_or(self.theme.COLOR_TEXT);
+        let branches = self.graph_branch_choices(alias);
         branches.iter().enumerate().for_each(|(idx, branch)| {
             height += 1;
             let is_local = self.branches.local.values().any(|branches| branches.iter().any(|b| b.as_str() == branch));
             length = (10 + branch.len()).max(length);
             lines.push(Line::from(Span::styled(
                 format!("{} {} ", if is_local { "●" } else { "◆" }, branch),
-                Style::default().fg(if idx == self.modal_checkout_selected as usize { *color } else { self.theme.COLOR_TEXT }),
+                Style::default().fg(if idx == self.modal_checkout_selected as usize { color } else { self.theme.COLOR_TEXT }),
             )));
         });
 

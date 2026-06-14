@@ -158,8 +158,9 @@ pub fn save_layout_config(config: &LayoutConfig) {
         let _ = fs::create_dir_all(parent);
     }
 
-    let config_string = facet_json::to_string(config).unwrap();
-    fs::write(&path, &config_string).unwrap();
+    if let Ok(config_string) = facet_json::to_string(config) {
+        let _ = fs::write(&path, &config_string);
+    }
 }
 
 #[cfg(test)]
