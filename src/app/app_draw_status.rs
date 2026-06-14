@@ -34,6 +34,12 @@ impl App {
 
         // The pseudo-row splits uncommitted files into staged and unstaged panes.
         if is_showing_uncommitted {
+            for file in self.uncommitted.conflicts.iter() {
+                lines_status_top.push(Line::from(vec![
+                    Span::styled("! ", Style::default().fg(self.theme.COLOR_ORANGE)),
+                    Span::styled(truncate_with_ellipsis(file, max_status_top_width), Style::default().fg(self.theme.COLOR_ORANGE)),
+                ]));
+            }
             for file in self.uncommitted.staged.modified.iter() {
                 lines_status_top.push(Line::from(vec![
                     Span::styled("~ ", Style::default().fg(self.theme.COLOR_BLUE)),
@@ -68,6 +74,12 @@ impl App {
                 is_staged_changes = true;
             }
 
+            for file in self.uncommitted.conflicts.iter() {
+                lines_status_bottom.push(Line::from(vec![
+                    Span::styled("! ", Style::default().fg(self.theme.COLOR_ORANGE)),
+                    Span::styled(truncate_with_ellipsis(file, max_status_bottom_width), Style::default().fg(self.theme.COLOR_ORANGE)),
+                ]));
+            }
             for file in self.uncommitted.unstaged.modified.iter() {
                 lines_status_bottom.push(Line::from(vec![
                     Span::styled("~ ", Style::default().fg(self.theme.COLOR_BLUE)),
@@ -185,7 +197,7 @@ impl App {
                 let list = List::new(list_items).block(
                     Block::default()
                         .padding(padding)
-                        .borders(if self.layout_config.is_inspector && self.graph_selected != 0 { Borders::TOP } else { Borders::NONE })
+                        .borders(if self.layout_config.is_inspector && (self.graph_selected != 0 || self.uncommitted.has_conflicts) { Borders::TOP } else { Borders::NONE })
                         .border_style(Style::default().fg(self.theme.COLOR_BORDER)),
                 );
 
@@ -193,7 +205,7 @@ impl App {
 
                 let mut scrollbar_state = ScrollbarState::new(total_lines.saturating_sub(visible_height)).position(self.status_top_scroll.get());
                 let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-                    .begin_symbol(if self.layout_config.is_inspector && self.graph_selected != 0 { Some("│") } else { Some("╮") })
+                    .begin_symbol(if self.layout_config.is_inspector && (self.graph_selected != 0 || self.uncommitted.has_conflicts) { Some("│") } else { Some("╮") })
                     .end_symbol(if self.graph_selected == 0 { Some("┤") } else { Some("╯") })
                     .track_symbol(Some("│"))
                     .thumb_symbol(if total_lines > visible_height { "▌" } else { "│" })

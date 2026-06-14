@@ -25,6 +25,11 @@ pub fn get_filenames_diff_at_workdir(repo: &Repository) -> Result<UncommittedCha
             // Query each file after expansion to avoid applying directory status to children.
             let file_status = repo.status_file(Path::new(&file))?;
 
+            if file_status.is_conflicted() {
+                push_unique(&mut changes.conflicts, file.clone());
+                continue;
+            }
+
             if file_status.is_index_modified() {
                 changes.staged.modified.push(file.clone());
             }
@@ -47,15 +52,38 @@ pub fn get_filenames_diff_at_workdir(repo: &Repository) -> Result<UncommittedCha
         }
     }
 
+    if let Ok(index) = repo.index()
+        && let Ok(conflicts) = index.conflicts()
+    {
+        for conflict in conflicts.flatten() {
+            let path = conflict.our.as_ref().and_then(conflict_path).or_else(|| conflict.their.as_ref().and_then(conflict_path)).or_else(|| conflict.ancestor.as_ref().and_then(conflict_path));
+            if let Some(path) = path {
+                push_unique(&mut changes.conflicts, path);
+            }
+        }
+    }
+
     // Counts are deduplicated because the same path can be both staged and unstaged.
     changes.modified_count = deduplicate(&changes.staged.modified, &changes.unstaged.modified);
     changes.added_count = deduplicate(&changes.staged.added, &changes.unstaged.added);
     changes.deleted_count = deduplicate(&changes.staged.deleted, &changes.unstaged.deleted);
-    changes.is_staged = !changes.staged.modified.is_empty() || !changes.staged.added.is_empty() || !changes.staged.deleted.is_empty();
-    changes.is_unstaged = !changes.unstaged.modified.is_empty() || !changes.unstaged.added.is_empty() || !changes.unstaged.deleted.is_empty();
-    changes.is_clean = !changes.is_staged && !changes.is_unstaged;
+    changes.conflict_count = changes.conflicts.len();
+    changes.has_conflicts = changes.conflict_count > 0;
+    changes.is_staged = changes.has_conflicts || !changes.staged.modified.is_empty() || !changes.staged.added.is_empty() || !changes.staged.deleted.is_empty();
+    changes.is_unstaged = changes.has_conflicts || !changes.unstaged.modified.is_empty() || !changes.unstaged.added.is_empty() || !changes.unstaged.deleted.is_empty();
+    changes.is_clean = !changes.is_staged && !changes.is_unstaged && !changes.has_conflicts;
 
     Ok(changes)
+}
+
+fn conflict_path(entry: &git2::IndexEntry) -> Option<String> {
+    std::str::from_utf8(&entry.path).ok().map(|path| path.to_string())
+}
+
+fn push_unique(paths: &mut Vec<String>, path: String) {
+    if !paths.iter().any(|existing| existing == &path) {
+        paths.push(path);
+    }
 }
 
 fn collect_files_for_status(repo: &Repository, workdir: &Path, rel_path: &str) -> Vec<String> {
@@ -175,4 +203,82 @@ pub fn get_file_at_oid(repo: &Repository, commit_oid: Oid, filename: &str) -> Ve
 pub fn get_file_at_workdir(repo: &Repository, filename: &str) -> Vec<String> {
     let full_path = repo.workdir().map(|root| root.join(filename)).unwrap_or_else(|| Path::new(filename).to_path_buf());
     std::fs::read_to_string(full_path).map(|s| s.lines().map(|l| l.to_string()).collect()).unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::git::actions::rebasing::{RebaseOutcome, start_rebase};
+    use git2::{Repository, Signature, build::CheckoutBuilder};
+    use std::{
+        fs,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    fn temp_repo(name: &str) -> (PathBuf, Repository) {
+        let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let path = std::env::temp_dir().join(format!("guitar-diff-{name}-{id}"));
+        fs::create_dir_all(&path).unwrap();
+        let repo = Repository::init(&path).unwrap();
+        {
+            let mut config = repo.config().unwrap();
+            config.set_str("user.name", "Test User").unwrap();
+            config.set_str("user.email", "test@example.com").unwrap();
+        }
+        (path, repo)
+    }
+
+    fn write(path: &Path, file: &str, content: &str) {
+        fs::write(path.join(file), content).unwrap();
+    }
+
+    fn commit(repo: &Repository, file: &str, message: &str) -> Oid {
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new(file)).unwrap();
+        index.write().unwrap();
+        let tree_oid = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_oid).unwrap();
+        let sig = Signature::now("Test User", "test@example.com").unwrap();
+        let parent = repo.head().ok().and_then(|head| head.peel_to_commit().ok());
+        let parents: Vec<&git2::Commit<'_>> = parent.iter().collect();
+        repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents).unwrap()
+    }
+
+    fn checkout_new_branch(repo: &Repository, name: &str) {
+        let head = repo.head().unwrap().peel_to_commit().unwrap();
+        repo.branch(name, &head, false).unwrap();
+        repo.set_head(&format!("refs/heads/{name}")).unwrap();
+        repo.checkout_head(Some(CheckoutBuilder::default().force())).unwrap();
+    }
+
+    fn checkout_branch(repo: &Repository, name: &str) {
+        repo.set_head(&format!("refs/heads/{name}")).unwrap();
+        repo.checkout_head(Some(CheckoutBuilder::default().force())).unwrap();
+    }
+
+    #[test]
+    fn workdir_diff_marks_conflicted_paths() {
+        let (path, repo) = temp_repo("conflict");
+        write(&path, "file.txt", "base\n");
+        commit(&repo, "file.txt", "base");
+        checkout_new_branch(&repo, "feature");
+        write(&path, "file.txt", "feature\n");
+        commit(&repo, "file.txt", "feature");
+        checkout_branch(&repo, "master");
+        write(&path, "file.txt", "main\n");
+        let main = commit(&repo, "file.txt", "main");
+        checkout_branch(&repo, "feature");
+
+        assert_eq!(start_rebase(&repo, main).unwrap(), RebaseOutcome::Conflict);
+
+        let changes = get_filenames_diff_at_workdir(&repo).unwrap();
+        assert!(changes.has_conflicts);
+        assert!(changes.is_staged);
+        assert!(changes.is_unstaged);
+        assert_eq!(changes.conflict_count, 1);
+        assert_eq!(changes.conflicts, vec!["file.txt".to_string()]);
+
+        let _ = fs::remove_dir_all(path);
+    }
 }

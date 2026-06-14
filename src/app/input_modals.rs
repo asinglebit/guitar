@@ -33,6 +33,19 @@ impl App {
             return true;
         }
 
+        if matches!(self.focus, Focus::ModalRebaseConflict | Focus::ModalRebaseSuccess) {
+            if matches!(key_event.code, KeyCode::Enter | KeyCode::Esc) {
+                self.modal_rebase_message.clear();
+                self.focus = Focus::Viewport;
+                self.reload(None);
+            }
+            return true;
+        }
+
+        if self.focus == Focus::ModalRebaseProgress {
+            return true;
+        }
+
         if self.focus == Focus::ModalRemoveWorktree {
             match key_event.code {
                 KeyCode::Esc => {

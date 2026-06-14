@@ -156,6 +156,8 @@ impl Default for App {
             // Modal error
             modal_error_message: String::new(),
             modal_error_return_focus: Focus::Viewport,
+            modal_rebase_message: String::new(),
+            pending_rebase_action: None,
 
             // Exit
             is_exit: false,

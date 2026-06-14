@@ -1,5 +1,5 @@
 use crate::{
-    app::app::{App, Focus, Viewport},
+    app::app::{App, Focus, PendingRebaseAction, Viewport},
     git::{
         actions::{
             branching::delete_branch,
@@ -7,6 +7,7 @@ use crate::{
             cherrypicking::cherry_pick_commit,
             fetching::fetch_over_ssh,
             pushing::{push_over_ssh, push_tags_over_ssh},
+            rebasing::{RebaseOutcome, abort_rebase, continue_rebase, is_rebase_in_progress, start_rebase},
             resetting::{reset_file, reset_to_commit},
             staging::{stage_all, stage_file, unstage_all, unstage_file},
             stashing::{pop, stash},
@@ -19,6 +20,56 @@ use git2::Repository;
 use std::path::Path;
 
 impl App {
+    pub fn run_pending_rebase_action(&mut self) {
+        let Some(action) = self.pending_rebase_action.take() else {
+            return;
+        };
+        let Some(path) = self.repo.as_ref().map(|repo| repo.path().to_path_buf()) else {
+            self.focus = Focus::Viewport;
+            self.show_error("Rebase failed: no repository is open");
+            return;
+        };
+
+        let repo = match Repository::open(path) {
+            Ok(repo) => repo,
+            Err(error) => {
+                self.focus = Focus::Viewport;
+                self.show_error(format!("Open repository failed: {error}"));
+                return;
+            },
+        };
+
+        let result = match action {
+            PendingRebaseAction::Start(oid) => start_rebase(&repo, oid),
+            PendingRebaseAction::Continue => continue_rebase(&repo),
+            PendingRebaseAction::Abort => abort_rebase(&repo),
+        };
+
+        match result {
+            Ok(RebaseOutcome::Completed { applied }) => {
+                self.modal_rebase_message = if applied == 1 { "Rebase completed after applying 1 commit.".to_string() } else { format!("Rebase completed after applying {applied} commits.") };
+                self.focus = Focus::ModalRebaseSuccess;
+                self.reload(None);
+            },
+            Ok(RebaseOutcome::Conflict) => {
+                self.modal_rebase_message = "Rebase stopped because conflicts need to be resolved.".to_string();
+                self.focus = Focus::ModalRebaseConflict;
+                self.reload(None);
+            },
+            Ok(RebaseOutcome::Aborted) => {
+                self.modal_rebase_message = "Rebase aborted.".to_string();
+                self.focus = Focus::ModalRebaseSuccess;
+                self.reload(None);
+            },
+            Err(error) => {
+                self.modal_rebase_message.clear();
+                self.focus = Focus::Viewport;
+                self.show_error(format!("Rebase failed: {error}"));
+                self.reload(None);
+            },
+        }
+    }
+
     pub fn on_drop(&mut self) {
         if self.repo.is_some() && self.viewport == Viewport::Graph && self.focus == Focus::Viewport {
             let alias = self.oids.get_alias_by_idx(self.graph_selected);
@@ -241,6 +292,12 @@ impl App {
                         Focus::StatusTop => {
                             let file: String = {
                                 let mut idx = self.status_top_selected;
+                                let conflicts = &self.uncommitted.conflicts;
+                                if idx < conflicts.len() {
+                                    self.show_error("Unstage file failed: resolve conflicts in your editor, then continue the rebase");
+                                    return;
+                                }
+                                idx -= conflicts.len();
                                 let modified = &self.uncommitted.staged.modified;
                                 let added = &self.uncommitted.staged.added;
                                 let deleted = &self.uncommitted.staged.deleted;
@@ -290,6 +347,12 @@ impl App {
                         Focus::StatusBottom => {
                             let file: String = {
                                 let mut idx = self.status_bottom_selected;
+                                let conflicts = &self.uncommitted.conflicts;
+                                if idx < conflicts.len() {
+                                    self.show_error("Stage file failed: resolve conflicts in your editor, then continue the rebase");
+                                    return;
+                                }
+                                idx -= conflicts.len();
                                 let modified = &self.uncommitted.unstaged.modified;
                                 let added = &self.uncommitted.unstaged.added;
                                 let deleted = &self.uncommitted.unstaged.deleted;
@@ -513,5 +576,39 @@ impl App {
                 Err(error) => self.show_error(format!("Cherry-pick failed: {error}")),
             }
         }
+    }
+
+    pub fn on_rebase(&mut self) {
+        let Some(repo) = &self.repo else { return };
+        if matches!(self.viewport, Viewport::Settings | Viewport::Viewer) || self.focus != Focus::Viewport {
+            return;
+        }
+
+        if is_rebase_in_progress(repo) {
+            self.pending_rebase_action = Some(PendingRebaseAction::Continue);
+            self.modal_rebase_message = "Continuing rebase...".to_string();
+            self.focus = Focus::ModalRebaseProgress;
+            return;
+        }
+
+        if self.viewport != Viewport::Graph || self.graph_selected == 0 {
+            return;
+        }
+
+        let oid = *self.oids.get_oid_by_idx(self.graph_selected);
+        self.pending_rebase_action = Some(PendingRebaseAction::Start(oid));
+        self.modal_rebase_message = "Rebasing the current branch onto the selected commit...".to_string();
+        self.focus = Focus::ModalRebaseProgress;
+    }
+
+    pub fn on_abort_rebase(&mut self) {
+        let Some(repo) = &self.repo else { return };
+        if matches!(self.viewport, Viewport::Settings | Viewport::Viewer) || self.focus != Focus::Viewport || !is_rebase_in_progress(repo) {
+            return;
+        }
+
+        self.pending_rebase_action = Some(PendingRebaseAction::Abort);
+        self.modal_rebase_message = "Aborting rebase...".to_string();
+        self.focus = Focus::ModalRebaseProgress;
     }
 }

@@ -99,7 +99,7 @@ impl App {
     pub fn layout(&mut self, frame: &mut Frame) {
         let is_zen = self.layout_config.is_zen;
         let is_settings = self.viewport == Viewport::Splash || self.viewport == Viewport::Settings;
-        let is_inspector = !is_settings && self.layout_config.is_inspector && self.graph_selected != 0;
+        let is_inspector = !is_settings && self.layout_config.is_inspector && (self.graph_selected != 0 || self.uncommitted.has_conflicts);
         let is_status = !is_settings && self.layout_config.is_status;
         let is_right_pane = is_inspector || is_status;
         let is_left_pane = (self.layout_config.is_branches || self.layout_config.is_tags || self.layout_config.is_stashes || self.layout_config.is_worktrees) && !is_settings;
@@ -213,7 +213,7 @@ impl App {
         // Status can merge with inspector to avoid double borders between stacked panes.
         let mut status_top_scrollbar = chunks_status[0];
         let mut status_top = chunks_status[0];
-        let merge_with_inspector = self.layout_config.is_inspector && self.graph_selected != 0;
+        let merge_with_inspector = self.layout_config.is_inspector && (self.graph_selected != 0 || self.uncommitted.has_conflicts);
         if merge_with_inspector {
             status_top_scrollbar = extend_up(status_top_scrollbar, 1);
             status_top = extend_up(status_top, 1);

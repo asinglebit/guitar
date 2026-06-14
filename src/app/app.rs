@@ -38,7 +38,7 @@ use crossterm::{
     execute,
     terminal::{enable_raw_mode, supports_keyboard_enhancement},
 };
-use git2::Repository;
+use git2::{Oid, Repository};
 use indexmap::IndexMap;
 use ratatui::{
     DefaultTerminal, Frame,
@@ -88,7 +88,17 @@ pub enum Focus {
     ModalGrep,
     ModalTag,
     ModalDeleteTag,
+    ModalRebaseProgress,
+    ModalRebaseConflict,
+    ModalRebaseSuccess,
     ModalError,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum PendingRebaseAction {
+    Start(Oid),
+    Continue,
+    Abort,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -236,6 +246,10 @@ pub struct App {
     pub modal_error_message: String,
     pub modal_error_return_focus: Focus,
 
+    // Modal rebase
+    pub modal_rebase_message: String,
+    pub pending_rebase_action: Option<PendingRebaseAction>,
+
     // Main loop shutdown flag.
     pub is_exit: bool,
 }
@@ -269,6 +283,7 @@ impl App {
                 }
 
                 terminal.draw(|frame| self.draw(frame))?;
+                self.run_pending_rebase_action();
             }
 
             Ok(())
@@ -340,7 +355,7 @@ impl App {
                     if self.layout_config.is_status {
                         self.draw_status(frame);
                     }
-                    if self.layout_config.is_inspector && self.graph_selected != 0 {
+                    if self.layout_config.is_inspector && (self.graph_selected != 0 || self.uncommitted.has_conflicts) {
                         self.draw_inspector(frame, repo);
                     }
                 },
@@ -369,6 +384,9 @@ impl App {
                 },
                 Focus::ModalDeleteTag => {
                     self.draw_modal_delete_tag(frame);
+                },
+                Focus::ModalRebaseProgress | Focus::ModalRebaseConflict | Focus::ModalRebaseSuccess => {
+                    self.draw_modal_rebase(frame);
                 },
                 Focus::ModalError => {
                     self.draw_modal_error(frame);

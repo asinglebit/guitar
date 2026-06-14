@@ -19,7 +19,7 @@ impl App {
         for focus in &[Focus::Viewport, Focus::Inspector, Focus::StatusTop, Focus::StatusBottom, Focus::Worktrees, Focus::Stashes, Focus::Tags, Focus::Branches] {
             match focus {
                 Focus::Viewport => order.push(Focus::Viewport),
-                Focus::Inspector if self.layout_config.is_inspector && self.graph_selected != 0 => order.push(Focus::Inspector),
+                Focus::Inspector if self.layout_config.is_inspector && (self.graph_selected != 0 || self.uncommitted.has_conflicts) => order.push(Focus::Inspector),
                 Focus::StatusTop if self.layout_config.is_status => order.push(*focus),
                 Focus::StatusBottom if self.layout_config.is_status && self.graph_selected == 0 => order.push(*focus),
                 Focus::Branches if self.layout_config.is_branches => order.push(Focus::Branches),
@@ -232,7 +232,7 @@ impl App {
                 self.viewport = Viewport::Graph;
             },
             Focus::StatusTop => {
-                if self.graph_selected != 0 {
+                if self.graph_selected != 0 || self.uncommitted.has_conflicts {
                     self.layout_config.is_inspector = true;
                     self.focus = Focus::Inspector;
                 } else {
@@ -506,7 +506,7 @@ impl App {
                         if let Some(repo) = &self.repo {
                             if self.graph_selected > 0 {
                                 self.graph_selected -= 1;
-                                if self.graph_selected == 0 && self.focus == Focus::Inspector {
+                                if self.graph_selected == 0 && self.focus == Focus::Inspector && !self.uncommitted.has_conflicts {
                                     self.focus = Focus::Viewport;
                                 }
                             }

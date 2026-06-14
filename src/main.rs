@@ -11,6 +11,7 @@ mod app {
     pub mod app_draw_modal_delete_tag;
     pub mod app_draw_modal_error;
     pub mod app_draw_modal_input;
+    pub mod app_draw_modal_rebase;
     pub mod app_draw_modal_remove_worktree;
     pub mod app_draw_modal_solo;
     pub mod app_draw_modal_worktree_chooser;
@@ -53,6 +54,7 @@ pub mod git {
         pub mod committing;
         pub mod fetching;
         pub mod pushing;
+        pub mod rebasing;
         pub mod resetting;
         pub mod staging;
         pub mod stashing;

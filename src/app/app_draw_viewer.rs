@@ -216,17 +216,20 @@ impl App {
                     // Commit status rows come from current_diff.
                     Some(self.current_diff.get(self.status_top_selected)?.filename.to_string())
                 } else if self.graph_selected == 0 && self.uncommitted.is_staged {
-                    // Staged uncommitted rows are grouped modified, added, then deleted.
+                    // Staged uncommitted rows are grouped conflicts, modified, added, then deleted.
+                    let conflict_len = self.uncommitted.conflicts.len();
                     let modified_len = self.uncommitted.staged.modified.len();
                     let added_len = self.uncommitted.staged.added.len();
                     let index = self.status_top_selected;
 
-                    if index < modified_len {
-                        self.uncommitted.staged.modified.get(index).cloned()
-                    } else if index < modified_len + added_len {
-                        self.uncommitted.staged.added.get(index - modified_len).cloned()
+                    if index < conflict_len {
+                        self.uncommitted.conflicts.get(index).cloned()
+                    } else if index < conflict_len + modified_len {
+                        self.uncommitted.staged.modified.get(index - conflict_len).cloned()
+                    } else if index < conflict_len + modified_len + added_len {
+                        self.uncommitted.staged.added.get(index - conflict_len - modified_len).cloned()
                     } else {
-                        self.uncommitted.staged.deleted.get(index - modified_len - added_len).cloned()
+                        self.uncommitted.staged.deleted.get(index - conflict_len - modified_len - added_len).cloned()
                     }
                 } else {
                     None
@@ -235,16 +238,19 @@ impl App {
             Focus::StatusBottom => {
                 if self.graph_selected == 0 && self.uncommitted.is_unstaged {
                     // Unstaged rows use the same grouping as staged rows.
+                    let conflict_len = self.uncommitted.conflicts.len();
                     let modified_len = self.uncommitted.unstaged.modified.len();
                     let added_len = self.uncommitted.unstaged.added.len();
                     let index = self.status_bottom_selected;
 
-                    if index < modified_len {
-                        self.uncommitted.unstaged.modified.get(index).cloned()
-                    } else if index < modified_len + added_len {
-                        self.uncommitted.unstaged.added.get(index - modified_len).cloned()
+                    if index < conflict_len {
+                        self.uncommitted.conflicts.get(index).cloned()
+                    } else if index < conflict_len + modified_len {
+                        self.uncommitted.unstaged.modified.get(index - conflict_len).cloned()
+                    } else if index < conflict_len + modified_len + added_len {
+                        self.uncommitted.unstaged.added.get(index - conflict_len - modified_len).cloned()
                     } else {
-                        self.uncommitted.unstaged.deleted.get(index - modified_len - added_len).cloned()
+                        self.uncommitted.unstaged.deleted.get(index - conflict_len - modified_len - added_len).cloned()
                     }
                 } else {
                     None

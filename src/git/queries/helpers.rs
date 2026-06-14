@@ -5,14 +5,17 @@ use std::collections::HashSet;
 // Snapshot of uncommitted state split the same way the status panes are drawn.
 #[derive(Debug, Default, Clone)]
 pub struct UncommittedChanges {
-    pub unstaged: FileChanges, // Working tree changes not yet staged.
-    pub staged: FileChanges,   // Index changes ready to commit.
-    pub modified_count: usize, // Unique modified paths across staged and unstaged.
-    pub added_count: usize,    // Unique added paths across staged and unstaged.
-    pub deleted_count: usize,  // Unique deleted paths across staged and unstaged.
-    pub is_clean: bool,        // True when both staged and unstaged lists are empty.
-    pub is_staged: bool,       // True when the index has at least one change.
-    pub is_unstaged: bool,     // True when the workdir has at least one change.
+    pub unstaged: FileChanges,  // Working tree changes not yet staged.
+    pub staged: FileChanges,    // Index changes ready to commit.
+    pub conflicts: Vec<String>, // Paths currently carrying index conflicts.
+    pub modified_count: usize,  // Unique modified paths across staged and unstaged.
+    pub added_count: usize,     // Unique added paths across staged and unstaged.
+    pub deleted_count: usize,   // Unique deleted paths across staged and unstaged.
+    pub conflict_count: usize,  // Unique conflicted paths.
+    pub is_clean: bool,         // True when both staged and unstaged lists are empty.
+    pub is_staged: bool,        // True when the index has at least one change.
+    pub is_unstaged: bool,      // True when the workdir has at least one change.
+    pub has_conflicts: bool,    // True when the index has unresolved conflicts.
 }
 
 // File buckets are kept separate so status actions can address a stable row group.

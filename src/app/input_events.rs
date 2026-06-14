@@ -90,7 +90,7 @@ impl App {
         if self.layout_config.is_worktrees && Self::rect_contains(self.layout.pane_worktrees, column, row) {
             return Some(Focus::Worktrees);
         }
-        if self.layout_config.is_inspector && self.graph_selected != 0 && Self::rect_contains(self.layout.pane_inspector, column, row) {
+        if self.layout_config.is_inspector && (self.graph_selected != 0 || self.uncommitted.has_conflicts) && Self::rect_contains(self.layout.pane_inspector, column, row) {
             return Some(Focus::Inspector);
         }
         if self.layout_config.is_status && self.graph_selected == 0 && Self::rect_contains(self.layout.pane_status_bottom, column, row) {
@@ -167,6 +167,9 @@ impl App {
                 | Focus::ModalGrep
                 | Focus::ModalTag
                 | Focus::ModalDeleteTag
+                | Focus::ModalRebaseProgress
+                | Focus::ModalRebaseConflict
+                | Focus::ModalRebaseSuccess
                 | Focus::ModalError
         )
     }

@@ -77,6 +77,8 @@ pub enum Command {
     Tag,
     Untag,
     Cherrypick,
+    Rebase,
+    AbortRebase,
     CreateWorktree,
     RemoveWorktree,
     ToggleWorktreeLock,
@@ -315,6 +317,12 @@ fn default_action_keymap() -> IndexMap<KeyBinding, Command> {
 
     // 'y' for cherrypick (vim uses 'y' for yank here yank/copy a commit to current branch)
     map.insert(KeyBinding::new(Char('y'), KeyModifiers::NONE), Command::Cherrypick);
+
+    // 'r' starts or continues a rebase from action mode.
+    map.insert(KeyBinding::new(Char('r'), KeyModifiers::NONE), Command::Rebase);
+
+    // 'R' aborts an in-progress rebase from action mode.
+    map.insert(KeyBinding::new(Char('R'), KeyModifiers::SHIFT), Command::AbortRebase);
 
     // 'W' removes/prunes a selected worktree.
     map.insert(KeyBinding::new(Char('W'), KeyModifiers::SHIFT), Command::RemoveWorktree);
@@ -561,6 +569,14 @@ fn migrate_default_bindings(maps: &mut Keymaps) -> bool {
     changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('w'), KeyModifiers::NONE), Command::CreateWorktree);
     changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('W'), KeyModifiers::SHIFT), Command::RemoveWorktree);
     changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('L'), KeyModifiers::SHIFT), Command::ToggleWorktreeLock);
+    if let Some(action) = maps.get_mut(&InputMode::Action)
+        && action.get(&KeyBinding::new(Char('r'), KeyModifiers::NONE)) == Some(&Command::Reload)
+    {
+        action.insert(KeyBinding::new(Char('r'), KeyModifiers::NONE), Command::Rebase);
+        changed = true;
+    }
+    changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('r'), KeyModifiers::NONE), Command::Rebase);
+    changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('R'), KeyModifiers::SHIFT), Command::AbortRebase);
     changed
 }
 
@@ -609,5 +625,43 @@ mod tests {
         assert_eq!(normal.get(&KeyBinding::new(Char('w'), KeyModifiers::NONE)), Some(&Command::CreateWorktree));
         assert_eq!(action.get(&KeyBinding::new(Char('W'), KeyModifiers::SHIFT)), Some(&Command::RemoveWorktree));
         assert_eq!(action.get(&KeyBinding::new(Char('L'), KeyModifiers::SHIFT)), Some(&Command::ToggleWorktreeLock));
+    }
+
+    #[test]
+    fn defaults_include_rebase_bindings() {
+        let maps = default_keymaps();
+        let action = maps.get(&InputMode::Action).unwrap();
+
+        assert_eq!(action.get(&KeyBinding::new(Char('r'), KeyModifiers::NONE)), Some(&Command::Rebase));
+        assert_eq!(action.get(&KeyBinding::new(Char('R'), KeyModifiers::SHIFT)), Some(&Command::AbortRebase));
+    }
+
+    #[test]
+    fn migration_replaces_inherited_action_reload_with_rebase() {
+        let mut maps = IndexMap::new();
+        maps.insert(InputMode::Normal, IndexMap::new());
+        let mut action = IndexMap::new();
+        action.insert(KeyBinding::new(Char('r'), KeyModifiers::NONE), Command::Reload);
+        maps.insert(InputMode::Action, action);
+
+        assert!(migrate_default_bindings(&mut maps));
+
+        let action = maps.get(&InputMode::Action).unwrap();
+        assert_eq!(action.get(&KeyBinding::new(Char('r'), KeyModifiers::NONE)), Some(&Command::Rebase));
+        assert_eq!(action.get(&KeyBinding::new(Char('R'), KeyModifiers::SHIFT)), Some(&Command::AbortRebase));
+    }
+
+    #[test]
+    fn migration_preserves_custom_action_r() {
+        let mut maps = IndexMap::new();
+        maps.insert(InputMode::Normal, IndexMap::new());
+        let mut action = IndexMap::new();
+        action.insert(KeyBinding::new(Char('r'), KeyModifiers::NONE), Command::FetchAll);
+        maps.insert(InputMode::Action, action);
+
+        assert!(migrate_default_bindings(&mut maps));
+
+        let action = maps.get(&InputMode::Action).unwrap();
+        assert_eq!(action.get(&KeyBinding::new(Char('r'), KeyModifiers::NONE)), Some(&Command::FetchAll));
     }
 }

@@ -32,12 +32,12 @@ impl App {
             },
             Focus::StatusTop => {
                 if self.graph_selected == 0 {
-                    self.uncommitted.staged.modified.len() + self.uncommitted.staged.added.len() + self.uncommitted.staged.deleted.len()
+                    self.uncommitted.conflicts.len() + self.uncommitted.staged.modified.len() + self.uncommitted.staged.added.len() + self.uncommitted.staged.deleted.len()
                 } else {
                     self.current_diff.len()
                 }
             },
-            Focus::StatusBottom => self.uncommitted.unstaged.modified.len() + self.uncommitted.unstaged.added.len() + self.uncommitted.unstaged.deleted.len(),
+            Focus::StatusBottom => self.uncommitted.conflicts.len() + self.uncommitted.unstaged.modified.len() + self.uncommitted.unstaged.added.len() + self.uncommitted.unstaged.deleted.len(),
             Focus::Branches => self.branches.sorted.len(),
             Focus::Worktrees => self.worktrees.entries.len(),
             _ => 0,

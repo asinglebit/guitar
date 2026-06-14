@@ -492,6 +492,10 @@ pub fn render_message_range(
         } else {
             // Alias NONE renders the uncommitted summary instead of a commit message.
             let color = if global_idx == selected { theme.COLOR_GREY_500 } else { theme.COLOR_GREY_600 };
+            if uncommitted.conflict_count > 0 {
+                spans.push(Span::styled("! ", Style::default().fg(theme.COLOR_ORANGE)));
+                spans.push(Span::styled(format!("{} ", uncommitted.conflict_count), Style::default().fg(theme.COLOR_ORANGE)));
+            }
             if uncommitted.modified_count > 0 {
                 spans.push(Span::styled("~ ", Style::default().fg(theme.COLOR_BLUE)));
                 spans.push(Span::styled(format!("{} ", uncommitted.modified_count), Style::default().fg(color)));
