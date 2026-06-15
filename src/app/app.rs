@@ -62,7 +62,7 @@ use std::{
     rc::Rc,
     sync::{Arc, atomic::AtomicBool, mpsc::channel},
     thread::JoinHandle,
-    time::Duration,
+    time::{Duration, Instant},
 };
 use std::{env, io::stdout, path::PathBuf};
 
@@ -258,6 +258,21 @@ pub enum LayoutDrag {
     StatusFiles,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MouseSelectionTarget {
+    Graph(usize),
+    Branches(usize),
+    Tags(usize),
+    Stashes(usize),
+    Reflogs(usize),
+    Worktrees(usize),
+    Inspector(usize),
+    StatusTop(usize),
+    StatusBottom(usize),
+    Splash(usize),
+    Settings(usize),
+}
+
 pub struct App {
     // Global application state and user-facing configuration.
     pub logo: Vec<Span<'static>>,
@@ -312,6 +327,7 @@ pub struct App {
     // Persistent layout switches and current interaction target.
     pub layout_config: LayoutConfig,
     pub layout_drag: Option<LayoutDrag>,
+    pub last_mouse_click: Option<(MouseSelectionTarget, Instant)>,
     pub viewport: Viewport,
     pub focus: Focus,
 
@@ -348,6 +364,7 @@ pub struct App {
 
     // Settings
     pub settings_selected: usize,
+    pub settings_scroll: Cell<usize>,
     pub settings_selections: Vec<SettingsSelection>,
     pub modal_key_capture_selection: Option<KeymapSelection>,
     pub modal_key_capture_candidate: Option<KeyBinding>,

@@ -94,6 +94,7 @@ impl Default for App {
             // Focus
             layout_config: load_layout_config(),
             layout_drag: None,
+            last_mouse_click: None,
             viewport: Viewport::Splash,
             focus: Focus::Viewport,
 
@@ -126,6 +127,7 @@ impl Default for App {
 
             // Settings
             settings_selected: 0,
+            settings_scroll: 0.into(),
             settings_selections: Vec::new(),
             modal_key_capture_selection: None,
             modal_key_capture_candidate: None,

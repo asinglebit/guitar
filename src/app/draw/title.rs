@@ -35,6 +35,7 @@ impl App {
         frame.render_widget(paragraph, self.layout.title_left);
 
         let focus_name = match self.focus {
+            Focus::Viewport if self.viewport == Viewport::Settings => "settings",
             Focus::Viewport => "graph",
             Focus::Branches => "branches",
             Focus::Tags => "tags",

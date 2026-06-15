@@ -215,7 +215,7 @@ impl App {
             });
         }
 
-        // Settings uses sticky scroll so the selected row stays near the bottom while moving down.
+        // Center the selected row where possible so settings navigation keeps context above and below.
         let total_lines = lines.len();
         let visible_height = if self.layout_config.is_zen { self.layout.graph.height.saturating_sub(2) as usize } else { self.layout.graph.height as usize };
 
@@ -241,7 +241,9 @@ impl App {
             }
         }
 
-        let start = (self.settings_selected + 1).saturating_sub(visible_height);
+        let max_scroll = total_lines.saturating_sub(visible_height);
+        let start = if visible_height == 0 { 0 } else { self.settings_selected.saturating_sub(visible_height / 2).min(max_scroll) };
+        self.settings_scroll.set(start);
         let end = (start + visible_height).min(total_lines);
 
         // Ensure blank lines still occupy space after conversion to ListItem.
@@ -309,3 +311,7 @@ impl App {
         frame.render_stateful_widget(scrollbar, self.layout.app, &mut scrollbar_state);
     }
 }
+
+#[cfg(test)]
+#[path = "../../tests/app/draw/settings.rs"]
+mod tests;

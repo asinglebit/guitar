@@ -54,7 +54,7 @@ impl App {
         }
     }
 
-    fn select_graph_index(&mut self, idx: usize) {
+    pub(crate) fn select_graph_index(&mut self, idx: usize) {
         self.graph.pending_selection_restore = None;
         self.graph_selected = Self::clamp_selection(idx, self.graph_commit_count());
         self.refresh_current_diff_for_graph_selection();

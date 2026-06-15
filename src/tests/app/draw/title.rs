@@ -36,3 +36,16 @@ fn title_shows_repo_file_path_inside_viewer() {
     let rendered = rendered_symbols(&terminal);
     assert!(rendered.contains("/tmp/guitar-title-repo/src/lib.rs"));
 }
+
+#[test]
+fn title_names_settings_viewport() {
+    let mut app = title_app(Viewport::Settings);
+    app.focus = Focus::Viewport;
+    let backend = TestBackend::new(120, 1);
+    let mut terminal = Terminal::new(backend).unwrap();
+
+    terminal.draw(|frame| app.draw_title(frame)).unwrap();
+
+    let rendered = rendered_symbols(&terminal);
+    assert!(rendered.contains("settings"));
+}
