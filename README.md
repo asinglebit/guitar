@@ -18,39 +18,74 @@ made with ♡
   </pre>
 </div>
 
-![2](https://github.com/user-attachments/assets/177dbf13-b9ad-480e-a1be-71a333454a44)
+![guitar screenshot](https://github.com/user-attachments/assets/177dbf13-b9ad-480e-a1be-71a333454a44)
 
-`guita╭` is a Rust terminal UI for working with Git history from a topology-first point of view. It is built with `ratatui` and `libgit2`, and aims to make large repositories navigable without leaving the terminal.
+`guita╭`, distributed as `guitar`, is a Rust terminal UI for working with Git history from a topology-first point of view. It is built with `ratatui`, `crossterm`, and `libgit2`, and is designed for exploring, filtering, and operating on large repositories without leaving the terminal.
 
-### Demo
+## Contents
 
-Here is an older recording of the v0.1.12 feature set:
+- [Status And Warning](#status-and-warning)
+- [Demo](#demo)
+- [Requirements](#requirements)
+- [Install](#install)
+- [Run](#run)
+- [Mental Model](#mental-model)
+- [Interface Sections](#interface-sections)
+- [Navigation](#navigation)
+- [Inputs And Keymaps](#inputs-and-keymaps)
+- [Git Operations](#git-operations)
+- [Authentication](#authentication)
+- [Settings](#settings)
+- [Persistence](#persistence)
+- [Configuration Files](#configuration-files)
+- [Development](#development)
+- [Known Limitations](#known-limitations)
+- [Roadmap](#roadmap)
+- [Screenshots](#screenshots)
+
+## Status And Warning
+
+This is a hobby project with sharp Git tools. It can stage, unstage, commit, force checkout, force push, delete branches, reset, stash, pop, drop, rebase, merge, cherry-pick, prune worktrees, and discard file changes.
+
+Use it carefully on important repositories. Keep backups, understand what the selected row and focused pane mean before using action mode, and report issues when behavior is surprising.
+
+## Demo
+
+Older recording of the `v0.1.12` feature set:
 
 [https://www.youtube.com/watch?v=oERA8MYlHjQ](https://www.youtube.com/watch?v=oERA8MYlHjQ)
 
-The recording is still useful as a high-level tour, but the current README and in-app settings/help screen are the source of truth for current shortcuts and behavior.
+The recording is still useful as a tour. This README and the in-app settings/help view are the current source of truth for shortcuts and behavior.
 
-### Disclaimer
+## Requirements
 
-This is a hobby project, and it includes sharp tools. Some actions are intentionally destructive, and several workflows still favor the happy path over a fully guided Git client experience. Use it with caution on important repositories, keep backups, and please report issues or contribute fixes if something feels wrong.
+- Rust and Cargo when building from source.
+- A non-bare Git repository. Bare repositories are not supported by the UI.
+- `user.name` and `user.email` configured in Git before opening a repository. `guitar` reads these on repository load and uses them when creating commits.
+- Terminal mouse support for pane dragging and wheel scrolling.
+- SSH or HTTPS credentials for private remotes when using network operations.
 
-### Motivation
+Set identity globally:
 
-I wanted a terminal-based, cross-platform Git client that makes it easy to understand where I am topologically at any point in time. It needed to be fast, useful in day-to-day work, and a good reason to learn Rust. This project is where those goals met.
+```bash
+git config --global user.name "Your Name"
+git config --global user.email "you@example.com"
+```
 
-### Requirements
+Or set identity per repository:
 
-- A Rust toolchain with Cargo and Rust support.
-- `user.name` and `user.email` configured in Git before launching a repository. The app reads them on repository load and uses them for commits.
-- Network credentials for private remotes. `guitar` uses `ssh-agent` when available, can prompt for SSH key passphrases, and can prompt for HTTPS username/password or token credentials. Prompted secrets are kept in memory for the current session only.
+```bash
+git config user.name "Your Name"
+git config user.email "you@example.com"
+```
 
-### Install
+## Install
 
 Prebuilt binaries are published on the releases page:
 
 [https://github.com/asinglebit/guitar/releases](https://github.com/asinglebit/guitar/releases)
 
-To build from source:
+Build from source:
 
 ```bash
 git clone https://github.com/asinglebit/guitar.git
@@ -58,24 +93,24 @@ cd guitar
 cargo build --release
 ```
 
-The release binary will be at:
+The release binary is written to:
 
 ```bash
 target/release/guitar
 ```
 
-### Usage
+## Run
 
-Run `guitar` from inside a repository, from a repository subdirectory, or with an explicit path:
+Run from inside a repository, a repository subdirectory, or with an explicit path:
 
 ```bash
 guitar
-guitar ../path/to/your/repo
+guitar ../path/to/repository
 ```
 
-If the path cannot be opened as a Git repository, the app falls back to the splash screen and shows recent repositories if any are saved.
+The first non-flag argument is treated as the repository path. If no path is provided, `.` is used. The path is canonicalized and then resolved to the Git repository root when possible.
 
-Useful flags:
+Meta flags:
 
 ```bash
 guitar --version
@@ -83,110 +118,280 @@ guitar -v
 guitar --reset
 ```
 
-`--reset` deletes the saved `guitar` config directory so layout, keymap, and recent repository files can be regenerated.
+`--version` and `-v` print the version and exit. `--reset` deletes the saved `guitar` config directory, then starts the app with regenerated defaults.
 
-### Current Features
+If the path cannot be opened as a Git repository, `guitar` falls back to the splash screen and shows saved recent repositories.
 
-#### Repository Graph
+## Mental Model
 
-- Incremental history loading in a background walker. Large repositories become usable while history continues loading in batches.
-- Graph rendering for commits, branches, merges, tags, stashes, worktree HEAD badges, and the synthetic uncommitted-work row.
+`guitar` is built around a few core ideas:
+
+- The graph is the primary view. Commits, refs, stashes, worktrees, and optional HEAD reflog entries are projected onto one topology-oriented list.
+- Row `0` is a synthetic uncommitted-work row above `HEAD`. It represents staged files, unstaged files, and conflicts in the working tree.
+- Commit history loads incrementally on a background worker. The app becomes usable while more history is still being walked.
+- Focus controls what keys operate on. The same key can scroll the graph, a side pane, a status pane, settings, a modal, or the file viewer depending on focus.
+- Scope navigation is horizontal: `h` widens outward, `l` narrows inward.
+- Dangerous commands are gated behind action mode. By default, press `Ctrl+a`, then the action key.
+
+## Interface Sections
+
+### Splash
+
+The splash screen appears when no repository is open or when you back out of the graph. It lists recent repositories from `recent.json`.
+
+- `Enter` or `l` opens the selected recent repository.
+- `Esc` returns to the graph when a repository is already loaded.
+- `q` exits.
+
+### Graph
+
+The graph is the central history view. It can render:
+
+- The synthetic uncommitted-work row.
+- Commits in topology order.
+- Local and remote branch labels.
+- Lightweight and annotated tags resolved to commits.
+- Stash commits placed near their base commits.
+- Worktree badges for commits checked out in main or linked worktrees.
+- Optional HEAD reflog labels and roots.
 - Optional abbreviated SHA column.
-- Branch visibility filters, branch toggling, and one-branch solo mode.
-- Optional HEAD reflog graph roots so reset-away or otherwise unlabeled HEAD positions can be found.
-- Navigation by row, page, half page, list midpoint, first/last row, branch labels, and first-parent commit relationships.
-- SHA-prefix jump for commits that have already been loaded.
-- Recent repository splash screen.
-- Status bar with current branch, detached HEAD, unborn repository state, selection counts, loading spinner, action-mode indicator, and zen-mode indicator.
 
-#### Panes and Views
+Graph row details are loaded by window, so large repositories can stay responsive.
 
-- Branch pane with local/remote and visible/hidden indicators.
-- Tag pane for local tags.
-- Stash pane showing stash commits alongside normal history.
-- HEAD reflog pane for jumping to recent HEAD positions, including commits no branch currently names.
-- Worktree pane showing main and linked worktrees, current/locked/invalid state, branch or detached HEAD, and dirty markers.
-- Status panes that split staged and unstaged files on the uncommitted row, with conflicted files highlighted in yellow.
-- Commit file list for the selected commit, compared with its first parent.
-- Commit inspector with commit SHA, parent SHAs, featured branches, author, committer, summary, and body.
-- File viewer for selected status/commit files, with line wrapping, line numbers, diff highlighting, hunk-only mode, split diff mode, and conflict-marker display.
-- Settings/help view with version, commit heatmap, config paths, Git identity, auth notes, theme selection, and active keymaps.
-- Zen mode for focusing one pane at a time.
-- Minimal chrome mode that hides the title and status bars.
+### Branches
 
-#### Git Operations
+The branch pane lists local branches first and remote branches after them, sorted by name inside each group.
 
-- Stage all unstaged files from the graph row, or stage one selected unstaged file from the status pane.
-- Unstage all staged files from the graph row, or unstage one selected staged file from the status pane.
-- Commit staged changes with an in-app commit message prompt.
-- Fetch `origin` heads and tags over SSH or HTTPS, with pruning enabled.
-- Force push the current branch to `origin` over SSH or HTTPS.
-- Push all local tags to `origin` over SSH or HTTPS.
-- Checkout local branches, materialize and checkout remote branches, or checkout an unlabeled commit in detached HEAD mode.
-- Create a branch at the selected graph or HEAD reflog commit.
-- Delete a local branch, or delete a remote branch over SSH or HTTPS when the selected branch is remote.
-- Create and delete lightweight local tags.
-- Create linked worktrees from the selected commit, using the new worktree name as the new local branch name.
-- Open a selected valid worktree from the worktree pane, or press `Enter` on a graph worktree badge.
-- Lock, unlock, prune, and guarded-remove linked worktrees from the pane or graph badge.
-- Stash current work, including untracked files.
-- Pop or drop a selected stash.
-- Hard reset or mixed reset to the selected commit.
-- Discard changes for a selected status file by resetting it to `HEAD`.
-- Cherry-pick a selected commit after confirming or editing the resulting commit message.
-- Merge the selected graph commit into the current local branch, using Git-default fast-forward/no-op/merge-commit behavior and honoring `merge.ff`.
-- Rebase the current local branch onto the selected graph commit.
-- Continue or abort an in-progress rebase, cherry-pick, or merge from action mode.
-- Conflict-aware rebase, cherry-pick, and merge flows: conflicts are surfaced in a modal, marked in the graph/status/inspector panes, and can be viewed in unified or split diff mode while you resolve them externally.
+- Filled circle: visible local branch.
+- Hollow circle: hidden local branch.
+- Filled diamond: visible remote branch.
+- Hollow diamond: hidden remote branch.
 
-#### Input, Layout, and Persistence
+Branch visibility affects graph roots and filtering. An empty visibility set means all branches are visible.
 
-- Vim-like default navigation with a customizable keymap.
-- Single-shot action mode for dangerous operations. Press the action-mode key first, then the action key.
-- Mouse wheel scrolling over panes.
-- Mouse dragging for side-pane widths, stacked-pane heights, and the split diff divider.
-- Persistent layout toggles, pane widths, pane weights, and split diff divider position.
-- Persistent recent repository list.
-- Built-in themes include classic, ANSI, monochrome, Dracula, Monokai, Catppuccin, Atom, and VS Code, with dark and light variants for the named palettes.
+### Tags
 
-Saved files live under your platform config directory in a `guitar` folder, for example `~/.config/guitar` on many Linux systems. The app currently writes:
+The tag pane lists local tags sorted by name. Tags are shown in the graph at the commit they resolve to. The app can create and delete local lightweight tags.
 
-- `keymap.json`
-- `layout.json`
-- `recent.json`
-- `theme.json`
+### Stashes
 
-### Known Limitations and Missing Features
+The stash pane lists stash commits. Stashes are real commits and are rendered in the graph near their first parent.
 
-- There is no filesystem watcher. Use reload when repository state changes outside the app.
-- Network operations still assume the current operation remote, usually `origin`; there is no remote picker or upstream-aware push routing yet.
-- The current branch push command is force push only.
-- There is no pull UI.
-- Conflict resolution editing is external; guitar detects conflicts, displays conflicted files, and continues rebases, cherry-picks, or merges after you resolve files in another editor.
-- Worktree move/repair and custom separate worktree branch names are not implemented.
-- Submodules are ignored in commit diffs.
-- Merge commit file lists and file diffs are compared to the first parent only.
-- The graph renderer models ordinary two-parent merges; octopus merges are not a first-class display target.
-- Tags are lightweight only. There is no annotated-tag message flow and no remote tag deletion flow.
-- Branch rename, remote management, and branch upstream editing are not implemented.
-- Search only matches loaded commit SHA prefixes. It does not search commit messages, authors, branches, tags, filenames, or unloaded history.
-- The recent repository list is append-only from inside the app; there is no in-app remove/reorder UI.
+### Reflogs
 
-### Roadmap
+The reflog pane lists recent HEAD reflog entries. Reflog rows can jump to commits that are visible in the graph. If the reflog commit is hidden, enable graph reflogs with `9` so the walker includes HEAD reflog roots.
 
-Planned or desired features include jujutsu integration, richer worktree management, richer in-app conflict resolution, and more.
+### Worktrees
 
-Follow the project board for current work:
+The worktree pane lists the main worktree and linked worktrees.
 
-[https://github.com/users/asinglebit/projects/1/views/1](https://github.com/users/asinglebit/projects/1/views/1)
+Rows include:
 
-### Default Keyboard Mappings
+- Worktree name.
+- Branch name, detached HEAD short SHA, or no-head state.
+- Current-worktree marker.
+- Dirty marker.
+- Locked marker.
+- Invalid marker.
 
-You will probably want to tune the keymap for your terminal and OS, especially on macOS where Option/Command behavior varies by terminal. Defaults are written to `keymap.json` on first run.
+Valid worktrees can be opened from the pane. Linked worktrees can be locked, unlocked, removed, or pruned through the worktree actions.
 
-Dangerous actions live behind action mode. By default, press `Ctrl+a`, then press the action key. Action mode is single-shot, so each dangerous command needs a fresh prefix.
+### Status
 
-#### Normal Mode
+The status area is on the right.
+
+On the uncommitted row:
+
+- The top status pane shows conflicts and staged changes.
+- The bottom status pane shows conflicts and unstaged changes.
+- Conflicts appear in both panes and are highlighted.
+
+On a commit row:
+
+- The top status pane shows files changed by the selected commit compared with its first parent.
+- The bottom status pane is not used.
+
+Status symbols:
+
+- `!` conflict.
+- `~` modified.
+- `+` added.
+- `-` deleted.
+- `→` renamed.
+
+### Inspector
+
+The inspector shows selected commit metadata:
+
+- Commit SHA.
+- Parent SHAs.
+- Featured branch labels.
+- Author.
+- Committer.
+- Summary.
+- Body.
+
+When the selected row is uncommitted, the inspector appears if there are conflicts.
+
+### Viewer
+
+The viewer opens from a selected status row. It can show:
+
+- Working tree file contents and diff for the uncommitted row.
+- Commit file contents and diff for selected commits.
+- Conflict files with conflict-marker highlighting.
+- Unified diff style.
+- Hunk-only mode.
+- Side-by-side split diff mode.
+- Line numbers.
+- Wrapped long lines.
+
+For merge commits, file lists and file diffs compare against the first parent.
+
+### Settings
+
+The settings/help view is opened with `?`. It shows version, commit heatmap, config paths, Git identity, auth notes, theme choices, and active keymaps. Theme rows and keybinding rows are selectable.
+
+## Navigation
+
+### Scope
+
+`h` and `l` are the most important navigation keys.
+
+- In the graph, `l` narrows into details. On a commit row it focuses the inspector; on the uncommitted row it focuses staged or unstaged status.
+- In the inspector, `l` moves to status.
+- In status, `l` opens the selected file in the viewer.
+- In the viewer, `h` returns to status.
+- In status, `h` moves outward to inspector or graph.
+- In the graph, `h` opens/focuses the branch pane.
+- In branch, tag, stash, reflog, and worktree panes, `l` jumps into the selected item.
+- In settings, `h` returns to the graph.
+- In the splash screen, `l` opens the selected recent repository.
+
+### Focus
+
+`Tab` and `Ctrl+n` move to the next focusable pane. `Shift+Tab` and `Ctrl+p` move to the previous focusable pane.
+
+Focusable panes are ordered:
+
+```text
+graph/viewer, inspector, staged/commit status, unstaged status, worktrees, reflogs, stashes, tags, branches
+```
+
+Hidden panes are skipped. The unstaged status pane is focusable only on the uncommitted row.
+
+### Selection
+
+`Enter` means "open/select" for the current focus:
+
+- Splash: open selected recent repository.
+- Settings theme: activate and save theme.
+- Settings keybinding: open key capture.
+- Graph: open a worktree badge if the selected commit has valid worktree candidates.
+- Branch/tag/stash/reflog panes: jump to the corresponding graph row.
+- Worktree pane: open the selected valid worktree.
+- Status panes: open the selected file in the viewer.
+- Choice modals: confirm the selected row.
+
+### Back
+
+`Esc` cancels modals or widens back to the graph.
+
+- From graph: opens the splash screen when the history worker is idle.
+- From splash: returns to graph when a repository is loaded.
+- From viewer/settings/side panes/status/inspector: returns to graph.
+- From text-entry modals: clears input and returns to the relevant view.
+- From auth prompt: cancels the pending network operation.
+
+### Scrolling
+
+All scroll commands act on the focused pane or viewport:
+
+- `j` / `Down`: one row down.
+- `k` / `Up`: one row up.
+- `Ctrl+d`: half page down.
+- `Ctrl+u`: half page up.
+- `PageDown`: page down.
+- `PageUp`: page up.
+- `Ctrl+Alt+d`: jump halfway toward the end of the focused graph/side pane list.
+- `Ctrl+Alt+u`: jump halfway toward the beginning of the focused graph/side pane list.
+- `g` / `Home`: beginning.
+- `Shift+G` / `End`: end.
+
+In full viewer mode, `Ctrl+d` and `Ctrl+u` jump between diff hunk edges. In hunk and split viewer modes, they scroll by half pages.
+
+### Graph Jumps
+
+- `{`: jump to the previous visible branch-bearing commit.
+- `}`: jump to the next visible branch-bearing commit.
+- `[`: jump to the first loaded child of the selected commit.
+- `]`: jump to the first parent of the selected commit.
+- `/`: open SHA-prefix lookup for loaded history.
+
+SHA lookup accepts non-empty prefixes up to 40 characters. It searches commits already known to the worker.
+
+### Mouse
+
+Mouse capture is enabled while the app runs.
+
+- Mouse wheel scrolls the pane under the cursor and focuses it.
+- Drag the left and right vertical dividers to resize side panes.
+- Drag stacked pane dividers to resize branch/tag/stash/reflog/worktree, inspector/status, and staged/unstaged splits.
+- Drag the split-diff divider to resize side-by-side viewer columns.
+- Layout changes from dragging are saved when the mouse button is released.
+
+## Inputs And Keymaps
+
+### Input Modes
+
+There are two keymap modes:
+
+- Normal mode: navigation, layout, safe operations, and non-destructive creation prompts.
+- Action mode: single-shot mode for dangerous or destructive operations.
+
+By default, `Ctrl+a` enters action mode. The next handled key runs through the action keymap and then the mode returns to normal.
+
+Action mode inherits normal-mode navigation and safe operations, but overrides or adds the dangerous bindings listed below. Notably, action-mode `r` is rebase and action-mode `m` is merge.
+
+### Text Inputs
+
+Text prompts are single-line inputs.
+
+Supported editing keys:
+
+- Printable character keys insert text.
+- `Backspace` removes before the cursor.
+- `Delete` removes at the cursor.
+- `Left` and `Right` move the cursor.
+- `Home` and `End` jump to the start or end.
+- `Enter` submits when the prompt accepts the current value.
+- `Esc` cancels.
+
+Text prompts are used for commit messages, cherry-pick messages, branch names, tag names, worktree names, worktree paths, worktree lock reasons, SHA lookup, and auth fields.
+
+### Auth Inputs
+
+The auth modal uses:
+
+- `Tab`, `Shift+Tab`, `Up`, or `Down` to switch between username and secret fields for HTTP/HTTPS prompts.
+- `Enter` to submit.
+- `Esc` to cancel the network operation.
+
+For SSH passphrase prompts, focus stays on the secret field.
+
+### Key Capture
+
+In settings, selecting a keybinding opens key capture.
+
+- Press a new key combination to preview it.
+- `Enter` confirms if there is no conflict.
+- `Ctrl+C` cancels.
+
+If a normal-mode binding is also present in action mode for the same command, rebinding the normal key syncs the matching action-mode binding.
+
+### Default Normal Mode Keymap
+
+Defaults are written to `keymap.json` on first run. User-edited keymaps can differ.
 
 | Command | Default keys |
 | --- | --- |
@@ -239,13 +444,15 @@ Dangerous actions live behind action mode. By default, press `Ctrl+a`, then pres
 | Toggle Selected Branch | `Shift+T` |
 | Solo Selected Branch | `Space` |
 
-#### Action Mode
+### Default Action Mode Keymap
+
+Press `Ctrl+a`, then one of these keys.
 
 | Command | Default key after `Ctrl+a` |
 | --- | --- |
-| Drop | `x` |
-| Pop | `p` |
-| Stash | `Shift+S` |
+| Drop Stash | `x` |
+| Pop Stash | `p` |
+| Stash Worktree | `Shift+S` |
 | Checkout | `o` |
 | Hard Reset | `Shift+H` |
 | Mixed Reset | `Shift+M` |
@@ -254,19 +461,634 @@ Dangerous actions live behind action mode. By default, press `Ctrl+a`, then pres
 | Delete Branch | `Shift+D` |
 | Remove Worktree | `Shift+W` |
 | Toggle Worktree Lock | `Shift+L` |
-| Untag | `Shift+U` |
-| Cherrypick | `y` |
+| Delete Tag | `Shift+U` |
+| Cherry-pick | `y` |
 | Rebase | `r` |
 | Merge | `m` |
-| Continue Rebase/Cherrypick/Merge | `Shift+C` |
-| Abort Rebase/Cherrypick/Merge | `Shift+A` |
+| Continue Rebase/Cherry-pick/Merge | `Shift+C` |
+| Abort Rebase/Cherry-pick/Merge | `Shift+A` |
 
-### Screenshots
+## Git Operations
 
-![1](https://github.com/user-attachments/assets/37df457b-bbf4-4d51-a965-c300b426cb62)
-![1](https://github.com/user-attachments/assets/b09f73e7-5bda-4ecd-ba7c-3bba85395e37)
-![6](https://github.com/user-attachments/assets/2ed8f14e-193b-4815-b37e-283bd129787f)
-![5](https://github.com/user-attachments/assets/15e4630f-a141-4724-9d35-1b8601006598)
-![4](https://github.com/user-attachments/assets/10389ec5-6780-4bcb-85dc-67f9e012ed63)
-![3](https://github.com/user-attachments/assets/a408af0c-ef85-4692-914b-81562d3873e4)
-![untitled](https://github.com/user-attachments/assets/72d09d11-86cb-4356-a3dd-93684abc9b19)
+Operations depend on the focused pane and selected row. Most operations call `reload` on success so the graph, status, panes, and recent path state refresh.
+
+### Stage
+
+Normal key: `s`.
+
+- Graph focus on the uncommitted row stages all unstaged changes, including untracked files and deletes.
+- Status bottom focus stages the selected unstaged file.
+- Conflict rows cannot be staged from the UI. Resolve conflicts externally, then continue the active operation.
+
+Ignored files are not staged.
+
+### Unstage
+
+Normal key: `u`.
+
+- Graph focus on the uncommitted row unstages all staged files with a mixed reset to `HEAD`.
+- Status top focus unstages the selected staged file.
+- In a repository without `HEAD`, unstaging a file removes it from the initial index.
+- Conflict rows cannot be unstaged from the UI.
+
+### Commit
+
+Normal key: `c`.
+
+`Commit` opens a single-line commit message prompt when staged changes exist. The commit uses the configured `user.name` and `user.email`. If the branch is unborn, the commit becomes the root commit.
+
+### Fetch
+
+Normal key: `f`.
+
+Fetch runs as a background network operation against `origin`.
+
+It fetches:
+
+- `refs/heads/*` into `refs/remotes/origin/*`.
+- `refs/tags/*` into local tags.
+
+Pruning is enabled.
+
+### Checkout
+
+Action key: `Ctrl+a`, then `o`.
+
+Checkout is forceful and uses libgit2 checkout options with conflicts allowed.
+
+- Branch pane focus checks out the selected branch.
+- If the selected branch is local, it is checked out directly.
+- If the selected branch is remote, `guitar` materializes a local branch using the remote branch's short name, sets upstream to the remote branch, and checks it out.
+- Graph focus checks out the selected commit.
+- If the commit has no branch label, graph checkout uses detached HEAD.
+- If the commit has one branch label, that branch is checked out.
+- If the commit has multiple branch labels, a checkout modal lets you choose.
+
+The uncommitted row cannot be checked out.
+
+### Branch Visibility
+
+Normal keys:
+
+- `Shift+T`: toggle selected branch visibility.
+- `Space`: solo selected branch.
+
+Branch visibility filters graph roots and branch labels.
+
+- From branch pane focus, the action applies to the selected branch.
+- From graph focus, the action applies to branch labels on the selected commit.
+- If multiple branch labels are present, a modal lets you choose.
+- When no branches are hidden, toggling one branch creates an explicit "all except this branch" visibility set.
+- If filtering would hide every branch, the filter resets to all visible.
+
+### Create Branch
+
+Normal key: `b`.
+
+- Graph focus creates a local branch at the selected commit.
+- Reflog focus creates a local branch at the selected reflog entry's new commit.
+- Branch creation does not check out the new branch.
+- The selected uncommitted row is not a branch target.
+
+### Delete Branch
+
+Action key: `Ctrl+a`, then `Shift+D`.
+
+- Branch pane focus deletes the selected branch.
+- Graph focus deletes a branch label attached to the selected commit.
+- If multiple deletable labels exist, a modal lets you choose.
+- The current branch cannot be deleted.
+- Local branch deletion removes the local branch ref.
+- Remote branch deletion pushes an empty source refspec to the selected remote branch.
+
+Remote deletion derives the remote from the branch name. For example, `origin/topic` deletes `topic` from `origin`.
+
+### Tags
+
+Create tag: normal key `t`.
+
+Delete tag: action key `Ctrl+a`, then `Shift+U`.
+
+- Tag creation creates a lightweight local tag at the selected commit.
+- If the graph is on the uncommitted row, tag creation targets the first real commit.
+- Tag deletion from the tag pane deletes the selected local tag.
+- Tag deletion from the graph deletes a tag attached to the selected commit. If multiple tags exist, a modal lets you choose.
+- `guitar` can push local tags, but it does not delete remote tags.
+
+### Push
+
+Force push current branch: action key `Ctrl+a`, then `Shift+P`.
+
+Push tags: action key `Ctrl+a`, then `Shift+V`.
+
+- Branch push targets `origin`.
+- Branch push is force push only and updates the current local branch on the remote branch with the same name.
+- Detached HEAD cannot be pushed.
+- Tag push pushes all local tags to `origin`.
+- If no local tags exist, push-tags succeeds without changing anything.
+
+### Stash
+
+Stash current work: action key `Ctrl+a`, then `Shift+S`.
+
+Pop selected stash: action key `Ctrl+a`, then `p`.
+
+Drop selected stash: action key `Ctrl+a`, then `x`.
+
+- Stash includes untracked files.
+- Stash messages are generated from the current `HEAD` short SHA and summary.
+- Pop applies the stash and drops it.
+- Drop removes the stash without applying it.
+- Pop/drop operate only when graph focus is on a stash row.
+
+### Reset
+
+Hard reset selected commit: action key `Ctrl+a`, then `Shift+H`.
+
+Mixed reset selected commit: action key `Ctrl+a`, then `Shift+M`.
+
+Discard selected status file: focus a status row and use action key `Ctrl+a`, then `Shift+H`.
+
+- Graph hard reset moves the current branch or detached `HEAD` to the selected commit and rewrites index and working tree.
+- Graph mixed reset moves the current branch or detached `HEAD` to the selected commit and rewrites the index while leaving working tree contents.
+- File hard reset removes staged and working tree changes for the selected path by restoring it from `HEAD`.
+
+### Cherry-pick
+
+Action key: `Ctrl+a`, then `y`.
+
+- Graph focus on a commit opens a single-line message prompt.
+- The default message is `cherrypicked: <selected summary>`.
+- The working tree must be clean before starting.
+- If there are no conflicts, `guitar` commits immediately with the provided message.
+- If conflicts occur, `guitar` stops and shows a conflict modal.
+- Resolve files externally, then continue with `Ctrl+a`, `Shift+C`.
+- Abort with `Ctrl+a`, `Shift+A`.
+
+During an in-progress conflicted cherry-pick, the message is stored at `.git/GUITAR_CHERRYPICK_MSG` and removed on commit or abort.
+
+### Rebase
+
+Action key: `Ctrl+a`, then `r`.
+
+- Rebases the current local branch onto the selected graph commit.
+- Detached HEAD cannot be rebased.
+- The selected commit cannot already be `HEAD`.
+- The working tree must be clean before starting.
+- Commits are driven through libgit2's rebase API.
+- If conflicts occur, resolve files externally, then continue with `Ctrl+a`, `Shift+C`.
+- Abort with `Ctrl+a`, `Shift+A`.
+
+If a rebase, cherry-pick, or merge is already in progress, pressing the rebase action attempts to continue the active operation.
+
+### Merge
+
+Action key: `Ctrl+a`, then `m`.
+
+- Merges the selected graph commit into the current local branch.
+- Detached HEAD cannot be merged into.
+- Another in-progress Git operation blocks merge start.
+- The working tree must be clean before starting.
+- Merge analysis honors Git's fast-forward preferences, including `merge.ff=only`.
+- Fast-forward, up-to-date, normal merge commit, conflict, and abort states are surfaced in the UI.
+- Continue with `Ctrl+a`, `Shift+C`.
+- Abort with `Ctrl+a`, `Shift+A`.
+
+If a rebase, cherry-pick, or merge is already in progress, pressing the merge action attempts to continue the active operation.
+
+### Continue And Abort
+
+Continue active operation: action key `Ctrl+a`, then `Shift+C`.
+
+Abort active operation: action key `Ctrl+a`, then `Shift+A`.
+
+These apply to active rebase, cherry-pick, or merge states.
+
+On continue, `guitar` checks the index for conflicts. For conflicted paths, it inspects the worktree file:
+
+- If the file still contains conflict markers, it remains conflicted.
+- If the file exists and conflict markers are gone, it is added to the index.
+- If the file was removed, it is removed from the index.
+
+Then the active Git operation continues.
+
+### Worktrees
+
+Create worktree: normal key `w`.
+
+Remove worktree: action key `Ctrl+a`, then `Shift+W`.
+
+Lock or unlock worktree: action key `Ctrl+a`, then `Shift+L`.
+
+Open worktree: focus a worktree row and press `Enter`; or press `Enter` on a graph worktree badge.
+
+Create worktree flow:
+
+1. Focus the graph on a real commit.
+2. Press `w`.
+3. Enter a worktree name.
+4. Confirm or edit the default path.
+
+The worktree name becomes a new local branch name. Names cannot be empty, `.`, `..`, or contain path separators. If worktree creation fails after branch creation, `guitar` attempts to delete the branch it created.
+
+Default worktree paths are based on the current repository path:
+
+```text
+<repo-parent>/<repo-name>-<worktree-name>
+```
+
+Removal rules:
+
+- Only linked worktrees can be removed.
+- The current worktree cannot be removed.
+- The main worktree cannot be removed.
+- Locked worktrees cannot be removed.
+- Valid worktrees are pruned with working-tree removal enabled.
+
+Locking rules:
+
+- Only valid linked worktrees can be locked.
+- Locking opens a reason prompt. Empty reasons are allowed and become no reason.
+- Locked linked worktrees can be unlocked with the same action.
+
+Opening a worktree reloads the app at the selected worktree path.
+
+## Authentication
+
+Network auth is used for fetch, push current branch, push tags, and remote branch deletion.
+
+### SSH
+
+For SSH remotes, `guitar` tries:
+
+1. Username from the URL or callback, falling back to `git`.
+2. `ssh-agent` via libgit2.
+3. A default private key without passphrase.
+4. An in-app passphrase prompt if a default private key exists.
+
+Default private key search order:
+
+```text
+~/.ssh/id_ed25519
+~/.ssh/id_ecdsa
+~/.ssh/id_rsa
+```
+
+If no `ssh-agent` credential works and none of those keys exist, the operation fails with an SSH auth error.
+
+### HTTP And HTTPS
+
+For HTTP/HTTPS remotes, `guitar` tries:
+
+1. Any matching secret already entered during the current `guitar` session.
+2. Git credential helper through libgit2.
+3. Username callback if requested by libgit2.
+4. In-app username/password or username/token prompt.
+
+Use a personal access token as the password when your hosting provider requires token auth.
+
+### Auth Attempts And Secret Storage
+
+- A network operation allows up to 3 auth prompt attempts.
+- Rejected in-memory secrets are evicted before retry.
+- Prompted secrets are stored only in memory for the running process.
+- No prompted SSH passphrases, HTTPS passwords, or HTTPS tokens are written to `guitar` config files.
+- Existing Git credential helpers may store credentials according to your Git configuration; that storage is outside `guitar`.
+
+Only one network operation can run at a time.
+
+## Settings
+
+Open settings with `?`.
+
+The settings view includes:
+
+- App version.
+- Commit heatmap.
+- Config file paths.
+- Git `user.name` and `user.email`.
+- Auth behavior notes.
+- Theme list.
+- Normal-mode shortcuts.
+- Action-mode shortcuts that differ from normal mode.
+
+Selectable rows:
+
+- Theme rows: `Enter` activates and saves the selected theme.
+- Keybinding rows: `Enter` opens key capture.
+
+Settings reuses normal navigation. Use `j`/`k`, page keys, `g`, `Shift+G`, or mouse wheel to move. Use `h`, `Esc`, or `?` to return to the graph.
+
+Available built-in themes:
+
+```text
+classic
+ansi
+monochrome
+dracula dark
+dracula light
+monokai dark
+monokai light
+catppuccin dark
+catppuccin light
+atom dark
+atom light
+vscode dark
+vscode light
+solarized dark
+solarized light
+gruvbox dark
+gruvbox light
+nord
+tokyo night
+tokyo night storm
+tokyo night light
+github dark
+github light
+github dark dimmed
+night owl
+light owl
+ayu dark
+ayu mirage
+ayu light
+material
+palenight
+rose pine
+rose pine moon
+rose pine dawn
+kanagawa wave
+kanagawa dragon
+kanagawa lotus
+everforest dark
+everforest light
+zenburn
+horizon
+synthwave 84
+base16 tomorrow
+base16 ocean
+base16 eighties
+matrix
+```
+
+## Persistence
+
+Saved app files live under your platform config directory in a `guitar` folder.
+
+Common examples:
+
+```text
+Linux:   ~/.config/guitar
+macOS:   ~/Library/Application Support/guitar
+Windows: %APPDATA%\guitar
+```
+
+The app writes:
+
+- `keymap.json`: keyboard mappings.
+- `layout.json`: pane visibility, widths, weights, SHA display, graph reflog setting, zen/minimal state.
+- `theme.json`: active theme and all color slots.
+- `recent.json`: recent repository paths.
+
+The app may also temporarily write `.git/GUITAR_CHERRYPICK_MSG` inside a repository during a conflicted cherry-pick.
+
+Not persisted by `guitar`:
+
+- SSH key passphrases entered in the auth modal.
+- HTTPS usernames, passwords, or tokens entered in the auth modal.
+- Branch visibility filters. They are preserved across reloads during a session, but not written to config.
+- Current selection, scroll positions, open modal state, or current viewport.
+
+Reset all saved app config:
+
+```bash
+guitar --reset
+```
+
+## Configuration Files
+
+### keymap.json
+
+`keymap.json` has `normal` and `action` arrays.
+
+Example entry:
+
+```json
+{
+  "key": "Char(j)",
+  "modifiers": [],
+  "command": "ScrollDown"
+}
+```
+
+Supported key strings include:
+
+```text
+Backspace
+Enter
+Left
+Right
+Up
+Down
+Home
+End
+PageUp
+PageDown
+Tab
+BackTab
+Delete
+Insert
+Null
+Esc
+CapsLock
+ScrollLock
+NumLock
+PrintScreen
+Pause
+F(n)
+Char(x)
+```
+
+Supported modifiers:
+
+```text
+Shift
+Control
+Ctrl
+Alt
+Command
+Meta
+```
+
+Supported commands are the command names listed in the keymap tables, without spaces, for example `ToggleSplitDiffMode`, `CreateWorktree`, `ContinueOperation`, and `AbortOperation`.
+
+When an old keymap is loaded, `guitar` attempts small migrations for newly added default bindings.
+
+### layout.json
+
+Default layout:
+
+```json
+{
+  "is_shas": true,
+  "is_minimal": false,
+  "is_branches": true,
+  "is_tags": false,
+  "is_stashes": false,
+  "is_reflogs": false,
+  "is_graph_reflogs": false,
+  "is_worktrees": false,
+  "is_status": true,
+  "is_inspector": true,
+  "is_zen": false,
+  "width_left_pane": 45,
+  "width_right_pane": 46,
+  "weight_branches": 100,
+  "weight_tags": 100,
+  "weight_stashes": 100,
+  "weight_reflogs": 100,
+  "weight_worktrees": 100,
+  "weight_inspector": 100,
+  "weight_status": 100,
+  "weight_status_top": 100,
+  "weight_status_bottom": 100,
+  "weight_viewer_split_left": 100,
+  "weight_viewer_split_right": 100
+}
+```
+
+Width values are clamped to a minimum of 16 columns. The center pane keeps at least 20 columns when possible. Stacked pane weights and split viewer weights are normalized to at least `1`.
+
+The graph reflog toggle requires a reload because it changes graph roots.
+
+### theme.json
+
+`theme.json` stores a label and full color map. Loading a known preset label without custom colors resolves to that preset. Unknown labels or color overrides become a custom theme.
+
+Example:
+
+```json
+{
+  "label": "solarized dark",
+  "colors": {
+    "red": "#dc322f",
+    "green": "#859900",
+    "blue": "#268bd2",
+    "grey_950": "#002b36",
+    "border": "#073642",
+    "text": "#839496",
+    "highlighted": "#93a1a1"
+  }
+}
+```
+
+Color values can be:
+
+- Hex colors like `#268bd2`.
+- Terminal color names such as `red`, `green`, `blue`, `gray`, `dark_gray`, `light_red`, `white`, or `reset`.
+- Indexed terminal colors like `indexed:42` or `indexed_42`.
+
+Color slots:
+
+```text
+red, pink, purple, durple, indigo, blue, cyan, teal, green, grass,
+lime, yellow, amber, orange, grapefruit, brown, dark_red,
+light_green_900, grey_50, grey_100, grey_200, grey_300, grey_400,
+grey_500, grey_600, grey_700, grey_800, grey_900, grey_950,
+border, text, highlighted
+```
+
+Malformed theme files fall back to `classic` and are rewritten.
+
+### recent.json
+
+`recent.json` is a JSON array of absolute repository root paths:
+
+```json
+[
+  "/home/me/src/project-a",
+  "/home/me/src/project-b"
+]
+```
+
+Recent repositories are appended when a repository opens successfully. There is no in-app remove or reorder UI.
+
+## Development
+
+Build:
+
+```bash
+cargo build
+cargo build --release
+```
+
+Run from source:
+
+```bash
+cargo run -- .
+cargo run -- ../path/to/repository
+```
+
+Test:
+
+```bash
+cargo test
+```
+
+Format:
+
+```bash
+cargo fmt
+```
+
+The value printed by `guitar --version` comes from Cargo package metadata. Release builds can override it at compile time with `GUITAR_BUILD_OVERWRITE_VERSION`.
+
+Important source areas:
+
+- `src/main.rs`: CLI flags and app startup.
+- `src/app/app.rs`: main app state, event loop, draw orchestration, reload, graph worker sync.
+- `src/app/input/`: keyboard, mouse, modal, navigation, Git, and worktree input handlers.
+- `src/app/draw/`: TUI drawing for graph, panes, viewer, settings, status, and modals.
+- `src/core/`: graph worker, walker, topology buffer, pane data, render helpers.
+- `src/git/actions/`: mutating Git operations.
+- `src/git/queries/`: repository reads, diffs, commits, reflogs, worktrees.
+- `src/git/auth.rs`: network credential classification, prompting, and session cache.
+- `src/helpers/`: keymaps, layout persistence, themes, recent repos, symbols, text, colors.
+
+## Known Limitations
+
+- No filesystem watcher. Use reload when repository state changes outside the app.
+- Network operations are remote-name limited and mostly assume `origin`.
+- Current branch push is force push only.
+- No pull UI.
+- Conflict resolution editing is external.
+- Worktree move/repair and custom separate worktree branch names are not implemented.
+- Submodules are ignored in commit diffs.
+- Merge commit file lists and file diffs compare against the first parent only.
+- The graph renderer models ordinary two-parent merges; octopus merges are not a first-class display target.
+- Tag creation is lightweight only.
+- No annotated-tag message flow.
+- No remote tag deletion flow.
+- Branch rename, remote management, and branch upstream editing are not implemented.
+- Search matches loaded commit SHA prefixes only.
+- Search does not match commit messages, authors, branches, tags, filenames, or unloaded history.
+- Recent repositories are append-only from inside the app.
+- Branch visibility is not persisted between app launches.
+- Text prompts are single-line.
+
+## Roadmap
+
+Planned or desired features include jujutsu integration, richer worktree management, richer in-app conflict resolution, and more.
+
+Follow the project board for current work:
+
+[https://github.com/users/asinglebit/projects/1/views/1](https://github.com/users/asinglebit/projects/1/views/1)
+
+## Screenshots
+
+![screenshot 1](https://github.com/user-attachments/assets/37df457b-bbf4-4d51-a965-c300b426cb62)
+![screenshot 2](https://github.com/user-attachments/assets/b09f73e7-5bda-4ecd-ba7c-3bba85395e37)
+![screenshot 3](https://github.com/user-attachments/assets/2ed8f14e-193b-4815-b37e-283bd129787f)
+![screenshot 4](https://github.com/user-attachments/assets/15e4630f-a141-4724-9d35-1b8601006598)
+![screenshot 5](https://github.com/user-attachments/assets/10389ec5-6780-4bcb-85dc-67f9e012ed63)
+![screenshot 6](https://github.com/user-attachments/assets/a408af0c-ef85-4692-914b-81562d3873e4)
+![screenshot 7](https://github.com/user-attachments/assets/72d09d11-86cb-4356-a3dd-93684abc9b19)
