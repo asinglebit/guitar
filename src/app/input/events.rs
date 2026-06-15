@@ -111,6 +111,11 @@ impl App {
                 self.viewport = Viewport::Graph;
                 self.select_graph_index(index);
             },
+            MouseSelectionTarget::Viewer(index) => {
+                self.focus = Focus::Viewport;
+                self.viewport = Viewport::Viewer;
+                self.viewer_selected = index;
+            },
             MouseSelectionTarget::Branches(index) => {
                 self.focus = Focus::Branches;
                 self.branches_selected = index;
@@ -164,8 +169,16 @@ impl App {
         match self.viewport {
             Viewport::Splash => return self.splash_mouse_target_at(column, row),
             Viewport::Settings => return self.settings_mouse_target_at(column, row),
-            Viewport::Viewer => return None,
             Viewport::Graph => {},
+            Viewport::Viewer => {
+                if let Some(target) = self.left_pane_mouse_target_at(column, row) {
+                    return Some(target);
+                }
+                if let Some(target) = self.right_pane_mouse_target_at(column, row) {
+                    return Some(target);
+                }
+                return self.viewer_mouse_target_at(column, row);
+            },
         }
 
         if let Some(target) = self.left_pane_mouse_target_at(column, row) {
@@ -188,6 +201,13 @@ impl App {
             return None;
         }
         Some(MouseSelectionTarget::Graph(index))
+    }
+
+    fn viewer_mouse_target_at(&self, column: u16, row: u16) -> Option<MouseSelectionTarget> {
+        let visible_height = if self.layout_config.is_zen { self.layout.graph.height.saturating_sub(2) as usize } else { self.layout.graph.height as usize };
+        let row_offset = self.row_offset_in_content(self.layout.graph, column, row, visible_height, self.layout_config.is_zen)?;
+        let index = self.viewer_scroll.get().saturating_add(row_offset);
+        (index < self.viewer_row_count()).then_some(MouseSelectionTarget::Viewer(index))
     }
 
     fn left_pane_mouse_target_at(&self, column: u16, row: u16) -> Option<MouseSelectionTarget> {

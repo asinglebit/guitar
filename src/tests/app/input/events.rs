@@ -2,6 +2,7 @@ use super::*;
 use crate::{
     app::{
         app::{SettingsSelection, SettingsSelectionKind},
+        state::defaults::ViewerMode,
         state::layout::Layout,
     },
     core::{
@@ -18,6 +19,7 @@ use git2::{Oid, Repository, Signature};
 use ratatui::{
     crossterm::event::{KeyCode, KeyModifiers},
     layout::Rect,
+    widgets::ListItem,
 };
 use std::{
     fs,
@@ -94,6 +96,25 @@ fn mouse_click_selects_graph_row() {
 
     assert_eq!(app.focus, Focus::Viewport);
     assert_eq!(app.graph_selected, 5);
+}
+
+#[test]
+fn mouse_click_selects_viewer_row_without_leaving_viewer() {
+    let mut app = graph_app();
+    app.viewport = Viewport::Viewer;
+    app.viewer_lines = (0..10).map(|idx| ListItem::new(format!("line {idx}"))).collect();
+    app.viewer_scroll.set(2);
+
+    app.handle_mouse_event(left_down(1, 3));
+
+    assert_eq!(app.focus, Focus::Viewport);
+    assert_eq!(app.viewport, Viewport::Viewer);
+    assert_eq!(app.viewer_selected, 5);
+
+    app.handle_mouse_event(left_down(1, 3));
+
+    assert_eq!(app.viewport, Viewport::Viewer);
+    assert_eq!(app.viewer_selected, 5);
 }
 
 #[test]
@@ -243,6 +264,27 @@ fn double_click_on_branch_row_acts_like_enter() {
 }
 
 #[test]
+fn viewer_mode_double_click_on_branch_row_acts_like_enter() {
+    let (_path, repo) = temp_repo("viewer-branch-double");
+    let mut app = graph_app();
+    let oid = commit_file(&repo, "feature.txt", "feature");
+    app.repo = Some(Rc::new(repo));
+    app.viewport = Viewport::Viewer;
+    app.layout_config.is_branches = true;
+    app.layout.branches = Rect::new(0, 0, 20, 6);
+    let alias = app.oids.get_alias_by_oid(oid);
+    app.oids.sorted_aliases = vec![NONE, alias];
+    app.branches.sorted = vec![(alias, "feature".into())];
+
+    app.handle_mouse_event(left_down(1, 0));
+    app.handle_mouse_event(left_down(1, 0));
+
+    assert_eq!(app.focus, Focus::Viewport);
+    assert_eq!(app.viewport, Viewport::Graph);
+    assert_eq!(app.graph_selected, 1);
+}
+
+#[test]
 fn double_click_on_tag_stash_and_reflog_rows_act_like_enter() {
     let (_path, repo) = temp_repo("pane-double");
     let tag_oid = commit_file(&repo, "tag.txt", "tag");
@@ -340,6 +382,31 @@ fn double_click_on_status_row_acts_like_enter() {
 
     assert_eq!(app.viewport, Viewport::Viewer);
     assert_eq!(app.file_name.as_deref(), Some("file.txt"));
+}
+
+#[test]
+fn viewer_mode_double_click_on_status_row_refreshes_viewer_file() {
+    let (path, repo) = temp_repo("viewer-status-double");
+    fs::write(path.join("old.txt"), "old\n").unwrap();
+    fs::write(path.join("new.txt"), "new\n").unwrap();
+    let mut app = graph_app();
+    app.repo = Some(Rc::new(repo));
+    app.path = Some(path.display().to_string());
+    app.viewport = Viewport::Viewer;
+    app.viewer_mode = ViewerMode::Full;
+    app.file_name = Some("old.txt".into());
+    app.layout_config.is_status = true;
+    app.layout.status_top = Rect::new(40, 0, 30, 6);
+    app.is_uncommitted_loaded = true;
+    app.uncommitted.is_staged = true;
+    app.uncommitted.staged.modified = vec!["old.txt".into(), "new.txt".into()];
+
+    app.handle_mouse_event(left_down(41, 1));
+    app.handle_mouse_event(left_down(41, 1));
+
+    assert_eq!(app.focus, Focus::Viewport);
+    assert_eq!(app.viewport, Viewport::Viewer);
+    assert_eq!(app.file_name.as_deref(), Some("new.txt"));
 }
 
 #[test]

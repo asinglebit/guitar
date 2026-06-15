@@ -215,7 +215,7 @@ impl App {
             });
         }
 
-        // Center the selected row where possible so settings navigation keeps context above and below.
+        // Settings follows the same bounded scrolling behavior as graph-like lists.
         let total_lines = lines.len();
         let visible_height = if self.layout_config.is_zen { self.layout.graph.height.saturating_sub(2) as usize } else { self.layout.graph.height as usize };
 
@@ -241,9 +241,9 @@ impl App {
             }
         }
 
-        let max_scroll = total_lines.saturating_sub(visible_height);
-        let start = if visible_height == 0 { 0 } else { self.settings_selected.saturating_sub(visible_height / 2).min(max_scroll) };
-        self.settings_scroll.set(start);
+        self.trap_selection(self.settings_selected, &self.settings_scroll, total_lines, visible_height);
+
+        let start = self.settings_scroll.get().min(total_lines.saturating_sub(visible_height));
         let end = (start + visible_height).min(total_lines);
 
         // Ensure blank lines still occupy space after conversion to ListItem.

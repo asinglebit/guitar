@@ -36,6 +36,7 @@ impl App {
 
         let focus_name = match self.focus {
             Focus::Viewport if self.viewport == Viewport::Settings => "settings",
+            Focus::Viewport if self.viewport == Viewport::Viewer => "viewer",
             Focus::Viewport => "graph",
             Focus::Branches => "branches",
             Focus::Tags => "tags",

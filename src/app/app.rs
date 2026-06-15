@@ -261,6 +261,7 @@ pub enum LayoutDrag {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MouseSelectionTarget {
     Graph(usize),
+    Viewer(usize),
     Branches(usize),
     Tags(usize),
     Stashes(usize),

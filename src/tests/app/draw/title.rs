@@ -49,3 +49,16 @@ fn title_names_settings_viewport() {
     let rendered = rendered_symbols(&terminal);
     assert!(rendered.contains("settings"));
 }
+
+#[test]
+fn title_names_viewer_viewport() {
+    let mut app = title_app(Viewport::Viewer);
+    app.focus = Focus::Viewport;
+    let backend = TestBackend::new(120, 1);
+    let mut terminal = Terminal::new(backend).unwrap();
+
+    terminal.draw(|frame| app.draw_title(frame)).unwrap();
+
+    let rendered = rendered_symbols(&terminal);
+    assert!(rendered.contains("viewer"));
+}

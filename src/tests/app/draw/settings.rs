@@ -52,19 +52,44 @@ fn draw_settings_once(app: &mut App, repo: &Repository) {
 }
 
 #[test]
-fn settings_scroll_centers_middle_selection() {
-    let (_path, repo) = temp_repo("center");
+fn settings_scroll_keeps_visible_selection_without_recentering() {
+    let (_path, repo) = temp_repo("visible");
     let mut app = settings_app();
     draw_settings_once(&mut app, &repo);
 
     let visible_height = app.layout.graph.height as usize;
     let last_selectable = app.settings_selections.last().unwrap().line;
-    let selected = app.settings_selections.iter().map(|selection| selection.line).find(|line| *line >= visible_height / 2 && last_selectable.saturating_sub(*line) > visible_height).unwrap();
+    let selected = app.settings_selections.iter().map(|selection| selection.line).find(|line| *line > visible_height * 2 && last_selectable.saturating_sub(*line) > visible_height).unwrap();
+    let scroll = selected.saturating_sub(2);
+    app.settings_scroll.set(scroll);
     app.settings_selected = selected;
 
     draw_settings_once(&mut app, &repo);
 
-    assert_eq!(app.settings_scroll.get(), selected - visible_height / 2);
+    assert_eq!(app.settings_scroll.get(), scroll);
+}
+
+#[test]
+fn settings_scroll_moves_only_when_selection_leaves_view() {
+    let (_path, repo) = temp_repo("bounded");
+    let mut app = settings_app();
+    draw_settings_once(&mut app, &repo);
+
+    let visible_height = app.layout.graph.height as usize;
+    let below = app.settings_selections.iter().map(|selection| selection.line).find(|line| *line >= visible_height * 2).unwrap();
+    app.settings_scroll.set(0);
+    app.settings_selected = below;
+
+    draw_settings_once(&mut app, &repo);
+
+    assert_eq!(app.settings_scroll.get(), below.saturating_sub(visible_height).saturating_add(1));
+
+    app.settings_scroll.set(below.saturating_add(3));
+    app.settings_selected = below;
+
+    draw_settings_once(&mut app, &repo);
+
+    assert_eq!(app.settings_scroll.get(), below);
 }
 
 #[test]
