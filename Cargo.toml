@@ -17,7 +17,7 @@ dirs = "6.0.0"
 encoding_rs = "0.8.35"
 facet = "0.43"
 facet-json = "0.43.2"
-git2 = "0.20.4"
+git2 = "0.21.0"
 im = "15.1.0"
 indexmap = "2.12.1"
 miette = { version = "7", features = ["fancy"] } # pretty diagnostics
