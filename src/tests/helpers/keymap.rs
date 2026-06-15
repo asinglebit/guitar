@@ -21,8 +21,37 @@ fn migration_adds_worktree_defaults_without_overwriting_existing_keys() {
     assert_eq!(normal.get(&KeyBinding::new(Char('8'), KeyModifiers::NONE)), Some(&Command::ToggleShas));
     assert_eq!(normal.get(&KeyBinding::new(Char('9'), KeyModifiers::NONE)), Some(&Command::ToggleGraphReflogs));
     assert_eq!(normal.get(&KeyBinding::new(Char('w'), KeyModifiers::NONE)), Some(&Command::CreateWorktree));
+    assert_eq!(normal.get(&KeyBinding::new(Char('d'), KeyModifiers::NONE)), Some(&Command::RemoveRecentRepository));
+    assert_eq!(action.get(&KeyBinding::new(Char('d'), KeyModifiers::NONE)), Some(&Command::RemoveRecentRepository));
     assert_eq!(action.get(&KeyBinding::new(Char('W'), KeyModifiers::SHIFT)), Some(&Command::RemoveWorktree));
     assert_eq!(action.get(&KeyBinding::new(Char('L'), KeyModifiers::SHIFT)), Some(&Command::ToggleWorktreeLock));
+}
+
+#[test]
+fn defaults_include_remove_recent_repository_binding() {
+    let maps = default_keymaps();
+
+    for mode in [InputMode::Normal, InputMode::Action] {
+        assert_eq!(maps.get(&mode).unwrap().get(&KeyBinding::new(Char('d'), KeyModifiers::NONE)), Some(&Command::RemoveRecentRepository));
+    }
+}
+
+#[test]
+fn migration_does_not_overwrite_custom_d_binding() {
+    let mut maps = IndexMap::new();
+    let mut normal = IndexMap::new();
+    normal.insert(KeyBinding::new(Char('d'), KeyModifiers::NONE), Command::Reload);
+    maps.insert(InputMode::Normal, normal);
+    let mut action = IndexMap::new();
+    action.insert(KeyBinding::new(Char('d'), KeyModifiers::NONE), Command::Drop);
+    maps.insert(InputMode::Action, action);
+
+    assert!(migrate_default_bindings(&mut maps));
+
+    assert_eq!(maps.get(&InputMode::Normal).unwrap().get(&KeyBinding::new(Char('d'), KeyModifiers::NONE)), Some(&Command::Reload));
+    assert_eq!(maps.get(&InputMode::Action).unwrap().get(&KeyBinding::new(Char('d'), KeyModifiers::NONE)), Some(&Command::Drop));
+    assert!(!maps.get(&InputMode::Normal).unwrap().values().any(|command| command == &Command::RemoveRecentRepository));
+    assert!(!maps.get(&InputMode::Action).unwrap().values().any(|command| command == &Command::RemoveRecentRepository));
 }
 
 #[test]

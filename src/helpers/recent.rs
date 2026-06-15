@@ -1,4 +1,7 @@
-use std::{fs, path::PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 fn layout_path() -> PathBuf {
     let mut path = dirs::config_dir().unwrap();
@@ -19,8 +22,11 @@ pub fn load_recent() -> Vec<String> {
     }
 }
 
-pub fn save_recent(recent: &Vec<String>) {
-    let path = layout_path();
+pub fn save_recent(recent: &[String]) {
+    save_recent_to_path(&layout_path(), recent);
+}
+
+pub fn save_recent_to_path(path: &Path, recent: &[String]) {
     if let Some(parent) = path.parent()
         && !parent.exists()
     {
@@ -28,5 +34,5 @@ pub fn save_recent(recent: &Vec<String>) {
     }
 
     let recent_string = facet_json::to_string(recent).unwrap();
-    fs::write(&path, &recent_string).unwrap();
+    fs::write(path, &recent_string).unwrap();
 }

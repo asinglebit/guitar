@@ -31,6 +31,11 @@ fn temp_keymap_path(name: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("guitar-input-navigation-{name}-{id}")).join("keymap.json")
 }
 
+fn temp_recent_path(name: &str) -> std::path::PathBuf {
+    let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+    std::env::temp_dir().join(format!("guitar-input-navigation-{name}-{id}")).join("recent.json")
+}
+
 fn minimal_keymaps() -> Keymaps {
     let mut maps = IndexMap::new();
     let mut normal = IndexMap::new();
@@ -199,6 +204,95 @@ fn empty_recent_splash_scrolls_keep_selection_at_zero() {
     app.splash_selected = 3;
     app.on_scroll_to_end();
     assert_eq!(app.splash_selected, 0);
+}
+
+#[test]
+fn splash_d_key_removes_selected_recent_repository_and_persists() {
+    let path = temp_recent_path("remove-middle");
+    let mut keymaps = minimal_keymaps();
+    keymaps.get_mut(&InputMode::Normal).unwrap().insert(KeyBinding::new(KeyCode::Char('d'), KeyModifiers::NONE), Command::RemoveRecentRepository);
+    let mut app = App {
+        viewport: Viewport::Splash,
+        focus: Focus::Viewport,
+        keymaps,
+        recent: vec!["/repo/a".into(), "/repo/b".into(), "/repo/c".into()],
+        splash_selected: 1,
+        recent_save_path: Some(path.clone()),
+        ..Default::default()
+    };
+
+    app.handle_key_event(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
+
+    assert_eq!(app.recent, vec!["/repo/a".to_string(), "/repo/c".to_string()]);
+    assert_eq!(app.splash_selected, 1);
+    let saved: Vec<String> = facet_json::from_str(&fs::read_to_string(path).unwrap()).unwrap();
+    assert_eq!(saved, app.recent);
+}
+
+#[test]
+fn splash_remove_recent_last_item_selects_previous() {
+    let mut app = App {
+        viewport: Viewport::Splash,
+        focus: Focus::Viewport,
+        recent: vec!["/repo/a".into(), "/repo/b".into()],
+        splash_selected: 1,
+        recent_save_path: Some(temp_recent_path("remove-last")),
+        ..Default::default()
+    };
+
+    app.on_remove_recent_repository();
+
+    assert_eq!(app.recent, vec!["/repo/a".to_string()]);
+    assert_eq!(app.splash_selected, 0);
+}
+
+#[test]
+fn splash_remove_recent_current_repo_keeps_repo_open() {
+    let (repo_path, repo) = temp_repo("remove-current");
+    let current = repo_path.display().to_string();
+    let mut app = App {
+        path: Some(current.clone()),
+        repo: Some(Rc::new(repo)),
+        viewport: Viewport::Splash,
+        focus: Focus::Viewport,
+        recent: vec![current.clone(), "/repo/other".into()],
+        splash_selected: 0,
+        recent_save_path: Some(temp_recent_path("remove-current")),
+        ..Default::default()
+    };
+
+    app.on_remove_recent_repository();
+
+    assert_eq!(app.recent, vec!["/repo/other".to_string()]);
+    assert_eq!(app.path.as_deref(), Some(current.as_str()));
+    assert!(app.repo.is_some());
+    assert_eq!(app.viewport, Viewport::Splash);
+}
+
+#[test]
+fn splash_remove_recent_empty_list_normalizes_selection_without_saving() {
+    let path = temp_recent_path("remove-empty");
+    let mut app = App { viewport: Viewport::Splash, focus: Focus::Viewport, splash_selected: 7, recent_save_path: Some(path.clone()), ..Default::default() };
+
+    app.on_remove_recent_repository();
+
+    assert!(app.recent.is_empty());
+    assert_eq!(app.splash_selected, 0);
+    assert!(!path.exists());
+}
+
+#[test]
+fn splash_remove_recent_noops_while_loading() {
+    let path = temp_recent_path("remove-loading");
+    let mut app =
+        App { viewport: Viewport::Splash, focus: Focus::Viewport, recent: vec!["/repo/a".into(), "/repo/b".into()], splash_selected: 1, recent_save_path: Some(path.clone()), ..Default::default() };
+    app.spinner.running.store(true, std::sync::atomic::Ordering::SeqCst);
+
+    app.on_remove_recent_repository();
+
+    assert_eq!(app.recent, vec!["/repo/a".to_string(), "/repo/b".to_string()]);
+    assert_eq!(app.splash_selected, 1);
+    assert!(!path.exists());
 }
 
 #[test]

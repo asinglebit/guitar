@@ -41,6 +41,7 @@ pub enum Command {
     ToggleHelp,
     ActionMode,
     Exit,
+    RemoveRecentRepository,
 
     // Lists
     ScrollPageUp,
@@ -408,6 +409,9 @@ fn default_normal_keymap() -> IndexMap<KeyBinding, Command> {
     // Space for solo branch, keeping only the selected branch visible.
     map.insert(KeyBinding::new(Char(' '), KeyModifiers::NONE), Command::SoloBranch);
 
+    // 'd' removes the selected splash recent repository entry.
+    map.insert(KeyBinding::new(Char('d'), KeyModifiers::NONE), Command::RemoveRecentRepository);
+
     map
 }
 
@@ -763,6 +767,8 @@ fn migrate_default_bindings(maps: &mut Keymaps) -> bool {
     changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('9'), KeyModifiers::NONE), Command::ToggleGraphReflogs);
     changed |= add_default_binding(maps, InputMode::Normal, KeyBinding::new(Char('w'), KeyModifiers::NONE), Command::CreateWorktree);
     changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('w'), KeyModifiers::NONE), Command::CreateWorktree);
+    changed |= add_default_binding(maps, InputMode::Normal, KeyBinding::new(Char('d'), KeyModifiers::NONE), Command::RemoveRecentRepository);
+    changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('d'), KeyModifiers::NONE), Command::RemoveRecentRepository);
     changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('W'), KeyModifiers::SHIFT), Command::RemoveWorktree);
     changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('L'), KeyModifiers::SHIFT), Command::ToggleWorktreeLock);
     changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('r'), KeyModifiers::NONE), Command::Rebase);

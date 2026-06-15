@@ -14,7 +14,7 @@ use crate::{
         heatmap::{DAYS, WEEKS, empty_heatmap},
         keymap::{Command, KeyBinding, KeymapEditError, KeymapSelection},
         layout::LayoutConfig,
-        recent::{load_recent, save_recent},
+        recent::{load_recent, save_recent, save_recent_to_path},
     },
 };
 use crate::{
@@ -362,6 +362,7 @@ pub struct App {
 
     // Splash
     pub splash_selected: usize,
+    pub recent_save_path: Option<PathBuf>,
 
     // Settings
     pub settings_selected: usize,
@@ -693,7 +694,7 @@ impl App {
             // Recent paths are append-only here; the splash screen controls selection.
             if !self.recent.iter().any(|v| v == &absolute_path) {
                 self.recent.push(absolute_path.clone());
-                save_recent(&self.recent);
+                self.save_recent();
             }
 
             // Cancel the previous walker before spawning a new one for this repository state.
@@ -896,6 +897,14 @@ impl App {
 
     pub fn load_recent(&mut self) {
         self.recent = load_recent();
+    }
+
+    pub fn save_recent(&self) {
+        if let Some(path) = &self.recent_save_path {
+            save_recent_to_path(path.as_path(), &self.recent);
+        } else {
+            save_recent(&self.recent);
+        }
     }
 
     pub(crate) fn graph_commit_count(&self) -> usize {

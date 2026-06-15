@@ -124,6 +124,7 @@ impl Default for App {
 
             // Splash
             splash_selected: 0,
+            recent_save_path: None,
 
             // Settings
             settings_selected: 0,

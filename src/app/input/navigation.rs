@@ -42,6 +42,24 @@ impl App {
         self.splash_selected = Self::clamp_selection(self.splash_selected, self.recent.len());
     }
 
+    pub fn on_remove_recent_repository(&mut self) {
+        if self.spinner.is_running() {
+            return;
+        }
+
+        if self.recent.is_empty() {
+            self.splash_selected = 0;
+            return;
+        }
+
+        self.clamp_splash_selection();
+        if self.splash_selected < self.recent.len() {
+            self.recent.remove(self.splash_selected);
+            self.save_recent();
+            self.clamp_splash_selection();
+        }
+    }
+
     fn refresh_current_diff_for_graph_selection(&mut self) {
         self.current_diff.clear();
         self.current_diff_identity = None;

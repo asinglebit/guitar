@@ -33,6 +33,10 @@ const SETTINGS_LAYOUT_COMMANDS: &[(char, Command, &str)] = &[
 ];
 
 impl App {
+    fn settings_section_line(&self, label: &str, width: usize) -> Line<'static> {
+        Line::from(Span::styled(fill_width(label, "", width), Style::default().fg(self.theme.COLOR_HIGHLIGHTED))).centered()
+    }
+
     fn settings_layout_command_key(&self, command: &Command, fallback: char) -> String {
         self.keymaps
             .get(&InputMode::Normal)
@@ -44,68 +48,68 @@ impl App {
         match command {
             Command::ToggleBranches => {
                 if self.layout_config.is_branches {
-                    "on"
+                    "[*]"
                 } else {
-                    "off"
+                    "[ ]"
                 }
             },
             Command::ToggleTags => {
                 if self.layout_config.is_tags {
-                    "on"
+                    "[*]"
                 } else {
-                    "off"
+                    "[ ]"
                 }
             },
             Command::ToggleStashes => {
                 if self.layout_config.is_stashes {
-                    "on"
+                    "[*]"
                 } else {
-                    "off"
+                    "[ ]"
                 }
             },
             Command::ToggleStatus => {
                 if self.layout_config.is_status {
-                    "on"
+                    "[*]"
                 } else {
-                    "off"
+                    "[ ]"
                 }
             },
             Command::ToggleInspector => {
                 if self.layout_config.is_inspector {
-                    "on"
+                    "[*]"
                 } else {
-                    "off"
+                    "[ ]"
                 }
             },
             Command::ToggleWorktrees => {
                 if self.layout_config.is_worktrees {
-                    "on"
+                    "[*]"
                 } else {
-                    "off"
+                    "[ ]"
                 }
             },
             Command::ToggleReflogs => {
                 if self.layout_config.is_reflogs {
-                    "on"
+                    "[*]"
                 } else {
-                    "off"
+                    "[ ]"
                 }
             },
             Command::ToggleShas => {
                 if self.layout_config.is_shas {
-                    "on"
+                    "[*]"
                 } else {
-                    "off"
+                    "[ ]"
                 }
             },
             Command::ToggleGraphReflogs => {
                 if self.layout_config.is_graph_reflogs {
-                    "on"
+                    "[*]"
                 } else {
-                    "off"
+                    "[ ]"
                 }
             },
-            Command::ResetLayout => "action",
+            Command::ResetLayout => "(enter)",
             _ => "",
         }
     }
@@ -164,7 +168,7 @@ impl App {
 
         // Config paths are informational, but still selectable for consistent navigation.
         lines.push(Line::default());
-        lines.push(Line::from(vec![Span::styled(fill_width(" paths:", "", heatmap_width), Style::default().fg(self.theme.COLOR_TEXT))]).centered());
+        lines.push(self.settings_section_line(" paths:", heatmap_width));
         lines.push(Line::default());
         let mut pathbuf = dirs::config_dir().unwrap();
         pathbuf.push("guitar");
@@ -192,7 +196,7 @@ impl App {
 
         // Credential rows are selectable because they are important setup information.
         lines.push(Line::default());
-        lines.push(Line::from(vec![Span::styled(fill_width(" credentials:", "", heatmap_width), Style::default().fg(self.theme.COLOR_TEXT))]).centered());
+        lines.push(self.settings_section_line(" credentials:", heatmap_width));
         lines.push(Line::default());
         lines.push(
             Line::from(Span::styled(
@@ -229,7 +233,7 @@ impl App {
         lines.push(Line::from(Span::styled(fill_width(" secrets:", "session only ", heatmap_width), Style::default().fg(self.theme.COLOR_TEXT))).centered());
         self.settings_selections.push(SettingsSelection { line: lines.len().saturating_sub(1), kind: SettingsSelectionKind::Info });
         lines.push(Line::default());
-        lines.push(Line::from(Span::styled(fill_width(" themes:", "", heatmap_width), Style::default().fg(self.theme.COLOR_TEXT))).centered());
+        lines.push(self.settings_section_line(" themes:", heatmap_width));
         lines.push(Line::default());
 
         if self.theme.name == ThemeNames::Custom {
@@ -255,7 +259,7 @@ impl App {
         }
 
         lines.push(Line::default());
-        lines.push(Line::from(Span::styled(fill_width(" layout visibility:", "", heatmap_width), Style::default().fg(self.theme.COLOR_TEXT))).centered());
+        lines.push(self.settings_section_line(" layout visibility:", heatmap_width));
         lines.push(Line::default());
         for (idx, (fallback, command, label)) in SETTINGS_LAYOUT_COMMANDS.iter().enumerate() {
             let key = self.settings_layout_command_key(command, *fallback);
@@ -271,7 +275,7 @@ impl App {
 
         // Keymap sections are generated from the active keymap data, not duplicated text.
         lines.push(Line::default());
-        lines.push(Line::from(Span::styled(fill_width(" shortcuts / normal mode:", "", heatmap_width), Style::default().fg(self.theme.COLOR_TEXT))).centered());
+        lines.push(self.settings_section_line(" shortcuts / normal mode:", heatmap_width));
         lines.push(Line::default());
         if let Some(mode_keymap) = self.keymaps.get(&InputMode::Normal) {
             let rendered = render_keybindings(&self.theme, mode_keymap, heatmap_width);
@@ -294,7 +298,7 @@ impl App {
             });
         }
         lines.push(Line::default());
-        lines.push(Line::from(Span::styled(fill_width(" shortcuts / action mode:", "", heatmap_width), Style::default().fg(self.theme.COLOR_TEXT))).centered());
+        lines.push(self.settings_section_line(" shortcuts / action mode:", heatmap_width));
         lines.push(Line::default());
         if let Some(action_keymap) = self.keymaps.get(&InputMode::Action) {
             // Action mode hides inherited duplicates, but shows keys whose command changes.

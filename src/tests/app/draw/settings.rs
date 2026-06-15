@@ -145,8 +145,34 @@ fn settings_renders_layout_visibility_rows_with_states() {
     assert!(rendered.contains("1 branches:"));
     assert!(rendered.contains("8 SHAs:"));
     assert!(rendered.contains("0 reset layout:"));
-    assert!(rendered.contains("off"));
-    assert!(rendered.contains("action"));
+    assert!(rendered.contains("[*]"));
+    assert!(rendered.contains("[ ]"));
+    assert!(rendered.contains("(enter)"));
+}
+
+#[test]
+fn settings_section_names_use_highlight_color() {
+    let (_path, repo) = temp_repo("section-highlight");
+    let mut app = settings_app();
+    app.layout.graph = Rect::new(0, 0, 120, 160);
+    app.layout.app = Rect::new(0, 0, 120, 160);
+
+    let backend = TestBackend::new(120, 160);
+    let mut terminal = Terminal::new(backend).unwrap();
+    terminal.draw(|frame| app.draw_settings(frame, &repo)).unwrap();
+    let buffer = terminal.backend().buffer();
+
+    for label in ["paths:", "credentials:", "themes:", "layout visibility:", "shortcuts / normal mode:", "shortcuts / action mode:"] {
+        let row = (0..buffer.area.height)
+            .find(|&y| {
+                let line = (0..buffer.area.width).map(|x| buffer[(x, y)].symbol()).collect::<String>();
+                line.contains(label)
+            })
+            .unwrap();
+        let col = (0..buffer.area.width).find(|&x| buffer[(x, row)].symbol() == &label[0..1]).unwrap();
+
+        assert_eq!(buffer[(col, row)].fg, app.theme.COLOR_HIGHLIGHTED);
+    }
 }
 
 #[test]
