@@ -6,7 +6,7 @@ use crate::{
     },
     core::{
         chunk::NONE,
-        graph_service::{GraphHistory, GraphRow},
+        graph_service::{GraphCommand, GraphHistory, GraphRow},
     },
 };
 use git2::{Oid, Repository, Signature};
@@ -234,6 +234,66 @@ fn uncommitted_row_renders_when_visible_page_is_ready() {
     let lines = rendered_lines(&terminal);
     assert!(lines[0].contains("◌"), "{lines:?}");
     assert!(lines[0].contains("~ 2"), "{lines:?}");
+}
+
+#[test]
+fn graph_draw_prefetches_one_screen_before_and_after_visible_window() {
+    let (_path, repo, _oid) = temp_repo("prefetch-window");
+    let (tx, rx) = std::sync::mpsc::channel();
+    let mut app = App {
+        viewport: Viewport::Graph,
+        focus: Focus::Viewport,
+        graph_tx: Some(tx),
+        layout: Layout { graph: Rect::new(0, 0, 80, 3), graph_scrollbar: Rect::new(79, 0, 1, 3), ..Default::default() },
+        ..Default::default()
+    };
+    app.layout_config.is_shas = false;
+    app.layout_config.is_zen = false;
+    app.graph.generation = 7;
+    app.graph.total = 20;
+    app.graph_selected = 5;
+    app.graph_scroll.set(5);
+
+    let backend = TestBackend::new(80, 3);
+    let mut terminal = Terminal::new(backend).unwrap();
+    terminal
+        .draw(|frame| {
+            app.draw_graph(frame, &repo);
+        })
+        .unwrap();
+
+    match rx.try_recv().unwrap() {
+        GraphCommand::QueryGraphWindow { generation, request_id, start, end } => {
+            assert_eq!(generation, 7);
+            assert_eq!(request_id, 1);
+            assert_eq!((start, end), (2, 11));
+        },
+        other => panic!("expected graph window request, got {other:?}"),
+    }
+}
+
+#[test]
+fn graph_draw_keeps_prefetched_rows_out_of_visible_table() {
+    let (_path, repo, oid) = temp_repo("prefetch-render");
+    let mut app = app_with_cached_window(2, &["row2", "row3", "row4", "row5", "row6", "row7", "row8", "row9", "row10"], oid);
+    app.graph.total = 20;
+    app.graph_selected = 5;
+    app.graph_scroll.set(5);
+
+    let backend = TestBackend::new(80, 3);
+    let mut terminal = Terminal::new(backend).unwrap();
+    terminal
+        .draw(|frame| {
+            app.draw_graph(frame, &repo);
+        })
+        .unwrap();
+
+    let lines = rendered_lines(&terminal);
+    assert!(lines[0].contains("row5"), "{lines:?}");
+    assert!(lines[1].contains("row6"), "{lines:?}");
+    assert!(lines[2].contains("row7"), "{lines:?}");
+    assert!(!lines.iter().any(|line| line.contains("row4")), "{lines:?}");
+    assert!(!lines.iter().any(|line| line.contains("row8")), "{lines:?}");
 }
 
 #[test]

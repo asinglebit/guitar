@@ -1,5 +1,5 @@
 use super::*;
-use crate::core::graph_service::{GraphCommand, GraphEvent, GraphLookupKind, GraphLookupResult, GraphRow};
+use crate::core::graph_service::{GraphCommand, GraphEvent, GraphLookupKind, GraphLookupResult, GraphPane, GraphRow};
 use git2::{Repository, Signature};
 use ratatui::{Terminal, backend::TestBackend, style::Color};
 use std::{
@@ -195,4 +195,52 @@ fn explicit_graph_navigation_clears_pending_restore() {
 
     assert_eq!(app.graph_selected, 2);
     assert_eq!(app.graph.pending_selection_restore, None);
+}
+
+#[test]
+fn graph_window_request_reuses_cached_window_that_covers_range() {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let mut app = App { graph_tx: Some(tx), ..Default::default() };
+    app.graph.generation = 7;
+    app.graph.version = 2;
+    app.graph.graph_window = Some(GraphWindowCache { version: 2, start: 0, end: 10, head_alias: 1, rows: Vec::new(), history: Default::default() });
+
+    app.request_graph_window(2, 8);
+
+    assert!(rx.try_recv().is_err());
+
+    app.request_graph_window(0, 11);
+
+    match rx.try_recv().unwrap() {
+        GraphCommand::QueryGraphWindow { generation, request_id, start, end } => {
+            assert_eq!(generation, 7);
+            assert_eq!(request_id, 1);
+            assert_eq!((start, end), (0, 11));
+        },
+        other => panic!("expected graph window request, got {other:?}"),
+    }
+}
+
+#[test]
+fn pane_window_request_reuses_cached_window_that_covers_range() {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let mut app = App { graph_tx: Some(tx), ..Default::default() };
+    app.graph.generation = 7;
+    app.graph.version = 2;
+    app.graph.branches_window = Some(PaneWindowCache { version: 2, start: 0, end: 10, total: 20, rows: Vec::new() });
+
+    app.request_pane_window(GraphPane::Branches, 2, 8);
+
+    assert!(rx.try_recv().is_err());
+
+    app.request_pane_window(GraphPane::Branches, 0, 11);
+
+    match rx.try_recv().unwrap() {
+        GraphCommand::QueryPaneWindow { generation, pane, start, end } => {
+            assert_eq!(generation, 7);
+            assert_eq!(pane, GraphPane::Branches);
+            assert_eq!((start, end), (0, 11));
+        },
+        other => panic!("expected pane window request, got {other:?}"),
+    }
 }

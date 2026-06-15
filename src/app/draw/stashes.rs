@@ -5,7 +5,7 @@ use crate::{
         app::{App, Focus},
         draw::{
             buffered::{DrawTarget, SurfaceRender},
-            pane_window::{aligned_pane_rows, blank_lines, zebra_list_items},
+            pane_window::{aligned_pane_rows, blank_lines, preloaded_pane_window, zebra_list_items},
         },
     },
     core::graph_service::{GraphPane, GraphPaneRow},
@@ -48,7 +48,8 @@ impl App {
 
         let start = self.stashes_scroll.get().min(total_lines.saturating_sub(visible_height));
         let end = (start + visible_height).min(total_lines);
-        self.request_pane_window(GraphPane::Stashes, start, if total_lines == 0 { visible_height } else { end });
+        let (preload_start, preload_end) = preloaded_pane_window(start, end, total_lines, visible_height);
+        self.request_pane_window(GraphPane::Stashes, preload_start, preload_end);
 
         // Stashes are stored as commit aliases, so each row reads its summary from git.
         let mut lines: Vec<Line<'_>> = Vec::new();

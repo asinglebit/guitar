@@ -30,6 +30,14 @@ fn cached_rows_shift_down_when_requested_window_moves_up() {
 }
 
 #[test]
+fn preloaded_pane_window_adds_one_visible_page_on_each_side() {
+    assert_eq!(preloaded_pane_window(5, 8, 20, 3), (2, 11));
+    assert_eq!(preloaded_pane_window(0, 3, 20, 3), (0, 6));
+    assert_eq!(preloaded_pane_window(17, 20, 20, 3), (14, 20));
+    assert_eq!(preloaded_pane_window(0, 0, 0, 3), (0, 0));
+}
+
+#[test]
 fn zebra_list_items_fill_blank_tail_rows() {
     let theme = Theme::default();
     let items = zebra_list_items(&[Line::from("row")], 3, 0, usize::MAX, false, false, &theme);

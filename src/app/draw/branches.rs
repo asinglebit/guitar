@@ -1,5 +1,5 @@
 use crate::{
-    app::draw::pane_window::{aligned_pane_rows, blank_lines, zebra_list_items},
+    app::draw::pane_window::{aligned_pane_rows, blank_lines, preloaded_pane_window, zebra_list_items},
     app::{
         app::{App, Focus},
         draw::buffered::{DrawTarget, SurfaceRender},
@@ -38,7 +38,8 @@ impl App {
 
         let start = self.branches_scroll.get().min(total_lines.saturating_sub(visible_height));
         let end = (start + visible_height).min(total_lines);
-        self.request_pane_window(GraphPane::Branches, start, if total_lines == 0 { visible_height } else { end });
+        let (preload_start, preload_end) = preloaded_pane_window(start, end, total_lines, visible_height);
+        self.request_pane_window(GraphPane::Branches, preload_start, preload_end);
 
         // Render local/remote and visible/hidden state through the branch icon.
         let mut lines: Vec<Line<'_>> = Vec::new();

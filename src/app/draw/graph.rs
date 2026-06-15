@@ -43,7 +43,8 @@ impl App {
         let start = self.graph_scroll.get().min(total_lines.saturating_sub(visible_height));
         let end = (start + visible_height).min(total_lines);
 
-        self.request_graph_window(start, end);
+        let (preload_start, preload_end) = graph_preload_window(start, end, total_lines, visible_height);
+        self.request_graph_window(preload_start, preload_end);
 
         // An unborn repository has no graph data, so render a centered empty state.
         match repo.head().ok().and_then(|h| h.target()) {
@@ -180,6 +181,14 @@ fn graph_backdrop_rows<'a>(visible_height: usize, start: usize, selected: Option
 fn graph_window_has_stable_visible_page(window: &crate::app::app::GraphWindowCache, target_start: usize, target_end: usize) -> bool {
     let cached_len = window.end.saturating_sub(window.start);
     window.start <= target_start && target_end <= window.end && window.rows.len() >= cached_len && window.history.len() >= cached_len
+}
+
+fn graph_preload_window(start: usize, end: usize, total_lines: usize, visible_height: usize) -> (usize, usize) {
+    if visible_height == 0 {
+        return (start, end);
+    }
+
+    (start.saturating_sub(visible_height), end.saturating_add(visible_height).min(total_lines))
 }
 
 fn align_projection(lines: &[Line<'static>], cached_start: usize, target_start: usize, target_end: usize) -> Vec<Line<'static>> {

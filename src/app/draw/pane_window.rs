@@ -17,6 +17,14 @@ pub(super) fn blank_lines(len: usize) -> Vec<Line<'static>> {
     vec![Line::default(); len]
 }
 
+pub(super) fn preloaded_pane_window(start: usize, end: usize, total_lines: usize, visible_height: usize) -> (usize, usize) {
+    if total_lines == 0 || visible_height == 0 {
+        return (start, end);
+    }
+
+    (start.saturating_sub(visible_height), end.saturating_add(visible_height).min(total_lines))
+}
+
 pub(super) fn zebra_list_items<'a>(lines: &[Line<'a>], visible_height: usize, global_start: usize, selected: usize, is_focused: bool, selection_enabled: bool, theme: &Theme) -> Vec<ListItem<'a>> {
     (0..visible_height)
         .map(|idx| {

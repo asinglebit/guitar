@@ -917,11 +917,11 @@ impl App {
             return;
         };
 
-        if self.graph.graph_window.as_ref().is_some_and(|window| window.start == start && window.end == end && window.version >= self.graph.version) {
+        if self.graph.graph_window.as_ref().is_some_and(|window| window.start <= start && end <= window.end && window.version >= self.graph.version) {
             return;
         }
 
-        if self.graph.requested_graph.is_some_and(|(_, requested_start, requested_end)| requested_start == start && requested_end == end) {
+        if self.graph.requested_graph.is_some_and(|(_, requested_start, requested_end)| requested_start <= start && end <= requested_end) {
             return;
         }
 
@@ -942,7 +942,7 @@ impl App {
             GraphPane::Reflogs => self.graph.reflogs_window.as_ref(),
         };
 
-        if cache.is_some_and(|window| window.start == start && window.end == end && window.version >= self.graph.version) {
+        if cache.is_some_and(|window| window.start <= start && end <= window.end && window.version >= self.graph.version) {
             return;
         }
 
