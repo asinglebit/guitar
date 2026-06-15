@@ -19,8 +19,8 @@ made with ♡
 </div>
 
 ![guitar screenshot](https://github.com/user-attachments/assets/177dbf13-b9ad-480e-a1be-71a333454a44)
-<img width="650" height="377" alt="diffs(1)" src="https://github.com/user-attachments/assets/e5b10939-f3f2-4309-b9e6-5b3b8b726dfc" />
-<img width="650" height="377" alt="THEMS" src="https://github.com/user-attachments/assets/95b5d056-2460-4435-9d26-b40ee20538fb" />
+<img src="https://github.com/user-attachments/assets/e5b10939-f3f2-4309-b9e6-5b3b8b726dfc" />
+<img src="https://github.com/user-attachments/assets/95b5d056-2460-4435-9d26-b40ee20538fb" />
 
 `guita╭`, distributed as `guitar`, is a Rust terminal UI for working with Git history from a topology-first point of view. It is built with `ratatui`, `crossterm`, and `libgit2`, and is designed for exploring, filtering, and operating on large repositories without leaving the terminal.
 
