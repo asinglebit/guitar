@@ -28,7 +28,7 @@ impl App {
         lines.push(Line::default());
         lines.extend(wrapped_message.into_iter().map(|line| Line::from(Span::styled(line, Style::default().fg(self.theme.COLOR_RED)))));
         lines.push(Line::default());
-        lines.push(action_row(&[("ok", "enter"), ("cancel", "esc")], Style::default().fg(self.theme.COLOR_RED)));
+        lines.push(action_row(&[("ok", "enter")], Style::default().fg(self.theme.COLOR_RED)));
 
         let content_width = lines.iter().map(|line| line.width()).max().unwrap_or(30);
         let modal_width = (content_width + 10).max(30).min(max_modal_width) as u16;

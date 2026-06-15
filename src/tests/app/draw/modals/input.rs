@@ -16,7 +16,8 @@ fn input_modal_renders_esc_title_action_row_and_bordered_input() {
 
     let rendered = rendered_symbols(&terminal);
     assert!(rendered.contains("(esc)"));
-    assert!(rendered.contains("confirm (enter) cancel (esc)"));
+    assert!(rendered.contains("confirm (enter)"));
+    assert!(!rendered.contains("cancel (esc)"));
     assert!(rendered.contains("commit message"));
     assert!(rendered.contains("─"));
 }

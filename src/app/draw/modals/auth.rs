@@ -70,7 +70,7 @@ impl App {
             lines.extend(vec![Line::default(); 5]);
         }
         lines.push(Line::default());
-        lines.push(action_row(&[("submit", "enter"), ("switch field", "tab"), ("cancel", "esc")], Style::default().fg(self.theme.COLOR_GREY_600)));
+        lines.push(action_row(&[("submit", "enter"), ("switch field", "tab")], Style::default().fg(self.theme.COLOR_GREY_600)));
 
         let desired_height = lines.len().saturating_add(4);
         let max_modal_height = (frame.area().height as usize).max(1);

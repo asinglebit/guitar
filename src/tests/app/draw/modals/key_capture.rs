@@ -24,7 +24,8 @@ fn key_capture_modal_renders_esc_title_and_press_key_action_row() {
 
     let rendered = rendered_symbols(&terminal);
     assert!(rendered.contains("(esc)"));
-    assert!(rendered.contains("press key cancel (esc)"));
+    assert!(rendered.contains("press key"));
+    assert!(!rendered.contains("cancel (esc)"));
     assert!(!rendered.contains("Ctrl+C"));
 }
 
@@ -38,5 +39,6 @@ fn key_capture_modal_renders_save_action_row_for_valid_candidate() {
     terminal.draw(|frame| app.draw_modal_key_capture(frame)).unwrap();
 
     let rendered = rendered_symbols(&terminal);
-    assert!(rendered.contains("save (enter) cancel (esc)"));
+    assert!(rendered.contains("save (enter)"));
+    assert!(!rendered.contains("cancel (esc)"));
 }

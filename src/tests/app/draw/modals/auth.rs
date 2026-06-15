@@ -26,7 +26,8 @@ fn auth_modal_masks_secret_input() {
     assert!(!rendered.contains("supersecret"));
     assert!(rendered.contains("***********"));
     assert!(rendered.contains("(esc)"));
-    assert!(rendered.contains("submit (enter) switch field (tab) cancel (esc)"));
+    assert!(rendered.contains("submit (enter) switch field (tab)"));
+    assert!(!rendered.contains("cancel (esc)"));
     assert!(rendered.contains("password / token"));
     assert!(rendered.contains("─"));
 }

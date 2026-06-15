@@ -394,6 +394,63 @@ fn pane_row_jump_uses_graph_index_and_refreshes_diff() {
 }
 
 #[test]
+fn pane_row_jump_centers_selected_graph_row() {
+    let mut app = App { viewport: Viewport::Graph, focus: Focus::Branches, ..Default::default() };
+    app.graph.total = 100;
+    app.layout.graph.height = 10;
+
+    assert!(app.open_graph_pane_row(GraphPaneRow::Branch { alias: 99, name: "feature".to_string(), is_local: true, lane: None, graph_index: Some(40) }));
+
+    assert_eq!(app.graph_selected, 40);
+    assert_eq!(app.graph_scroll.get(), 35);
+}
+
+#[test]
+fn pane_row_jump_centering_clamps_near_graph_edges() {
+    let mut app = App { viewport: Viewport::Graph, focus: Focus::Branches, ..Default::default() };
+    app.graph.total = 100;
+    app.layout.graph.height = 10;
+
+    assert!(app.open_graph_pane_row(GraphPaneRow::Tag { alias: 99, name: "v1".to_string(), lane: None, graph_index: Some(2) }));
+    assert_eq!(app.graph_scroll.get(), 0);
+
+    assert!(app.open_graph_pane_row(GraphPaneRow::Stash { alias: 99, summary: "stash".to_string(), lane: None, graph_index: Some(98) }));
+    assert_eq!(app.graph_scroll.get(), 90);
+}
+
+#[test]
+fn zen_pane_row_jump_uses_inner_graph_height_for_centering() {
+    let mut app = App { viewport: Viewport::Graph, focus: Focus::Reflogs, ..Default::default() };
+    app.graph.total = 100;
+    app.layout.graph.height = 10;
+    app.layout_config.is_zen = true;
+
+    assert!(app.open_graph_pane_row(GraphPaneRow::Reflog { selector: "HEAD@{0}".to_string(), message: "commit: feature".to_string(), alias: 99, lane: None, graph_index: Some(40) }));
+
+    assert_eq!(app.graph_selected, 40);
+    assert_eq!(app.graph_scroll.get(), 36);
+}
+
+#[test]
+fn pane_alias_fallback_jump_centers_selected_graph_row() {
+    let (_path, repo) = temp_repo("pane-alias-center");
+    let oid = commit_file(&repo, "feature.txt", "feature");
+    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Branches, ..Default::default() };
+    let alias = app.oids.get_alias_by_oid(oid);
+    app.oids.sorted_aliases = vec![NONE; 100];
+    app.oids.sorted_aliases[40] = alias;
+    app.branches.sorted = vec![(alias, "feature".to_string())];
+    app.graph.total = 100;
+    app.layout.graph.height = 10;
+
+    app.on_narrow_scope();
+
+    assert_eq!(app.focus, Focus::Viewport);
+    assert_eq!(app.graph_selected, 40);
+    assert_eq!(app.graph_scroll.get(), 35);
+}
+
+#[test]
 fn empty_delete_tag_modal_navigation_stays_at_zero() {
     let mut app = App { focus: Focus::ModalDeleteTag, modal_delete_tag_selected: 4, ..Default::default() };
 

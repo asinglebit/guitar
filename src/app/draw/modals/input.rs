@@ -26,7 +26,7 @@ impl App {
         lines.push(Line::from(Span::styled(title, Style::default().fg(self.theme.COLOR_TEXT))));
         lines.push(Line::default());
         lines.extend(vec![Line::default(); fill]);
-        lines.push(action_row(&[("confirm", "enter"), ("cancel", "esc")], Style::default().fg(self.theme.COLOR_HIGHLIGHTED)));
+        lines.push(action_row(&[("confirm", "enter")], Style::default().fg(self.theme.COLOR_HIGHLIGHTED)));
 
         // Paint a plain overlay before clearing the modal rectangle.
         let bg_block = Block::default().style(Style::default().fg(self.theme.COLOR_BORDER));

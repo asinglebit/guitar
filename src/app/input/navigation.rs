@@ -60,6 +60,20 @@ impl App {
         self.refresh_current_diff_for_graph_selection();
     }
 
+    fn center_graph_scroll_on_selection(&self) {
+        let total = self.graph_commit_count();
+        let visible_height = if self.layout_config.is_zen { self.layout.graph.height.saturating_sub(2) as usize } else { self.layout.graph.height as usize };
+
+        if total == 0 || visible_height == 0 {
+            self.graph_scroll.set(0);
+            return;
+        }
+
+        let max_scroll = total.saturating_sub(visible_height);
+        let centered = self.graph_selected.saturating_sub(visible_height / 2);
+        self.graph_scroll.set(centered.min(max_scroll));
+    }
+
     fn select_graph_alias(&mut self, alias: u32) -> bool {
         if let Some(window) = &self.graph.graph_window
             && let Some(idx) = window.rows.iter().find(|row| row.alias == alias).map(|row| row.index)
@@ -81,6 +95,7 @@ impl App {
         }
         self.viewport = Viewport::Graph;
         self.focus = Focus::Viewport;
+        self.center_graph_scroll_on_selection();
         true
     }
 
@@ -100,7 +115,7 @@ impl App {
         };
 
         self.select_graph_index(graph_index);
-        self.graph_scroll.set(self.graph_selected);
+        self.center_graph_scroll_on_selection();
         self.viewport = Viewport::Graph;
         self.focus = Focus::Viewport;
         true
@@ -415,6 +430,7 @@ impl App {
                 },
                 Viewport::Viewer => {
                     self.layout_config.is_status = true;
+                    self.file_name = None;
                     if self.graph_selected == 0 && self.uncommitted.is_unstaged {
                         self.focus = Focus::StatusBottom;
                     } else {

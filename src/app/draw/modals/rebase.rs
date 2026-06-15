@@ -17,11 +17,11 @@ use ratatui::{
 
 impl App {
     pub fn draw_modal_rebase(&mut self, frame: &mut impl DrawTarget) {
-        let (title, hint) = match self.focus {
-            Focus::ModalOperationProgress => (self.modal_operation_kind.label().to_string(), "working..."),
-            Focus::ModalOperationConflict => (format!("{} conflict", self.modal_operation_kind.label()), "ok (enter) cancel (esc)"),
-            Focus::ModalOperationSuccess => (format!("{} complete", self.modal_operation_kind.label()), "ok (enter) cancel (esc)"),
-            _ => (self.modal_operation_kind.label().to_string(), "ok (enter) cancel (esc)"),
+        let title = match self.focus {
+            Focus::ModalOperationProgress => self.modal_operation_kind.label().to_string(),
+            Focus::ModalOperationConflict => format!("{} conflict", self.modal_operation_kind.label()),
+            Focus::ModalOperationSuccess => format!("{} complete", self.modal_operation_kind.label()),
+            _ => self.modal_operation_kind.label().to_string(),
         };
 
         let max_modal_width = (frame.area().width as f32 * 0.8) as usize;
@@ -40,9 +40,9 @@ impl App {
             lines.push(Line::default());
         }
         let action_line = if self.focus == Focus::ModalOperationProgress {
-            Line::from(Span::styled(hint, Style::default().fg(self.theme.COLOR_HIGHLIGHTED)))
+            Line::from(Span::styled("working...", Style::default().fg(self.theme.COLOR_HIGHLIGHTED)))
         } else {
-            action_row(&[("ok", "enter"), ("cancel", "esc")], Style::default().fg(self.theme.COLOR_HIGHLIGHTED))
+            action_row(&[("ok", "enter")], Style::default().fg(self.theme.COLOR_HIGHLIGHTED))
         };
         lines.push(action_line);
 

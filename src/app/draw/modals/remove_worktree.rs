@@ -29,7 +29,7 @@ impl App {
         }
 
         lines.push(Line::default());
-        lines.push(action_row(&[("confirm", "enter"), ("cancel", "esc")], Style::default().fg(self.theme.COLOR_HIGHLIGHTED)));
+        lines.push(action_row(&[("confirm", "enter")], Style::default().fg(self.theme.COLOR_HIGHLIGHTED)));
 
         let bg_block = Block::default().style(Style::default().fg(self.theme.COLOR_BORDER));
         bg_block.render(frame.area(), frame.buffer_mut());

@@ -25,7 +25,6 @@ impl App {
         };
 
         let mut lines = Vec::new();
-        lines.push(Line::default());
         lines.push(Line::from(Span::styled("set shortcut", Style::default().fg(self.theme.COLOR_TEXT))));
         lines.push(Line::default());
         lines.push(Line::from(Span::styled(format!("{} / {}", input_mode_to_visual_string(selection.mode), command_to_visual_string(&selection.command)), Style::default().fg(self.theme.COLOR_TEXT))));
@@ -61,9 +60,9 @@ impl App {
 
         lines.push(Line::default());
         let line = if self.modal_key_capture_candidate.is_some() && self.modal_key_capture_error.is_none() {
-            action_row(&[("save", "enter"), ("cancel", "esc")], Style::default().fg(self.theme.COLOR_HIGHLIGHTED))
+            action_row(&[("save", "enter")], Style::default().fg(self.theme.COLOR_HIGHLIGHTED))
         } else {
-            Line::from(Span::styled("press key cancel (esc)", Style::default().fg(self.theme.COLOR_HIGHLIGHTED)))
+            Line::from(Span::styled("press key", Style::default().fg(self.theme.COLOR_HIGHLIGHTED)))
         };
         lines.push(line);
 

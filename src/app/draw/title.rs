@@ -1,5 +1,5 @@
 use crate::app::{
-    app::{App, Focus},
+    app::{App, Focus, Viewport},
     draw::buffered::DrawTarget,
 };
 use crate::helpers::symbols::SYM_FOLDER;
@@ -14,7 +14,9 @@ impl App {
         let available_width = self.layout.title_left.width.saturating_sub(15) as usize;
 
         // Logo and path
-        let path = if let Some(file_name) = self.file_name.clone() {
+        let path = if self.viewport == Viewport::Viewer
+            && let Some(file_name) = self.file_name.clone()
+        {
             match &self.path {
                 Some(base) => format!("{}/{}", base, file_name),
                 None => file_name.clone(),
@@ -52,3 +54,7 @@ impl App {
         frame.render_widget(paragraph, self.layout.title_right);
     }
 }
+
+#[cfg(test)]
+#[path = "../../tests/app/draw/title.rs"]
+mod tests;
