@@ -92,6 +92,7 @@ pub enum Command {
     Tag,
     Untag,
     Cherrypick,
+    Revert,
     Rebase,
     Merge,
     ContinueOperation,
@@ -471,6 +472,9 @@ fn default_action_keymap() -> IndexMap<KeyBinding, Command> {
     // 'y' for cherrypick (vim uses 'y' for yank here yank/copy a commit to current branch)
     map.insert(KeyBinding::new(Char('y'), KeyModifiers::NONE), Command::Cherrypick);
 
+    // 'R' for revert (capital to indicate caution)
+    map.insert(KeyBinding::new(Char('R'), KeyModifiers::SHIFT), Command::Revert);
+
     // 'r' starts a rebase from action mode.
     map.insert(KeyBinding::new(Char('r'), KeyModifiers::NONE), Command::Rebase);
 
@@ -717,114 +721,12 @@ pub fn save_keymaps(maps: &Keymaps) -> Result<(), Box<dyn std::error::Error>> {
     save_keymaps_to_path(path.as_path(), maps)
 }
 
-fn add_default_binding(maps: &mut Keymaps, mode: InputMode, key: KeyBinding, command: Command) -> bool {
-    let Some(mode_map) = maps.get_mut(&mode) else {
-        return false;
-    };
-
-    if mode_map.values().any(|cmd| cmd == &command) || mode_map.contains_key(&key) {
-        return false;
-    }
-
-    mode_map.insert(key, command);
-    true
-}
-
-fn remap_old_numeric_defaults(maps: &mut Keymaps, mode: InputMode) -> bool {
-    let Some(mode_map) = maps.get_mut(&mode) else {
-        return false;
-    };
-
-    let key_6 = KeyBinding::new(Char('6'), KeyModifiers::NONE);
-    let key_7 = KeyBinding::new(Char('7'), KeyModifiers::NONE);
-    let key_8 = KeyBinding::new(Char('8'), KeyModifiers::NONE);
-
-    if mode_map.get(&key_6) != Some(&Command::ToggleShas) || mode_map.get(&key_7) != Some(&Command::ToggleWorktrees) || mode_map.get(&key_8) != Some(&Command::ToggleReflogs) {
-        return false;
-    }
-
-    mode_map.insert(key_6, Command::ToggleWorktrees);
-    mode_map.insert(key_7, Command::ToggleReflogs);
-    mode_map.insert(key_8, Command::ToggleShas);
-    true
-}
-
-fn migrate_merge_default(maps: &mut Keymaps) -> bool {
-    let Some(action) = maps.get_mut(&InputMode::Action) else {
-        return false;
-    };
-
-    let key = KeyBinding::new(Char('m'), KeyModifiers::NONE);
-    match action.get(&key) {
-        None | Some(Command::ToggleHunkMode) => {
-            action.insert(key, Command::Merge);
-            true
-        },
-        Some(_) => false,
-    }
-}
-
-fn migrate_default_bindings(maps: &mut Keymaps) -> bool {
-    let mut changed = false;
-    changed |= remap_old_numeric_defaults(maps, InputMode::Normal);
-    changed |= remap_old_numeric_defaults(maps, InputMode::Action);
-    changed |= migrate_merge_default(maps);
-    changed |= add_default_binding(maps, InputMode::Normal, KeyBinding::new(Char('v'), KeyModifiers::NONE), Command::ToggleSplitDiffMode);
-    changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('v'), KeyModifiers::NONE), Command::ToggleSplitDiffMode);
-    changed |= add_default_binding(maps, InputMode::Normal, KeyBinding::new(Char('0'), KeyModifiers::NONE), Command::ResetLayout);
-    changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('0'), KeyModifiers::NONE), Command::ResetLayout);
-    changed |= add_default_binding(maps, InputMode::Normal, KeyBinding::new(Char('6'), KeyModifiers::NONE), Command::ToggleWorktrees);
-    changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('6'), KeyModifiers::NONE), Command::ToggleWorktrees);
-    changed |= add_default_binding(maps, InputMode::Normal, KeyBinding::new(Char('7'), KeyModifiers::NONE), Command::ToggleReflogs);
-    changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('7'), KeyModifiers::NONE), Command::ToggleReflogs);
-    changed |= add_default_binding(maps, InputMode::Normal, KeyBinding::new(Char('8'), KeyModifiers::NONE), Command::ToggleShas);
-    changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('8'), KeyModifiers::NONE), Command::ToggleShas);
-    changed |= add_default_binding(maps, InputMode::Normal, KeyBinding::new(Char('9'), KeyModifiers::NONE), Command::ToggleGraphReflogs);
-    changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('9'), KeyModifiers::NONE), Command::ToggleGraphReflogs);
-    changed |= add_default_binding(maps, InputMode::Normal, KeyBinding::new(Char('w'), KeyModifiers::NONE), Command::CreateWorktree);
-    changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('w'), KeyModifiers::NONE), Command::CreateWorktree);
-    changed |= add_default_binding(maps, InputMode::Normal, KeyBinding::new(Char('d'), KeyModifiers::NONE), Command::RemoveRecentRepository);
-    changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('d'), KeyModifiers::NONE), Command::RemoveRecentRepository);
-    changed |= add_default_binding(maps, InputMode::Normal, KeyBinding::new(Char('K'), KeyModifiers::SHIFT), Command::MoveRecentRepositoryUp);
-    changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('K'), KeyModifiers::SHIFT), Command::MoveRecentRepositoryUp);
-    changed |= add_default_binding(maps, InputMode::Normal, KeyBinding::new(Char('J'), KeyModifiers::SHIFT), Command::MoveRecentRepositoryDown);
-    changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('J'), KeyModifiers::SHIFT), Command::MoveRecentRepositoryDown);
-    changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('W'), KeyModifiers::SHIFT), Command::RemoveWorktree);
-    changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('L'), KeyModifiers::SHIFT), Command::ToggleWorktreeLock);
-    changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('r'), KeyModifiers::NONE), Command::Rebase);
-    changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('C'), KeyModifiers::SHIFT), Command::ContinueOperation);
-    changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('A'), KeyModifiers::SHIFT), Command::AbortOperation);
-    changed |= add_default_binding(maps, InputMode::Normal, KeyBinding::new(Char('h'), KeyModifiers::CONTROL), Command::FocusPaneLeft);
-    changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('h'), KeyModifiers::CONTROL), Command::FocusPaneLeft);
-    changed |= add_default_binding(maps, InputMode::Normal, KeyBinding::new(Char('j'), KeyModifiers::CONTROL), Command::FocusPaneDown);
-    changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('j'), KeyModifiers::CONTROL), Command::FocusPaneDown);
-    changed |= add_default_binding(maps, InputMode::Normal, KeyBinding::new(Char('k'), KeyModifiers::CONTROL), Command::FocusPaneUp);
-    changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('k'), KeyModifiers::CONTROL), Command::FocusPaneUp);
-    changed |= add_default_binding(maps, InputMode::Normal, KeyBinding::new(Char('l'), KeyModifiers::CONTROL), Command::FocusPaneRight);
-    changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('l'), KeyModifiers::CONTROL), Command::FocusPaneRight);
-    changed |= add_default_binding(maps, InputMode::Normal, KeyBinding::new(Char('h'), KeyModifiers::CONTROL | KeyModifiers::ALT), Command::ResizePaneLeft);
-    changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('h'), KeyModifiers::CONTROL | KeyModifiers::ALT), Command::ResizePaneLeft);
-    changed |= add_default_binding(maps, InputMode::Normal, KeyBinding::new(Char('j'), KeyModifiers::CONTROL | KeyModifiers::ALT), Command::ResizePaneDown);
-    changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('j'), KeyModifiers::CONTROL | KeyModifiers::ALT), Command::ResizePaneDown);
-    changed |= add_default_binding(maps, InputMode::Normal, KeyBinding::new(Char('k'), KeyModifiers::CONTROL | KeyModifiers::ALT), Command::ResizePaneUp);
-    changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('k'), KeyModifiers::CONTROL | KeyModifiers::ALT), Command::ResizePaneUp);
-    changed |= add_default_binding(maps, InputMode::Normal, KeyBinding::new(Char('l'), KeyModifiers::CONTROL | KeyModifiers::ALT), Command::ResizePaneRight);
-    changed |= add_default_binding(maps, InputMode::Action, KeyBinding::new(Char('l'), KeyModifiers::CONTROL | KeyModifiers::ALT), Command::ResizePaneRight);
-    changed
-}
-
 pub fn load_or_init_keymaps() -> Keymaps {
     let pathbuf = keymap_config_path();
     let path = pathbuf.as_path();
 
     match load_keymaps_from_path(path) {
-        Ok(mut maps) => {
-            let changed = migrate_default_bindings(&mut maps);
-            if changed {
-                let _ = save_keymaps_to_path(path, &maps);
-            }
-            maps
-        },
+        Ok(maps) => maps,
         Err(_) => {
             let defaults = default_keymaps();
             let _ = save_keymaps_to_path(path, &defaults);

@@ -280,6 +280,7 @@ impl App {
                     | Focus::ModalSolo
                     | Focus::ModalCommit
                     | Focus::ModalCherrypick
+                    | Focus::ModalRevert
                     | Focus::ModalCreateBranch
                     | Focus::ModalCreateWorktreeName
                     | Focus::ModalCreateWorktreePath
@@ -349,6 +350,7 @@ impl App {
                         | Focus::ModalSolo
                         | Focus::ModalCommit
                         | Focus::ModalCherrypick
+                        | Focus::ModalRevert
                         | Focus::ModalCreateBranch
                         | Focus::ModalCreateWorktreeName
                         | Focus::ModalCreateWorktreePath

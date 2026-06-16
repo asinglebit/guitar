@@ -10,6 +10,7 @@ use crate::{
             network::NetworkRequest,
             rebasing::{RebaseOutcome, abort_rebase, continue_rebase, is_rebase_in_progress, start_rebase},
             resetting::{reset_file, reset_to_commit},
+            reverting::{RevertOutcome, abort_revert, continue_revert, is_revert_in_progress},
             staging::{stage_all, stage_file, unstage_all, unstage_file},
             stashing::{pop, stash},
             tagging::untag,
@@ -177,6 +178,10 @@ impl App {
                 self.focus = Focus::Viewport;
                 self.show_error("Cherry-pick failed: no commit message was provided");
             },
+            PendingOperationAction::Start { kind: OperationKind::Revert, .. } => {
+                self.focus = Focus::Viewport;
+                self.show_error("Revert failed: no commit message was provided");
+            },
             PendingOperationAction::Continue => self.continue_active_operation(&repo),
             PendingOperationAction::Abort => self.abort_active_operation(&repo),
         }
@@ -232,6 +237,31 @@ impl App {
         }
     }
 
+    pub(crate) fn handle_revert_result(&mut self, result: Result<RevertOutcome, git2::Error>) {
+        self.modal_operation_kind = OperationKind::Revert;
+        match result {
+            Ok(RevertOutcome::Committed { .. }) => {
+                self.modal_operation_message = "Revert completed.".to_string();
+                self.focus = Focus::ModalOperationSuccess;
+                self.reload(None);
+            },
+            Ok(RevertOutcome::Conflict) => {
+                self.show_operation_conflict(OperationKind::Revert, "Revert stopped because conflicts need to be resolved.");
+            },
+            Ok(RevertOutcome::Aborted) => {
+                self.modal_operation_message = "Revert aborted.".to_string();
+                self.focus = Focus::ModalOperationSuccess;
+                self.reload(None);
+            },
+            Err(error) => {
+                self.modal_operation_message.clear();
+                self.focus = Focus::Viewport;
+                self.show_error(format!("Revert failed: {error}"));
+                self.reload(None);
+            },
+        }
+    }
+
     fn handle_merge_result(&mut self, result: Result<MergeOutcome, git2::Error>) {
         self.modal_operation_kind = OperationKind::Merge;
         match result {
@@ -278,6 +308,7 @@ impl App {
         match repo.state() {
             RepositoryState::Rebase | RepositoryState::RebaseInteractive | RepositoryState::RebaseMerge | RepositoryState::ApplyMailboxOrRebase => Some(OperationKind::Rebase),
             RepositoryState::CherryPick | RepositoryState::CherryPickSequence => Some(OperationKind::Cherrypick),
+            RepositoryState::Revert | RepositoryState::RevertSequence => Some(OperationKind::Revert),
             RepositoryState::Merge => Some(OperationKind::Merge),
             _ => None,
         }
@@ -287,10 +318,11 @@ impl App {
         match Self::active_operation_kind(repo) {
             Some(OperationKind::Rebase) => self.handle_rebase_result(continue_rebase(repo)),
             Some(OperationKind::Cherrypick) => self.handle_cherrypick_result(continue_cherrypick(repo)),
+            Some(OperationKind::Revert) => self.handle_revert_result(continue_revert(repo)),
             Some(OperationKind::Merge) => self.handle_merge_result(continue_merge(repo)),
             None => {
                 self.focus = Focus::Viewport;
-                self.show_error("Continue failed: no rebase, cherry-pick, or merge in progress");
+                self.show_error("Continue failed: no rebase, cherry-pick, revert, or merge in progress");
             },
         }
     }
@@ -299,10 +331,11 @@ impl App {
         match Self::active_operation_kind(repo) {
             Some(OperationKind::Rebase) => self.handle_rebase_result(abort_rebase(repo)),
             Some(OperationKind::Cherrypick) => self.handle_cherrypick_result(abort_cherrypick(repo)),
+            Some(OperationKind::Revert) => self.handle_revert_result(abort_revert(repo)),
             Some(OperationKind::Merge) => self.handle_merge_result(abort_merge(repo)),
             None => {
                 self.focus = Focus::Viewport;
-                self.show_error("Abort failed: no rebase, cherry-pick, or merge in progress");
+                self.show_error("Abort failed: no rebase, cherry-pick, revert, or merge in progress");
             },
         }
     }
@@ -839,13 +872,49 @@ impl App {
         }
     }
 
+    pub fn on_revert(&mut self) {
+        let Some(repo) = &self.repo else { return };
+        if matches!(self.viewport, Viewport::Settings | Viewport::Viewer) || self.focus != Focus::Viewport {
+            return;
+        }
+
+        if Self::active_operation_kind(repo).is_some() {
+            self.on_continue_operation();
+            return;
+        }
+
+        if self.viewport != Viewport::Graph || self.graph_selected == 0 {
+            return;
+        }
+
+        let Some(oid) = self.graph_oid_at(self.graph_selected) else {
+            return;
+        };
+
+        let original_message = match repo.find_commit(oid) {
+            Ok(commit) if commit.parent_count() > 1 => None,
+            Ok(commit) => Some(Ok(commit.summary().unwrap_or("Revert commit").to_string())),
+            Err(error) => Some(Err(error)),
+        };
+
+        match original_message {
+            None => self.show_error("Revert failed: reverting merge commits is not supported"),
+            Some(Ok(original_message)) => {
+                self.pending_revert_oid = Some(oid);
+                self.modal_input.set_value(format!("reverted: {original_message}"));
+                self.focus = Focus::ModalRevert;
+            },
+            Some(Err(error)) => self.show_error(format!("Revert failed: {error}")),
+        }
+    }
+
     pub fn on_rebase(&mut self) {
         let Some(repo) = &self.repo else { return };
         if matches!(self.viewport, Viewport::Settings | Viewport::Viewer) || self.focus != Focus::Viewport {
             return;
         }
 
-        if is_rebase_in_progress(repo) || is_cherrypick_in_progress(repo) || is_merge_in_progress(repo) {
+        if is_rebase_in_progress(repo) || is_cherrypick_in_progress(repo) || is_revert_in_progress(repo) || is_merge_in_progress(repo) {
             self.on_continue_operation();
             return;
         }
@@ -869,7 +938,7 @@ impl App {
             return;
         }
 
-        if is_rebase_in_progress(repo) || is_cherrypick_in_progress(repo) || is_merge_in_progress(repo) {
+        if is_rebase_in_progress(repo) || is_cherrypick_in_progress(repo) || is_revert_in_progress(repo) || is_merge_in_progress(repo) {
             self.on_continue_operation();
             return;
         }

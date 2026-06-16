@@ -1,37 +1,6 @@
 use super::*;
 
 #[test]
-fn migration_adds_worktree_defaults_without_overwriting_existing_keys() {
-    let mut maps = IndexMap::new();
-    let mut normal = IndexMap::new();
-    normal.insert(KeyBinding::new(Char('7'), KeyModifiers::NONE), Command::ToggleTags);
-    let mut action = IndexMap::new();
-    action.insert(KeyBinding::new(Char('x'), KeyModifiers::NONE), Command::Drop);
-    maps.insert(InputMode::Normal, normal);
-    maps.insert(InputMode::Action, action);
-
-    assert!(migrate_default_bindings(&mut maps));
-
-    let normal = maps.get(&InputMode::Normal).unwrap();
-    let action = maps.get(&InputMode::Action).unwrap();
-
-    assert_eq!(normal.get(&KeyBinding::new(Char('7'), KeyModifiers::NONE)), Some(&Command::ToggleTags));
-    assert_eq!(normal.get(&KeyBinding::new(Char('0'), KeyModifiers::NONE)), Some(&Command::ResetLayout));
-    assert_eq!(normal.get(&KeyBinding::new(Char('6'), KeyModifiers::NONE)), Some(&Command::ToggleWorktrees));
-    assert_eq!(normal.get(&KeyBinding::new(Char('8'), KeyModifiers::NONE)), Some(&Command::ToggleShas));
-    assert_eq!(normal.get(&KeyBinding::new(Char('9'), KeyModifiers::NONE)), Some(&Command::ToggleGraphReflogs));
-    assert_eq!(normal.get(&KeyBinding::new(Char('w'), KeyModifiers::NONE)), Some(&Command::CreateWorktree));
-    assert_eq!(normal.get(&KeyBinding::new(Char('d'), KeyModifiers::NONE)), Some(&Command::RemoveRecentRepository));
-    assert_eq!(action.get(&KeyBinding::new(Char('d'), KeyModifiers::NONE)), Some(&Command::RemoveRecentRepository));
-    assert_eq!(normal.get(&KeyBinding::new(Char('K'), KeyModifiers::SHIFT)), Some(&Command::MoveRecentRepositoryUp));
-    assert_eq!(action.get(&KeyBinding::new(Char('K'), KeyModifiers::SHIFT)), Some(&Command::MoveRecentRepositoryUp));
-    assert_eq!(normal.get(&KeyBinding::new(Char('J'), KeyModifiers::SHIFT)), Some(&Command::MoveRecentRepositoryDown));
-    assert_eq!(action.get(&KeyBinding::new(Char('J'), KeyModifiers::SHIFT)), Some(&Command::MoveRecentRepositoryDown));
-    assert_eq!(action.get(&KeyBinding::new(Char('W'), KeyModifiers::SHIFT)), Some(&Command::RemoveWorktree));
-    assert_eq!(action.get(&KeyBinding::new(Char('L'), KeyModifiers::SHIFT)), Some(&Command::ToggleWorktreeLock));
-}
-
-#[test]
 fn defaults_include_recent_repository_bindings() {
     let maps = default_keymaps();
 
@@ -41,36 +10,6 @@ fn defaults_include_recent_repository_bindings() {
         assert_eq!(mode_map.get(&KeyBinding::new(Char('K'), KeyModifiers::SHIFT)), Some(&Command::MoveRecentRepositoryUp));
         assert_eq!(mode_map.get(&KeyBinding::new(Char('J'), KeyModifiers::SHIFT)), Some(&Command::MoveRecentRepositoryDown));
     }
-}
-
-#[test]
-fn migration_does_not_overwrite_custom_recent_bindings() {
-    let mut maps = IndexMap::new();
-    let mut normal = IndexMap::new();
-    normal.insert(KeyBinding::new(Char('d'), KeyModifiers::NONE), Command::Reload);
-    normal.insert(KeyBinding::new(Char('K'), KeyModifiers::SHIFT), Command::ScrollUp);
-    normal.insert(KeyBinding::new(Char('J'), KeyModifiers::SHIFT), Command::ScrollDown);
-    maps.insert(InputMode::Normal, normal);
-    let mut action = IndexMap::new();
-    action.insert(KeyBinding::new(Char('d'), KeyModifiers::NONE), Command::Drop);
-    action.insert(KeyBinding::new(Char('K'), KeyModifiers::SHIFT), Command::HardReset);
-    action.insert(KeyBinding::new(Char('J'), KeyModifiers::SHIFT), Command::MixedReset);
-    maps.insert(InputMode::Action, action);
-
-    assert!(migrate_default_bindings(&mut maps));
-
-    assert_eq!(maps.get(&InputMode::Normal).unwrap().get(&KeyBinding::new(Char('d'), KeyModifiers::NONE)), Some(&Command::Reload));
-    assert_eq!(maps.get(&InputMode::Normal).unwrap().get(&KeyBinding::new(Char('K'), KeyModifiers::SHIFT)), Some(&Command::ScrollUp));
-    assert_eq!(maps.get(&InputMode::Normal).unwrap().get(&KeyBinding::new(Char('J'), KeyModifiers::SHIFT)), Some(&Command::ScrollDown));
-    assert_eq!(maps.get(&InputMode::Action).unwrap().get(&KeyBinding::new(Char('d'), KeyModifiers::NONE)), Some(&Command::Drop));
-    assert_eq!(maps.get(&InputMode::Action).unwrap().get(&KeyBinding::new(Char('K'), KeyModifiers::SHIFT)), Some(&Command::HardReset));
-    assert_eq!(maps.get(&InputMode::Action).unwrap().get(&KeyBinding::new(Char('J'), KeyModifiers::SHIFT)), Some(&Command::MixedReset));
-    assert!(!maps.get(&InputMode::Normal).unwrap().values().any(|command| command == &Command::RemoveRecentRepository));
-    assert!(!maps.get(&InputMode::Normal).unwrap().values().any(|command| command == &Command::MoveRecentRepositoryUp));
-    assert!(!maps.get(&InputMode::Normal).unwrap().values().any(|command| command == &Command::MoveRecentRepositoryDown));
-    assert!(!maps.get(&InputMode::Action).unwrap().values().any(|command| command == &Command::RemoveRecentRepository));
-    assert!(!maps.get(&InputMode::Action).unwrap().values().any(|command| command == &Command::MoveRecentRepositoryUp));
-    assert!(!maps.get(&InputMode::Action).unwrap().values().any(|command| command == &Command::MoveRecentRepositoryDown));
 }
 
 #[test]
@@ -124,139 +63,15 @@ fn defaults_include_directional_focus_bindings() {
 }
 
 #[test]
-fn migration_adds_keyboard_resize_defaults_without_rewriting_existing_keys() {
-    let mods = KeyModifiers::CONTROL | KeyModifiers::ALT;
-    let mut maps = IndexMap::new();
-    let mut normal = IndexMap::new();
-    normal.insert(KeyBinding::new(Char('h'), mods), Command::Reload);
-    normal.insert(KeyBinding::new(F(3), KeyModifiers::NONE), Command::ResizePaneRight);
-    maps.insert(InputMode::Normal, normal);
-    let mut action = IndexMap::new();
-    action.insert(KeyBinding::new(Char('j'), mods), Command::Drop);
-    maps.insert(InputMode::Action, action);
-
-    assert!(migrate_default_bindings(&mut maps));
-
-    let normal = maps.get(&InputMode::Normal).unwrap();
-    let action = maps.get(&InputMode::Action).unwrap();
-
-    assert_eq!(normal.get(&KeyBinding::new(Char('h'), mods)), Some(&Command::Reload));
-    assert_eq!(normal.get(&KeyBinding::new(Char('j'), mods)), Some(&Command::ResizePaneDown));
-    assert_eq!(normal.get(&KeyBinding::new(Char('k'), mods)), Some(&Command::ResizePaneUp));
-    assert_eq!(normal.get(&KeyBinding::new(Char('l'), mods)), None);
-    assert_eq!(normal.get(&KeyBinding::new(F(3), KeyModifiers::NONE)), Some(&Command::ResizePaneRight));
-    assert_eq!(action.get(&KeyBinding::new(Char('h'), mods)), Some(&Command::ResizePaneLeft));
-    assert_eq!(action.get(&KeyBinding::new(Char('j'), mods)), Some(&Command::Drop));
-    assert_eq!(action.get(&KeyBinding::new(Char('k'), mods)), Some(&Command::ResizePaneUp));
-    assert_eq!(action.get(&KeyBinding::new(Char('l'), mods)), Some(&Command::ResizePaneRight));
-}
-
-#[test]
-fn migration_adds_directional_focus_defaults_without_rewriting_existing_keys() {
-    let mods = KeyModifiers::CONTROL;
-    let mut maps = IndexMap::new();
-    let mut normal = IndexMap::new();
-    normal.insert(KeyBinding::new(Char('h'), mods), Command::Reload);
-    normal.insert(KeyBinding::new(F(3), KeyModifiers::NONE), Command::FocusPaneRight);
-    maps.insert(InputMode::Normal, normal);
-    let mut action = IndexMap::new();
-    action.insert(KeyBinding::new(Char('j'), mods), Command::Drop);
-    maps.insert(InputMode::Action, action);
-
-    assert!(migrate_default_bindings(&mut maps));
-
-    let normal = maps.get(&InputMode::Normal).unwrap();
-    let action = maps.get(&InputMode::Action).unwrap();
-
-    assert_eq!(normal.get(&KeyBinding::new(Char('h'), mods)), Some(&Command::Reload));
-    assert_eq!(normal.get(&KeyBinding::new(Char('j'), mods)), Some(&Command::FocusPaneDown));
-    assert_eq!(normal.get(&KeyBinding::new(Char('k'), mods)), Some(&Command::FocusPaneUp));
-    assert_eq!(normal.get(&KeyBinding::new(Char('l'), mods)), None);
-    assert_eq!(normal.get(&KeyBinding::new(F(3), KeyModifiers::NONE)), Some(&Command::FocusPaneRight));
-    assert_eq!(action.get(&KeyBinding::new(Char('h'), mods)), Some(&Command::FocusPaneLeft));
-    assert_eq!(action.get(&KeyBinding::new(Char('j'), mods)), Some(&Command::Drop));
-    assert_eq!(action.get(&KeyBinding::new(Char('k'), mods)), Some(&Command::FocusPaneUp));
-    assert_eq!(action.get(&KeyBinding::new(Char('l'), mods)), Some(&Command::FocusPaneRight));
-}
-
-#[test]
-fn migration_remaps_old_numeric_ui_defaults() {
-    let mut maps = IndexMap::new();
-
-    for mode in [InputMode::Normal, InputMode::Action] {
-        let mut mode_map = IndexMap::new();
-        mode_map.insert(KeyBinding::new(Char('6'), KeyModifiers::NONE), Command::ToggleShas);
-        mode_map.insert(KeyBinding::new(Char('7'), KeyModifiers::NONE), Command::ToggleWorktrees);
-        mode_map.insert(KeyBinding::new(Char('8'), KeyModifiers::NONE), Command::ToggleReflogs);
-        maps.insert(mode, mode_map);
-    }
-
-    assert!(migrate_default_bindings(&mut maps));
-
-    for mode in [InputMode::Normal, InputMode::Action] {
-        let mode_map = maps.get(&mode).unwrap();
-        assert_eq!(mode_map.get(&KeyBinding::new(Char('6'), KeyModifiers::NONE)), Some(&Command::ToggleWorktrees));
-        assert_eq!(mode_map.get(&KeyBinding::new(Char('7'), KeyModifiers::NONE)), Some(&Command::ToggleReflogs));
-        assert_eq!(mode_map.get(&KeyBinding::new(Char('8'), KeyModifiers::NONE)), Some(&Command::ToggleShas));
-    }
-}
-
-#[test]
 fn defaults_include_operation_bindings() {
     let maps = default_keymaps();
     let action = maps.get(&InputMode::Action).unwrap();
 
     assert_eq!(action.get(&KeyBinding::new(Char('r'), KeyModifiers::NONE)), Some(&Command::Rebase));
+    assert_eq!(action.get(&KeyBinding::new(Char('R'), KeyModifiers::SHIFT)), Some(&Command::Revert));
     assert_eq!(action.get(&KeyBinding::new(Char('m'), KeyModifiers::NONE)), Some(&Command::Merge));
     assert_eq!(action.get(&KeyBinding::new(Char('C'), KeyModifiers::SHIFT)), Some(&Command::ContinueOperation));
     assert_eq!(action.get(&KeyBinding::new(Char('A'), KeyModifiers::SHIFT)), Some(&Command::AbortOperation));
-}
-
-#[test]
-fn migration_adds_operation_defaults_without_rewriting_existing_keys() {
-    let mut maps = IndexMap::new();
-    maps.insert(InputMode::Normal, IndexMap::new());
-    let mut action = IndexMap::new();
-    action.insert(KeyBinding::new(Char('r'), KeyModifiers::NONE), Command::Reload);
-    action.insert(KeyBinding::new(Char('R'), KeyModifiers::SHIFT), Command::ForcePush);
-    maps.insert(InputMode::Action, action);
-
-    assert!(migrate_default_bindings(&mut maps));
-
-    let action = maps.get(&InputMode::Action).unwrap();
-    assert_eq!(action.get(&KeyBinding::new(Char('r'), KeyModifiers::NONE)), Some(&Command::Reload));
-    assert_eq!(action.get(&KeyBinding::new(Char('R'), KeyModifiers::SHIFT)), Some(&Command::ForcePush));
-    assert_eq!(action.get(&KeyBinding::new(Char('m'), KeyModifiers::NONE)), Some(&Command::Merge));
-    assert_eq!(action.get(&KeyBinding::new(Char('C'), KeyModifiers::SHIFT)), Some(&Command::ContinueOperation));
-    assert_eq!(action.get(&KeyBinding::new(Char('A'), KeyModifiers::SHIFT)), Some(&Command::AbortOperation));
-}
-
-#[test]
-fn migration_replaces_inherited_action_hunk_mode_with_merge() {
-    let mut maps = IndexMap::new();
-    maps.insert(InputMode::Normal, IndexMap::new());
-    let mut action = IndexMap::new();
-    action.insert(KeyBinding::new(Char('m'), KeyModifiers::NONE), Command::ToggleHunkMode);
-    maps.insert(InputMode::Action, action);
-
-    assert!(migrate_default_bindings(&mut maps));
-
-    let action = maps.get(&InputMode::Action).unwrap();
-    assert_eq!(action.get(&KeyBinding::new(Char('m'), KeyModifiers::NONE)), Some(&Command::Merge));
-}
-
-#[test]
-fn migration_preserves_custom_action_m_binding() {
-    let mut maps = IndexMap::new();
-    maps.insert(InputMode::Normal, IndexMap::new());
-    let mut action = IndexMap::new();
-    action.insert(KeyBinding::new(Char('m'), KeyModifiers::NONE), Command::MixedReset);
-    maps.insert(InputMode::Action, action);
-
-    assert!(migrate_default_bindings(&mut maps));
-
-    let action = maps.get(&InputMode::Action).unwrap();
-    assert_eq!(action.get(&KeyBinding::new(Char('m'), KeyModifiers::NONE)), Some(&Command::MixedReset));
 }
 
 #[test]
@@ -407,4 +222,5 @@ fn keymaps_round_trip_through_disk() {
     let loaded = load_keymaps_from_path(path.as_path()).unwrap();
 
     assert_eq!(loaded, maps);
+    assert_eq!(loaded.get(&InputMode::Action).unwrap().get(&KeyBinding::new(Char('R'), KeyModifiers::SHIFT)), Some(&Command::Revert));
 }

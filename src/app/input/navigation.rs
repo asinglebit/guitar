@@ -1726,6 +1726,11 @@ impl App {
                 self.pending_cherrypick_oid = None;
                 self.focus = Focus::Viewport;
             },
+            Focus::ModalRevert => {
+                self.modal_input.clear();
+                self.pending_revert_oid = None;
+                self.focus = Focus::Viewport;
+            },
             Focus::ModalCreateBranch => {
                 self.modal_input.clear();
                 self.clear_pending_branch_target();
@@ -1808,6 +1813,11 @@ impl App {
             Focus::ModalCherrypick => {
                 self.modal_input.clear();
                 self.pending_cherrypick_oid = None;
+                self.focus = Focus::Viewport;
+            },
+            Focus::ModalRevert => {
+                self.modal_input.clear();
+                self.pending_revert_oid = None;
                 self.focus = Focus::Viewport;
             },
             Focus::ModalCommit | Focus::ModalCreateBranch | Focus::ModalCreateWorktreeName | Focus::ModalCreateWorktreePath | Focus::ModalLockWorktree => {

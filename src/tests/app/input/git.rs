@@ -2,6 +2,7 @@ use super::*;
 use crate::core::chunk::NONE;
 use crate::core::reflogs::HeadReflogAliasEntry;
 use crate::git::actions::merging::{MergeOutcome, start_merge};
+use crate::git::actions::reverting::{RevertOutcome, start_revert};
 use crate::git::auth::{AuthChallenge, AuthProtocol};
 use git2::{Signature, build::CheckoutBuilder};
 use std::{
@@ -83,6 +84,52 @@ fn cherrypick_opens_message_modal_with_prefilled_summary() {
 }
 
 #[test]
+fn revert_opens_message_modal_with_prefilled_summary() {
+    let (_path, repo) = temp_repo("revert-modal");
+    let oid = commit(&repo, "file.txt", "original summary\n\nbody");
+
+    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, graph_selected: 1, ..Default::default() };
+    let alias = app.oids.get_alias_by_oid(oid);
+    app.oids.sorted_aliases = vec![NONE, alias];
+
+    app.on_revert();
+
+    assert_eq!(app.focus, Focus::ModalRevert);
+    assert_eq!(app.pending_revert_oid, Some(oid));
+    assert_eq!(app.modal_input.value(), "reverted: original summary");
+}
+
+#[test]
+fn revert_rejects_merge_commits_before_opening_modal() {
+    let (_path, repo) = temp_repo("revert-merge-modal");
+    commit_with_content(&repo, "base.txt", "base\n", "base");
+    checkout_new_branch(&repo, "feature");
+    let feature = commit_with_content(&repo, "feature.txt", "feature\n", "feature");
+    checkout_branch(&repo, "master");
+    let main = commit_with_content(&repo, "main.txt", "main\n", "main");
+
+    let merge = {
+        let feature_commit = repo.find_commit(feature).unwrap();
+        let main_commit = repo.find_commit(main).unwrap();
+        let mut index = repo.index().unwrap();
+        let tree_oid = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_oid).unwrap();
+        let sig = Signature::now("Test User", "test@example.com").unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "merge", &tree, &[&main_commit, &feature_commit]).unwrap()
+    };
+
+    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, graph_selected: 1, ..Default::default() };
+    let alias = app.oids.get_alias_by_oid(merge);
+    app.oids.sorted_aliases = vec![NONE, alias];
+
+    app.on_revert();
+
+    assert_eq!(app.focus, Focus::ModalError);
+    assert!(app.modal_error_message.contains("merge commits"));
+    assert_eq!(app.pending_revert_oid, None);
+}
+
+#[test]
 fn merge_queues_selected_commit_operation() {
     let (_path, repo) = temp_repo("merge-queue");
     let oid = commit(&repo, "file.txt", "merge target");
@@ -96,6 +143,32 @@ fn merge_queues_selected_commit_operation() {
     assert_eq!(app.focus, Focus::ModalOperationProgress);
     assert_eq!(app.modal_operation_kind, OperationKind::Merge);
     assert_eq!(app.pending_operation_action, Some(PendingOperationAction::Start { kind: OperationKind::Merge, oid }));
+}
+
+#[test]
+fn revert_state_routes_continue_and_abort_operations() {
+    let (path, repo) = temp_repo("revert-active-operation");
+    commit_with_content(&repo, "file.txt", "base\n", "base");
+    let feature = commit_with_content(&repo, "file.txt", "feature\n", "feature");
+    commit_with_content(&repo, "file.txt", "main\n", "main");
+
+    assert_eq!(start_revert(&repo, feature, "reverted: feature").unwrap(), RevertOutcome::Conflict);
+
+    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+    app.on_revert();
+
+    assert_eq!(app.focus, Focus::ModalOperationProgress);
+    assert_eq!(app.modal_operation_kind, OperationKind::Revert);
+    assert_eq!(app.pending_operation_action, Some(PendingOperationAction::Continue));
+
+    app.focus = Focus::Viewport;
+    app.pending_operation_action = None;
+    app.on_abort_operation();
+
+    assert_eq!(app.focus, Focus::ModalOperationProgress);
+    assert_eq!(app.modal_operation_kind, OperationKind::Revert);
+    assert_eq!(app.pending_operation_action, Some(PendingOperationAction::Abort));
+    let _ = fs::remove_dir_all(path);
 }
 
 #[test]

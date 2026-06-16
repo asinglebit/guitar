@@ -1,10 +1,11 @@
 use crate::{
-    app::app::{App, AuthInputField, Focus, PendingGraphLookup},
+    app::app::{App, AuthInputField, Focus, OperationKind, PendingGraphLookup},
     core::graph_service::GraphLookupKind,
     git::actions::{
         branching::create_branch,
         cherrypicking::{CherrypickOutcome, start_cherrypick},
         committing::commit_staged,
+        reverting::{RevertOutcome, start_revert},
         tagging::tag,
         worktrees::{create_worktree, is_valid_worktree_name, lock_worktree},
     },
@@ -228,6 +229,48 @@ impl App {
                             },
                             Ok(CherrypickOutcome::Aborted) => {},
                             Err(error) => self.show_error(format!("Cherry-pick failed: {error}")),
+                        }
+                    },
+                    _ => {
+                        self.modal_input.on_key(key_event);
+                    },
+                }
+                true
+            },
+            Focus::ModalRevert => {
+                match key_event.code {
+                    KeyCode::Esc => {
+                        self.focus = Focus::Viewport;
+                        self.modal_input.clear();
+                        self.pending_revert_oid = None;
+                    },
+                    KeyCode::Enter => {
+                        let Some(repo) = &self.repo else {
+                            return true;
+                        };
+                        let Some(oid) = self.pending_revert_oid else {
+                            self.show_error("Revert failed: no commit is pending");
+                            return true;
+                        };
+                        let message = self.modal_input.value().trim().to_string();
+                        if message.is_empty() {
+                            return true;
+                        }
+
+                        match start_revert(repo, oid, &message) {
+                            Ok(RevertOutcome::Committed { .. }) => {
+                                self.modal_input.clear();
+                                self.pending_revert_oid = None;
+                                self.reload(None);
+                                self.focus = Focus::Viewport;
+                            },
+                            Ok(RevertOutcome::Conflict) => {
+                                self.modal_input.clear();
+                                self.pending_revert_oid = None;
+                                self.show_operation_conflict(OperationKind::Revert, "Revert stopped because conflicts need to be resolved.");
+                            },
+                            Ok(RevertOutcome::Aborted) => {},
+                            Err(error) => self.show_error(format!("Revert failed: {error}")),
                         }
                     },
                     _ => {

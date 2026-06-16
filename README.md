@@ -55,7 +55,7 @@ while looking really good
 
 ## Status And Warning
 
-This is a hobby project with sharp Git tools. It can stage, unstage, commit, force checkout, force push, delete branches, reset, stash, pop, drop, rebase, merge, cherry-pick, prune worktrees, and discard file changes.
+This is a hobby project with sharp Git tools. It can stage, unstage, commit, force checkout, force push, delete branches, reset, stash, pop, drop, rebase, merge, cherry-pick, revert, prune worktrees, and discard file changes.
 
 Use it carefully on important repositories. Keep backups, understand what the selected row and focused pane mean before using action mode, and report issues when behavior is surprising.
 
@@ -381,7 +381,7 @@ There are two keymap modes:
 
 By default, `Ctrl+a` enters action mode. The next handled key runs through the action keymap and then the mode returns to normal.
 
-Action mode inherits normal-mode navigation and safe operations, but overrides or adds the dangerous bindings listed below. Notably, action-mode `r` is rebase and action-mode `m` is merge.
+Action mode inherits normal-mode navigation and safe operations, but overrides or adds the dangerous bindings listed below. Notably, action-mode `r` is rebase, action-mode `Shift+R` is revert, and action-mode `m` is merge.
 
 ### Text Inputs
 
@@ -397,7 +397,7 @@ Supported editing keys:
 - `Enter` submits when the prompt accepts the current value.
 - `Esc` cancels.
 
-Text prompts are used for commit messages, cherry-pick messages, branch names, tag names, worktree names, worktree paths, worktree lock reasons, SHA lookup, and auth fields.
+Text prompts are used for commit messages, cherry-pick messages, revert messages, branch names, tag names, worktree names, worktree paths, worktree lock reasons, SHA lookup, and auth fields.
 
 ### Auth Inputs
 
@@ -504,10 +504,11 @@ Press `Ctrl+a`, then one of these keys.
 | Toggle Worktree Lock | `Shift+L` |
 | Delete Tag | `Shift+U` |
 | Cherry-pick | `y` |
+| Revert | `Shift+R` |
 | Rebase | `r` |
 | Merge | `m` |
-| Continue Rebase/Cherry-pick/Merge | `Shift+C` |
-| Abort Rebase/Cherry-pick/Merge | `Shift+A` |
+| Continue Rebase/Cherry-pick/Revert/Merge | `Shift+C` |
+| Abort Rebase/Cherry-pick/Revert/Merge | `Shift+A` |
 
 ## Git Operations
 
@@ -668,6 +669,21 @@ Action key: `Ctrl+a`, then `y`.
 
 During an in-progress conflicted cherry-pick, the message is stored at `.git/GUITAR_CHERRYPICK_MSG` and removed on commit or abort.
 
+### Revert
+
+Action key: `Ctrl+a`, then `Shift+R`.
+
+- Graph focus on a commit opens a single-line message prompt.
+- The default message is `reverted: <selected summary>`.
+- Merge commits cannot be reverted in this version.
+- The working tree must be clean before starting.
+- If there are no conflicts, `guitar` commits immediately with the provided message.
+- If conflicts occur, `guitar` stops and shows a conflict modal.
+- Resolve files externally, then continue with `Ctrl+a`, `Shift+C`.
+- Abort with `Ctrl+a`, `Shift+A`.
+
+During an in-progress conflicted revert, the message is stored at `.git/GUITAR_REVERT_MSG` and removed on commit or abort.
+
 ### Rebase
 
 Action key: `Ctrl+a`, then `r`.
@@ -680,7 +696,7 @@ Action key: `Ctrl+a`, then `r`.
 - If conflicts occur, resolve files externally, then continue with `Ctrl+a`, `Shift+C`.
 - Abort with `Ctrl+a`, `Shift+A`.
 
-If a rebase, cherry-pick, or merge is already in progress, pressing the rebase action attempts to continue the active operation.
+If a rebase, cherry-pick, revert, or merge is already in progress, pressing the rebase action attempts to continue the active operation.
 
 ### Merge
 
@@ -695,7 +711,7 @@ Action key: `Ctrl+a`, then `m`.
 - Continue with `Ctrl+a`, `Shift+C`.
 - Abort with `Ctrl+a`, `Shift+A`.
 
-If a rebase, cherry-pick, or merge is already in progress, pressing the merge action attempts to continue the active operation.
+If a rebase, cherry-pick, revert, or merge is already in progress, pressing the merge action attempts to continue the active operation.
 
 ### Continue And Abort
 
@@ -703,7 +719,7 @@ Continue active operation: action key `Ctrl+a`, then `Shift+C`.
 
 Abort active operation: action key `Ctrl+a`, then `Shift+A`.
 
-These apply to active rebase, cherry-pick, or merge states.
+These apply to active rebase, cherry-pick, revert, or merge states.
 
 On continue, `guitar` checks the index for conflicts. For conflicted paths, it inspects the worktree file:
 
@@ -894,7 +910,7 @@ The app writes:
 - `theme.json`: active theme and all color slots.
 - `recent.json`: recent repository paths.
 
-The app may also temporarily write `.git/GUITAR_CHERRYPICK_MSG` inside a repository during a conflicted cherry-pick.
+The app may also temporarily write `.git/GUITAR_CHERRYPICK_MSG` inside a repository during a conflicted cherry-pick and `.git/GUITAR_REVERT_MSG` during a conflicted revert.
 
 Not persisted by `guitar`:
 
@@ -964,9 +980,9 @@ Command
 Meta
 ```
 
-Supported commands are the command names listed in the keymap tables, without spaces, for example `ToggleSplitDiffMode`, `FocusPaneRight`, `ResizePaneRight`, `RemoveRecentRepository`, `CreateWorktree`, `ContinueOperation`, and `AbortOperation`.
+Supported commands are the command names listed in the keymap tables, without spaces, for example `ToggleSplitDiffMode`, `FocusPaneRight`, `ResizePaneRight`, `RemoveRecentRepository`, `CreateWorktree`, `Revert`, `ContinueOperation`, and `AbortOperation`.
 
-When an old keymap is loaded, `guitar` attempts small migrations for newly added default bindings.
+Existing `keymap.json` files are loaded as-is. `guitar` does not migrate older keymaps or add new default bindings automatically; reset saved config or edit the keymap if an existing config should use a new default.
 
 ### layout.json
 

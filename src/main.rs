@@ -30,6 +30,7 @@ pub mod git {
         pub mod pushing;
         pub mod rebasing;
         pub mod resetting;
+        pub mod reverting;
         pub mod staging;
         pub mod stashing;
         pub mod tagging;

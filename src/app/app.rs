@@ -10,7 +10,7 @@ use crate::{
         queries::{diffs::get_filenames_diff_at_oid, worktrees::list_worktrees},
     },
     helpers::{
-        copy::{STR_CHERRYPICK_COMMIT, STR_CREATE_BRANCH, STR_CREATE_COMMIT, STR_CREATE_TAG, STR_CREATE_WORKTREE_NAME, STR_CREATE_WORKTREE_PATH, STR_FIND_SHA, STR_LOCK_WORKTREE},
+        copy::{STR_CHERRYPICK_COMMIT, STR_CREATE_BRANCH, STR_CREATE_COMMIT, STR_CREATE_TAG, STR_CREATE_WORKTREE_NAME, STR_CREATE_WORKTREE_PATH, STR_FIND_SHA, STR_LOCK_WORKTREE, STR_REVERT_COMMIT},
         heatmap::{DAYS, WEEKS, empty_heatmap},
         keymap::{Command, KeyBinding, KeymapEditError, KeymapSelection},
         layout::LayoutConfig,
@@ -89,6 +89,7 @@ pub enum Focus {
     ModalSolo,
     ModalCommit,
     ModalCherrypick,
+    ModalRevert,
     ModalCreateBranch,
     ModalCreateWorktreeName,
     ModalCreateWorktreePath,
@@ -112,6 +113,7 @@ pub enum Focus {
 pub enum OperationKind {
     Rebase,
     Cherrypick,
+    Revert,
     Merge,
 }
 
@@ -120,6 +122,7 @@ impl OperationKind {
         match self {
             OperationKind::Rebase => "rebase",
             OperationKind::Cherrypick => "cherrypick",
+            OperationKind::Revert => "revert",
             OperationKind::Merge => "merge",
         }
     }
@@ -396,6 +399,7 @@ pub struct App {
     // Modal editor
     pub modal_input: TextInput,
     pub pending_cherrypick_oid: Option<Oid>,
+    pub pending_revert_oid: Option<Oid>,
     pub pending_branch_target_oid: Option<Oid>,
     pub modal_worktree_name: String,
     pub modal_worktree_selected: i32,
@@ -599,6 +603,9 @@ impl App {
                 },
                 Focus::ModalCherrypick => {
                     self.draw_surface(frame, DrawSurface::Modal, |app, surface| app.draw_modal_input(surface, STR_CHERRYPICK_COMMIT));
+                },
+                Focus::ModalRevert => {
+                    self.draw_surface(frame, DrawSurface::Modal, |app, surface| app.draw_modal_input(surface, STR_REVERT_COMMIT));
                 },
                 Focus::ModalCreateBranch => {
                     self.draw_surface(frame, DrawSurface::Modal, |app, surface| app.draw_modal_input(surface, STR_CREATE_BRANCH));

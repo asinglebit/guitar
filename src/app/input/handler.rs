@@ -105,6 +105,7 @@ impl App {
             Command::Tag => self.on_tag(),
             Command::Untag => self.on_untag(),
             Command::Cherrypick => self.on_cherrypick(),
+            Command::Revert => self.on_revert(),
             Command::Rebase => self.on_rebase(),
             Command::Merge => self.on_merge(),
             Command::ContinueOperation => self.on_continue_operation(),
