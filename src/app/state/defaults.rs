@@ -118,6 +118,10 @@ impl Default for App {
             worktrees_selected: 0,
             worktrees_scroll: 0.into(),
 
+            // Search
+            search_selected: 0,
+            search_scroll: 0.into(),
+
             // Graph
             graph_selected: 0,
             graph_scroll: 0.into(),

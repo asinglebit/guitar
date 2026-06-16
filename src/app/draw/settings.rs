@@ -27,6 +27,7 @@ const SETTINGS_LAYOUT_COMMANDS: &[(char, Command, &str)] = &[
     ('5', Command::ToggleInspector, "inspector"),
     ('6', Command::ToggleWorktrees, "worktrees"),
     ('7', Command::ToggleReflogs, "reflog"),
+    ('`', Command::ToggleSearch, "search"),
     ('8', Command::ToggleShas, "SHAs"),
     ('9', Command::ToggleGraphReflogs, "graph reflog commits"),
     ('0', Command::ResetLayout, "reset layout"),
@@ -90,6 +91,13 @@ impl App {
             },
             Command::ToggleReflogs => {
                 if self.layout_config.is_reflogs {
+                    "[*]"
+                } else {
+                    "[ ]"
+                }
+            },
+            Command::ToggleSearch => {
+                if self.layout_config.is_search {
                     "[*]"
                 } else {
                     "[ ]"

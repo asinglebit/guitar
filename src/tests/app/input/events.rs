@@ -45,6 +45,10 @@ fn left_down(column: u16, row: u16) -> MouseEvent {
     MouseEvent { kind: MouseEventKind::Down(MouseButton::Left), column, row, modifiers: KeyModifiers::NONE }
 }
 
+fn left_drag(column: u16, row: u16) -> MouseEvent {
+    MouseEvent { kind: MouseEventKind::Drag(MouseButton::Left), column, row, modifiers: KeyModifiers::NONE }
+}
+
 fn graph_app() -> App {
     let mut app = App { viewport: Viewport::Graph, focus: Focus::Viewport, layout_config: LayoutConfig::default(), layout: Layout::default(), ..Default::default() };
     app.layout.graph = Rect::new(0, 0, 30, 8);
@@ -487,6 +491,12 @@ fn keyboard_resize_updates_side_columns_for_focused_panes_and_viewport() {
     app.on_resize_pane_left();
     assert_eq!(app.layout_config.width_left_pane, 30);
 
+    app.focus = Focus::Search;
+    app.on_resize_pane_right();
+    assert_eq!(app.layout_config.width_left_pane, 31);
+    app.on_resize_pane_left();
+    assert_eq!(app.layout_config.width_left_pane, 30);
+
     app.focus = Focus::StatusTop;
     app.on_resize_pane_left();
     assert_eq!(app.layout_config.width_right_pane, 31);
@@ -567,6 +577,38 @@ fn keyboard_resize_edge_stack_direction_shrinks_from_opposite_edge() {
     app.on_resize_pane_down();
     assert!(app.layout_config.weight_tags > 100);
     assert!(app.layout_config.weight_stashes < 100);
+}
+
+#[test]
+fn keyboard_resize_updates_search_stack_weight() {
+    let mut app = left_stack_app();
+    app.layout_config.is_search = true;
+    app.layout_config.weight_search = 100;
+    app.layout.pane_search = Rect::new(0, 30, 30, 10);
+    app.focus = Focus::Search;
+
+    app.on_resize_pane_up();
+
+    assert!(app.layout_config.weight_stashes < 100);
+    assert!(app.layout_config.weight_search > 100);
+}
+
+#[test]
+fn mouse_resize_updates_search_stack_weight() {
+    let mut app = graph_app();
+    app.layout_config.is_worktrees = true;
+    app.layout_config.is_search = true;
+    app.layout_config.weight_worktrees = 100;
+    app.layout_config.weight_search = 100;
+    app.layout.pane_worktrees = Rect::new(0, 0, 30, 10);
+    app.layout.pane_search = Rect::new(0, 10, 30, 10);
+    app.layout.divider_worktrees_search = Rect::new(0, 9, 30, 1);
+
+    app.handle_mouse_event(left_down(1, 9));
+    app.handle_mouse_event(left_drag(1, 12));
+
+    assert!(app.layout_config.weight_worktrees > 100);
+    assert!(app.layout_config.weight_search < 100);
 }
 
 #[test]

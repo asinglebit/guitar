@@ -36,6 +36,7 @@ enum StackPane {
     Stashes,
     Reflogs,
     Worktrees,
+    Search,
     Inspector,
     Status,
     StatusTop,
@@ -134,6 +135,7 @@ impl App {
                 | MouseSelectionTarget::Stashes(_)
                 | MouseSelectionTarget::Reflogs(_)
                 | MouseSelectionTarget::Worktrees(_)
+                | MouseSelectionTarget::Search(_)
                 | MouseSelectionTarget::StatusTop(_)
                 | MouseSelectionTarget::StatusBottom(_)
                 | MouseSelectionTarget::Settings(_)
@@ -171,6 +173,10 @@ impl App {
             MouseSelectionTarget::Worktrees(index) => {
                 self.focus = Focus::Worktrees;
                 self.worktrees_selected = index;
+            },
+            MouseSelectionTarget::Search(index) => {
+                self.focus = Focus::Search;
+                self.search_selected = index;
             },
             MouseSelectionTarget::Inspector(index) => {
                 self.focus = Focus::Inspector;
@@ -297,6 +303,15 @@ impl App {
             }
         }
 
+        if self.layout_config.is_search {
+            let has_previous = self.layout_config.is_branches || self.layout_config.is_tags || self.layout_config.is_stashes || self.layout_config.is_reflogs || self.layout_config.is_worktrees;
+            let visible_height =
+                if self.layout_config.is_zen { self.layout.search.height.saturating_sub(2) as usize } else { self.layout.search.height.saturating_sub(if has_previous { 1 } else { 2 }) as usize };
+            if let Some(index) = self.scrolled_row_index(self.layout.search, column, row, visible_height, self.layout_config.is_zen, self.search_scroll.get(), self.search_clickable_count()) {
+                return Some(MouseSelectionTarget::Search(index));
+            }
+        }
+
         None
     }
 
@@ -401,6 +416,10 @@ impl App {
         self.graph.reflogs_window.as_ref().map(|window| window.total).unwrap_or(self.reflogs.entries.len())
     }
 
+    fn search_clickable_count(&self) -> usize {
+        0
+    }
+
     fn graph_pane_clickable(&self, index: usize, kind: GraphPaneClickKind) -> bool {
         if self.graph_tx.is_none() {
             return true;
@@ -489,6 +508,9 @@ impl App {
         if self.layout_config.is_worktrees && Self::rect_contains(self.layout.pane_worktrees, column, row) {
             return Some(Focus::Worktrees);
         }
+        if self.layout_config.is_search && Self::rect_contains(self.layout.pane_search, column, row) {
+            return Some(Focus::Search);
+        }
         if self.layout_config.is_inspector && (self.graph_selected != 0 || self.uncommitted.has_conflicts) && Self::rect_contains(self.layout.pane_inspector, column, row) {
             return Some(Focus::Inspector);
         }
@@ -531,6 +553,9 @@ impl App {
         if Self::rect_contains(self.layout.divider_branches_worktrees, column, row) {
             return Some(LayoutDrag::BranchesWorktrees);
         }
+        if Self::rect_contains(self.layout.divider_branches_search, column, row) {
+            return Some(LayoutDrag::BranchesSearch);
+        }
         if Self::rect_contains(self.layout.divider_tags_stashes, column, row) {
             return Some(LayoutDrag::TagsStashes);
         }
@@ -540,14 +565,26 @@ impl App {
         if Self::rect_contains(self.layout.divider_tags_worktrees, column, row) {
             return Some(LayoutDrag::TagsWorktrees);
         }
+        if Self::rect_contains(self.layout.divider_tags_search, column, row) {
+            return Some(LayoutDrag::TagsSearch);
+        }
         if Self::rect_contains(self.layout.divider_stashes_reflogs, column, row) {
             return Some(LayoutDrag::StashesReflogs);
         }
         if Self::rect_contains(self.layout.divider_stashes_worktrees, column, row) {
             return Some(LayoutDrag::StashesWorktrees);
         }
+        if Self::rect_contains(self.layout.divider_stashes_search, column, row) {
+            return Some(LayoutDrag::StashesSearch);
+        }
         if Self::rect_contains(self.layout.divider_reflogs_worktrees, column, row) {
             return Some(LayoutDrag::ReflogsWorktrees);
+        }
+        if Self::rect_contains(self.layout.divider_reflogs_search, column, row) {
+            return Some(LayoutDrag::ReflogsSearch);
+        }
+        if Self::rect_contains(self.layout.divider_worktrees_search, column, row) {
+            return Some(LayoutDrag::WorktreesSearch);
         }
         if Self::rect_contains(self.layout.divider_inspector_status, column, row) {
             return Some(LayoutDrag::InspectorStatus);
@@ -618,7 +655,7 @@ impl App {
                     false
                 } else {
                     match self.focus {
-                        Focus::Branches | Focus::Tags | Focus::Stashes | Focus::Reflogs | Focus::Worktrees | Focus::Viewport => self.resize_left_column_by(-1),
+                        Focus::Branches | Focus::Tags | Focus::Stashes | Focus::Reflogs | Focus::Worktrees | Focus::Search | Focus::Viewport => self.resize_left_column_by(-1),
                         Focus::Inspector | Focus::StatusTop | Focus::StatusBottom => self.resize_right_column_by(1),
                         _ => false,
                     }
@@ -629,7 +666,7 @@ impl App {
                     false
                 } else {
                     match self.focus {
-                        Focus::Branches | Focus::Tags | Focus::Stashes | Focus::Reflogs | Focus::Worktrees => self.resize_left_column_by(1),
+                        Focus::Branches | Focus::Tags | Focus::Stashes | Focus::Reflogs | Focus::Worktrees | Focus::Search => self.resize_left_column_by(1),
                         Focus::Viewport | Focus::Inspector | Focus::StatusTop | Focus::StatusBottom => self.resize_right_column_by(-1),
                         _ => false,
                     }
@@ -699,7 +736,7 @@ impl App {
         let Some(focused) = self.focus_stack_pane() else {
             return false;
         };
-        if !matches!(focused, StackPane::Branches | StackPane::Tags | StackPane::Stashes | StackPane::Reflogs | StackPane::Worktrees) {
+        if !matches!(focused, StackPane::Branches | StackPane::Tags | StackPane::Stashes | StackPane::Reflogs | StackPane::Worktrees | StackPane::Search) {
             return self.resize_right_stack_pane(focused, direction);
         }
 
@@ -767,6 +804,9 @@ impl App {
         if self.layout_config.is_worktrees {
             stack.push(StackPane::Worktrees);
         }
+        if self.layout_config.is_search {
+            stack.push(StackPane::Search);
+        }
         stack
     }
 
@@ -777,6 +817,7 @@ impl App {
             Focus::Stashes => Some(StackPane::Stashes),
             Focus::Reflogs => Some(StackPane::Reflogs),
             Focus::Worktrees => Some(StackPane::Worktrees),
+            Focus::Search => Some(StackPane::Search),
             Focus::Inspector => Some(StackPane::Inspector),
             Focus::StatusTop => Some(StackPane::StatusTop),
             Focus::StatusBottom => Some(StackPane::StatusBottom),
@@ -791,6 +832,7 @@ impl App {
             StackPane::Stashes => self.layout.pane_stashes,
             StackPane::Reflogs => self.layout.pane_reflogs,
             StackPane::Worktrees => self.layout.pane_worktrees,
+            StackPane::Search => self.layout.pane_search,
             StackPane::Inspector => self.layout.pane_inspector,
             StackPane::Status => self.layout.pane_status,
             StackPane::StatusTop => self.layout.pane_status_top,
@@ -805,6 +847,7 @@ impl App {
             StackPane::Stashes => self.layout_config.weight_stashes,
             StackPane::Reflogs => self.layout_config.weight_reflogs,
             StackPane::Worktrees => self.layout_config.weight_worktrees,
+            StackPane::Search => self.layout_config.weight_search,
             StackPane::Inspector => self.layout_config.weight_inspector,
             StackPane::Status => self.layout_config.weight_status,
             StackPane::StatusTop => self.layout_config.weight_status_top,
@@ -819,6 +862,7 @@ impl App {
             StackPane::Stashes => self.layout_config.weight_stashes = weight,
             StackPane::Reflogs => self.layout_config.weight_reflogs = weight,
             StackPane::Worktrees => self.layout_config.weight_worktrees = weight,
+            StackPane::Search => self.layout_config.weight_search = weight,
             StackPane::Inspector => self.layout_config.weight_inspector = weight,
             StackPane::Status => self.layout_config.weight_status = weight,
             StackPane::StatusTop => self.layout_config.weight_status_top = weight,
@@ -864,6 +908,14 @@ impl App {
                     self.layout_config.weight_worktrees = worktrees;
                 }
             },
+            LayoutDrag::BranchesSearch => {
+                if let Some((branches, search)) =
+                    Self::resized_pair_weights(row, self.layout.pane_branches, self.layout.pane_search, self.layout_config.weight_branches, self.layout_config.weight_search)
+                {
+                    self.layout_config.weight_branches = branches;
+                    self.layout_config.weight_search = search;
+                }
+            },
             LayoutDrag::TagsStashes => {
                 if let Some((tags, stashes)) = Self::resized_pair_weights(row, self.layout.pane_tags, self.layout.pane_stashes, self.layout_config.weight_tags, self.layout_config.weight_stashes) {
                     self.layout_config.weight_tags = tags;
@@ -883,6 +935,12 @@ impl App {
                     self.layout_config.weight_worktrees = worktrees;
                 }
             },
+            LayoutDrag::TagsSearch => {
+                if let Some((tags, search)) = Self::resized_pair_weights(row, self.layout.pane_tags, self.layout.pane_search, self.layout_config.weight_tags, self.layout_config.weight_search) {
+                    self.layout_config.weight_tags = tags;
+                    self.layout_config.weight_search = search;
+                }
+            },
             LayoutDrag::StashesWorktrees => {
                 if let Some((stashes, worktrees)) =
                     Self::resized_pair_weights(row, self.layout.pane_stashes, self.layout.pane_worktrees, self.layout_config.weight_stashes, self.layout_config.weight_worktrees)
@@ -899,12 +957,34 @@ impl App {
                     self.layout_config.weight_reflogs = reflogs;
                 }
             },
+            LayoutDrag::StashesSearch => {
+                if let Some((stashes, search)) = Self::resized_pair_weights(row, self.layout.pane_stashes, self.layout.pane_search, self.layout_config.weight_stashes, self.layout_config.weight_search)
+                {
+                    self.layout_config.weight_stashes = stashes;
+                    self.layout_config.weight_search = search;
+                }
+            },
             LayoutDrag::ReflogsWorktrees => {
                 if let Some((reflogs, worktrees)) =
                     Self::resized_pair_weights(row, self.layout.pane_reflogs, self.layout.pane_worktrees, self.layout_config.weight_reflogs, self.layout_config.weight_worktrees)
                 {
                     self.layout_config.weight_reflogs = reflogs;
                     self.layout_config.weight_worktrees = worktrees;
+                }
+            },
+            LayoutDrag::ReflogsSearch => {
+                if let Some((reflogs, search)) = Self::resized_pair_weights(row, self.layout.pane_reflogs, self.layout.pane_search, self.layout_config.weight_reflogs, self.layout_config.weight_search)
+                {
+                    self.layout_config.weight_reflogs = reflogs;
+                    self.layout_config.weight_search = search;
+                }
+            },
+            LayoutDrag::WorktreesSearch => {
+                if let Some((worktrees, search)) =
+                    Self::resized_pair_weights(row, self.layout.pane_worktrees, self.layout.pane_search, self.layout_config.weight_worktrees, self.layout_config.weight_search)
+                {
+                    self.layout_config.weight_worktrees = worktrees;
+                    self.layout_config.weight_search = search;
                 }
             },
             LayoutDrag::InspectorStatus => {

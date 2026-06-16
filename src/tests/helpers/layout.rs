@@ -18,6 +18,8 @@ fn layout_config_reads_old_boolean_only_config() {
     assert!(config.is_graph_reflogs);
     assert_eq!(config.weight_reflogs, LAYOUT_WEIGHT_DEFAULT);
     assert_eq!(config.weight_worktrees, LAYOUT_WEIGHT_DEFAULT);
+    assert!(!config.is_search);
+    assert_eq!(config.weight_search, LAYOUT_WEIGHT_DEFAULT);
     assert_eq!(config.weight_viewer_split_left, LAYOUT_WEIGHT_DEFAULT);
     assert_eq!(config.weight_viewer_split_right, LAYOUT_WEIGHT_DEFAULT);
 }
@@ -35,6 +37,7 @@ fn default_layout_shows_primary_workflow_panes() {
     assert!(!config.is_reflogs);
     assert!(!config.is_graph_reflogs);
     assert!(!config.is_worktrees);
+    assert!(!config.is_search);
     assert!(!config.is_zen);
 }
 

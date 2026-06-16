@@ -80,6 +80,7 @@ pub enum Focus {
     Inspector,
     StatusTop,
     StatusBottom,
+    Search,
     Branches,
     Tags,
     Stashes,
@@ -252,12 +253,17 @@ pub enum LayoutDrag {
     BranchesStashes,
     BranchesWorktrees,
     BranchesReflogs,
+    BranchesSearch,
     TagsStashes,
     TagsWorktrees,
     StashesWorktrees,
     TagsReflogs,
     StashesReflogs,
     ReflogsWorktrees,
+    TagsSearch,
+    StashesSearch,
+    ReflogsSearch,
+    WorktreesSearch,
     InspectorStatus,
     StatusFiles,
 }
@@ -274,6 +280,7 @@ pub enum MouseSelectionTarget {
     Inspector(usize),
     StatusTop(usize),
     StatusBottom(usize),
+    Search(usize),
     Splash(usize),
     Settings(usize),
 }
@@ -355,6 +362,10 @@ pub struct App {
     // Worktrees
     pub worktrees_selected: usize,
     pub worktrees_scroll: Cell<usize>,
+
+    // Search
+    pub search_selected: usize,
+    pub search_scroll: Cell<usize>,
 
     // Graph
     pub graph_selected: usize,
@@ -558,6 +569,9 @@ impl App {
                     }
                     if self.layout_config.is_worktrees {
                         self.draw_surface(frame, DrawSurface::Worktrees, |app, surface| app.draw_worktrees(surface));
+                    }
+                    if self.layout_config.is_search {
+                        self.draw_surface(frame, DrawSurface::Search, |app, surface| app.draw_search(surface));
                     }
                     if self.layout_config.is_status {
                         self.draw_surface(frame, DrawSurface::Status, |app, surface| app.draw_status(surface));

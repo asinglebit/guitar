@@ -52,6 +52,8 @@ pub struct LayoutConfig {
     pub is_stashes: bool,
     #[facet(default = false)]
     pub is_reflogs: bool,
+    #[facet(default = false)]
+    pub is_search: bool,
     #[facet(default = true)]
     pub is_graph_reflogs: bool,
     #[facet(default = false)]
@@ -73,6 +75,8 @@ pub struct LayoutConfig {
     pub weight_reflogs: u16,
     #[facet(default = LAYOUT_WEIGHT_DEFAULT)]
     pub weight_worktrees: u16,
+    #[facet(default = LAYOUT_WEIGHT_DEFAULT)]
+    pub weight_search: u16,
     #[facet(default = LAYOUT_WEIGHT_DEFAULT)]
     pub weight_inspector: u16,
     #[facet(default = LAYOUT_WEIGHT_DEFAULT)]
@@ -96,6 +100,7 @@ impl Default for LayoutConfig {
             is_tags: false,
             is_stashes: false,
             is_reflogs: false,
+            is_search: false,
             is_graph_reflogs: false,
             is_worktrees: false,
             is_status: true,
@@ -108,6 +113,7 @@ impl Default for LayoutConfig {
             weight_stashes: LAYOUT_WEIGHT_DEFAULT,
             weight_reflogs: LAYOUT_WEIGHT_DEFAULT,
             weight_worktrees: LAYOUT_WEIGHT_DEFAULT,
+            weight_search: LAYOUT_WEIGHT_DEFAULT,
             weight_inspector: LAYOUT_WEIGHT_DEFAULT,
             weight_status: LAYOUT_WEIGHT_DEFAULT,
             weight_status_top: LAYOUT_WEIGHT_DEFAULT,
@@ -127,6 +133,7 @@ impl LayoutConfig {
         self.weight_stashes = self.weight_stashes.max(1);
         self.weight_reflogs = self.weight_reflogs.max(1);
         self.weight_worktrees = self.weight_worktrees.max(1);
+        self.weight_search = self.weight_search.max(1);
         self.weight_inspector = self.weight_inspector.max(1);
         self.weight_status = self.weight_status.max(1);
         self.weight_status_top = self.weight_status_top.max(1);

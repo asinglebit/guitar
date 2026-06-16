@@ -371,12 +371,13 @@ impl App {
         if self.viewport == Viewport::Settings || self.viewport == Viewport::Splash {
             return order;
         }
-        for focus in &[Focus::Viewport, Focus::Inspector, Focus::StatusTop, Focus::StatusBottom, Focus::Worktrees, Focus::Reflogs, Focus::Stashes, Focus::Tags, Focus::Branches] {
+        for focus in &[Focus::Viewport, Focus::Inspector, Focus::StatusTop, Focus::StatusBottom, Focus::Search, Focus::Worktrees, Focus::Reflogs, Focus::Stashes, Focus::Tags, Focus::Branches] {
             match focus {
                 Focus::Viewport => order.push(Focus::Viewport),
                 Focus::Inspector if self.layout_config.is_inspector && (self.graph_selected != 0 || self.uncommitted.has_conflicts) => order.push(Focus::Inspector),
                 Focus::StatusTop if self.layout_config.is_status => order.push(*focus),
                 Focus::StatusBottom if self.layout_config.is_status && self.graph_selected == 0 => order.push(*focus),
+                Focus::Search if self.layout_config.is_search => order.push(Focus::Search),
                 Focus::Branches if self.layout_config.is_branches => order.push(Focus::Branches),
                 Focus::Tags if self.layout_config.is_tags => order.push(Focus::Tags),
                 Focus::Stashes if self.layout_config.is_stashes => order.push(Focus::Stashes),
@@ -443,6 +444,11 @@ impl App {
             },
             Command::ToggleWorktrees => {
                 self.layout_config.is_worktrees = !self.layout_config.is_worktrees;
+                self.mark_viewer_layout_dirty();
+                self.save_layout();
+            },
+            Command::ToggleSearch => {
+                self.layout_config.is_search = !self.layout_config.is_search;
                 self.mark_viewer_layout_dirty();
                 self.save_layout();
             },
@@ -798,6 +804,7 @@ impl App {
             Focus::Stashes => self.layout.pane_stashes,
             Focus::Reflogs => self.layout.pane_reflogs,
             Focus::Worktrees => self.layout.pane_worktrees,
+            Focus::Search => self.layout.pane_search,
             _ => Rect::default(),
         }
     }
@@ -885,6 +892,9 @@ impl App {
                 let page = self.layout.worktrees.height as usize - 1;
                 self.worktrees_selected = self.worktrees_selected.saturating_sub(page);
             },
+            Focus::Search => {
+                self.search_selected = 0;
+            },
             Focus::Viewport => {
                 let page = self.layout.graph.height as usize - 1;
                 match self.viewport {
@@ -941,6 +951,9 @@ impl App {
             Focus::Worktrees => {
                 let page = self.layout.worktrees.height as usize - 1;
                 self.worktrees_selected += page;
+            },
+            Focus::Search => {
+                self.search_selected = 0;
             },
             Focus::Viewport => {
                 let page = self.layout.graph.height as usize - 1;
@@ -1001,6 +1014,9 @@ impl App {
             },
             Focus::Worktrees => {
                 self.worktrees_selected = self.worktrees_selected.saturating_sub(1);
+            },
+            Focus::Search => {
+                self.search_selected = 0;
             },
             Focus::Viewport => {
                 match self.viewport {
@@ -1090,6 +1106,9 @@ impl App {
             Focus::Worktrees => {
                 self.worktrees_selected += 1;
             },
+            Focus::Search => {
+                self.search_selected = 0;
+            },
             Focus::Viewport => match self.viewport {
                 Viewport::Graph => {
                     self.select_graph_index(self.graph_selected.saturating_add(1));
@@ -1166,6 +1185,7 @@ impl App {
             Focus::Stashes => self.stashes_selected /= 2,
             Focus::Reflogs => self.reflogs_selected /= 2,
             Focus::Worktrees => self.worktrees_selected /= 2,
+            Focus::Search => self.search_selected = 0,
             _ => {},
         };
     }
@@ -1199,6 +1219,9 @@ impl App {
                 let total = self.worktrees.entries.len();
                 self.worktrees_selected = self.worktrees_selected + (total - self.worktrees_selected) / 2
             },
+            Focus::Search => {
+                self.search_selected = 0;
+            },
             _ => {},
         };
     }
@@ -1224,6 +1247,9 @@ impl App {
             Focus::Worktrees => {
                 let half = (self.layout.worktrees.height as usize - 1) / 2;
                 self.worktrees_selected = self.worktrees_selected.saturating_sub(half);
+            },
+            Focus::Search => {
+                self.search_selected = 0;
             },
             Focus::Viewport => {
                 let half = (self.layout.graph.height as usize - 1) / 2;
@@ -1291,6 +1317,9 @@ impl App {
             Focus::Worktrees => {
                 let half = (self.layout.worktrees.height.saturating_sub(1) as usize) / 2;
                 self.worktrees_selected += half;
+            },
+            Focus::Search => {
+                self.search_selected = 0;
             },
             Focus::Viewport => {
                 let half = (self.layout.graph.height.saturating_sub(1) as usize) / 2;
@@ -1517,6 +1546,9 @@ impl App {
             Focus::Worktrees => {
                 self.worktrees_selected = 0;
             },
+            Focus::Search => {
+                self.search_selected = 0;
+            },
             Focus::Viewport => match self.viewport {
                 Viewport::Graph => {
                     self.select_graph_index(0);
@@ -1560,6 +1592,9 @@ impl App {
             },
             Focus::Worktrees => {
                 self.worktrees_selected = usize::MAX;
+            },
+            Focus::Search => {
+                self.search_selected = 0;
             },
             Focus::Viewport => match self.viewport {
                 Viewport::Graph => {
@@ -1950,6 +1985,20 @@ impl App {
         }
         if self.layout_config.is_worktrees {
             self.focus = Focus::Worktrees;
+        } else {
+            self.focus = Focus::Viewport;
+        }
+        self.save_layout();
+    }
+
+    pub fn on_toggle_search(&mut self) {
+        self.layout_config.is_search = !self.layout_config.is_search;
+        self.mark_viewer_layout_dirty();
+        if self.viewport == Viewport::Settings {
+            return;
+        }
+        if self.layout_config.is_search {
+            self.focus = Focus::Search;
         } else {
             self.focus = Focus::Viewport;
         }

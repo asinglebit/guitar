@@ -39,6 +39,7 @@ pub enum Command {
     ToggleReflogs,
     ToggleGraphReflogs,
     ToggleWorktrees,
+    ToggleSearch,
     ToggleStatus,
     ToggleInspector,
     ToggleShas,
@@ -370,6 +371,7 @@ fn default_navigation_keymap() -> IndexMap<KeyBinding, Command> {
     map.insert(KeyBinding::new(Char('7'), KeyModifiers::NONE), Command::ToggleReflogs);
     map.insert(KeyBinding::new(Char('8'), KeyModifiers::NONE), Command::ToggleShas);
     map.insert(KeyBinding::new(Char('9'), KeyModifiers::NONE), Command::ToggleGraphReflogs);
+    map.insert(KeyBinding::new(Char('`'), KeyModifiers::NONE), Command::ToggleSearch);
 
     // Help and settings
     map.insert(KeyBinding::new(Char('?'), KeyModifiers::NONE), Command::ToggleHelp);
@@ -503,6 +505,19 @@ fn default_keymaps() -> Keymaps {
     maps.insert(InputMode::Action, default_action_keymap());
 
     maps
+}
+
+fn ensure_default_keymap_bindings(maps: &mut Keymaps) -> bool {
+    let mut changed = false;
+    for mode in [InputMode::Normal, InputMode::Action] {
+        let mode_map = maps.entry(mode).or_default();
+        let key = KeyBinding::new(Char('`'), KeyModifiers::NONE);
+        if !mode_map.values().any(|command| command == &Command::ToggleSearch) && !mode_map.contains_key(&key) {
+            mode_map.insert(key, Command::ToggleSearch);
+            changed = true;
+        }
+    }
+    changed
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -726,7 +741,12 @@ pub fn load_or_init_keymaps() -> Keymaps {
     let path = pathbuf.as_path();
 
     match load_keymaps_from_path(path) {
-        Ok(maps) => maps,
+        Ok(mut maps) => {
+            if ensure_default_keymap_bindings(&mut maps) {
+                let _ = save_keymaps_to_path(path, &maps);
+            }
+            maps
+        },
         Err(_) => {
             let defaults = default_keymaps();
             let _ = save_keymaps_to_path(path, &defaults);

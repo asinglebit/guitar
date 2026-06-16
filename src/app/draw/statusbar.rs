@@ -50,6 +50,7 @@ impl App {
             Focus::Stashes => self.graph.stashes_window.as_ref().map(|window| window.total).unwrap_or(self.oids.stashes.len()),
             Focus::Reflogs => self.graph.reflogs_window.as_ref().map(|window| window.total).unwrap_or(self.reflogs.entries.len()),
             Focus::Worktrees => self.worktrees.entries.len(),
+            Focus::Search => 0,
             _ => 0,
         };
 
@@ -75,6 +76,7 @@ impl App {
                 Focus::Stashes => self.stashes_selected + 1,
                 Focus::Reflogs => self.reflogs_selected + 1,
                 Focus::Worktrees => self.worktrees_selected + 1,
+                Focus::Search => self.search_selected + 1,
                 _ => 0,
             }
         };

@@ -22,6 +22,7 @@ pub mod draw {
     }
     pub(super) mod pane_window;
     pub mod reflogs;
+    pub mod search;
     pub mod settings;
     pub mod splash;
     pub mod stashes;

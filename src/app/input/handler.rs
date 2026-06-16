@@ -57,6 +57,7 @@ impl App {
             Command::ToggleReflogs => self.on_toggle_reflogs(),
             Command::ToggleGraphReflogs => self.on_toggle_graph_reflogs(),
             Command::ToggleWorktrees => self.on_toggle_worktrees(),
+            Command::ToggleSearch => self.on_toggle_search(),
             Command::ToggleStatus => self.on_toggle_status(),
             Command::ToggleInspector => self.on_toggle_inspector(),
             Command::ToggleShas => self.on_toggle_shas(),

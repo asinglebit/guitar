@@ -14,6 +14,7 @@ pub enum DrawSurface {
     Inspector,
     Modal,
     Reflogs,
+    Search,
     Settings,
     Splash,
     Stashes,

@@ -27,7 +27,7 @@ impl App {
         let max_text_width = available_width.saturating_sub(3);
 
         let has_previous = self.layout_config.is_branches || self.layout_config.is_tags || self.layout_config.is_stashes;
-        let has_next = self.layout_config.is_worktrees;
+        let has_next = self.layout_config.is_worktrees || self.layout_config.is_search;
         let visible_height =
             if self.layout_config.is_zen { self.layout.reflogs.height.saturating_sub(2) as usize } else { self.layout.reflogs.height.saturating_sub(if has_previous { 1 } else { 2 }) as usize };
         let total_lines = self.graph.reflogs_window.as_ref().map(|window| window.total).unwrap_or(self.reflogs.entries.len());
