@@ -94,6 +94,8 @@ git config user.email "you@example.com"
 
 Prebuilt binaries are published on the releases page:
 
+Important! Im not bothering myself with config migrations. So if you are trying out a new version, make sure to run `guitar --reset`. You might want to backup your `.config/guitar` folder before doing so. This is a temporary measure because im lazy.
+
 [https://github.com/asinglebit/guitar/releases](https://github.com/asinglebit/guitar/releases)
 
 Build from source:
