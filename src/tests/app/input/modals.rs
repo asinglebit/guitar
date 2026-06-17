@@ -2,6 +2,7 @@ use super::*;
 use crate::app::app::{RemoteInputAction, SettingsSelection, SettingsSelectionKind, Viewport};
 use crate::core::graph_service::GraphCommand;
 use crate::git::actions::network::NetworkRequest;
+use crate::git::queries::remotes::{GUITAR_DEFAULT_REMOTE_CONFIG, PUSH_DEFAULT_CONFIG};
 use git2::{Repository, Signature};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::{
@@ -286,6 +287,11 @@ fn add_remote_invalid_name_returns_to_name_prompt_with_text_preserved() {
 fn rename_remote_flow_rewrites_hidden_remote_branch_names() {
     let (path, mut app) = remote_app("rename-remote");
     app.repo.as_ref().unwrap().remote("origin", "https://example.com/repo.git").unwrap();
+    {
+        let mut config = app.repo.as_ref().unwrap().config().unwrap();
+        config.set_str(GUITAR_DEFAULT_REMOTE_CONFIG, "origin").unwrap();
+        config.set_str(PUSH_DEFAULT_CONFIG, "origin").unwrap();
+    }
     let oid = app.repo.as_ref().unwrap().head().unwrap().target().unwrap();
     app.repo.as_ref().unwrap().reference("refs/remotes/origin/topic", oid, true, "test").unwrap();
     app.repo.as_ref().unwrap().reference("refs/remotes/other/topic", oid, true, "test").unwrap();
@@ -301,9 +307,30 @@ fn rename_remote_flow_rewrites_hidden_remote_branch_names() {
     let repo = Repository::open(path).unwrap();
     assert!(repo.find_remote("origin").is_err());
     assert!(repo.find_remote("upstream").is_ok());
+    let config = repo.config().unwrap();
+    assert_eq!(config.get_string(GUITAR_DEFAULT_REMOTE_CONFIG).unwrap(), "upstream");
+    assert_eq!(config.get_string(PUSH_DEFAULT_CONFIG).unwrap(), "upstream");
     assert!(app.branches.hidden_branch_names.contains("upstream/topic"));
     assert!(app.branches.hidden_branch_names.contains("other/topic"));
     assert!(!app.branches.hidden_branch_names.contains("origin/topic"));
+}
+
+#[test]
+fn remote_action_sets_selected_remote_as_default() {
+    let (path, mut app) = remote_app("set-default");
+    app.repo.as_ref().unwrap().remote("upstream", "https://example.com/repo.git").unwrap();
+    app.modal_remote_target = Some("upstream".to_string());
+    app.modal_remote_selected = 1;
+    app.focus = Focus::ModalRemoteAction;
+
+    app.on_select();
+
+    let repo = Repository::open(path).unwrap();
+    let config = repo.config().unwrap();
+    assert_eq!(config.get_string(GUITAR_DEFAULT_REMOTE_CONFIG).unwrap(), "upstream");
+    assert_eq!(config.get_string(PUSH_DEFAULT_CONFIG).unwrap(), "upstream");
+    assert_eq!(app.focus, Focus::Viewport);
+    assert_eq!(app.viewport, Viewport::Settings);
 }
 
 #[test]
@@ -341,6 +368,11 @@ fn edit_remote_empty_push_url_clears_push_url() {
 fn delete_remote_confirmation_deletes_remote_and_prunes_hidden_remote_branches() {
     let (path, mut app) = remote_app("delete-remote");
     app.repo.as_ref().unwrap().remote("origin", "https://example.com/repo.git").unwrap();
+    {
+        let mut config = app.repo.as_ref().unwrap().config().unwrap();
+        config.set_str(GUITAR_DEFAULT_REMOTE_CONFIG, "origin").unwrap();
+        config.set_str(PUSH_DEFAULT_CONFIG, "origin").unwrap();
+    }
     let oid = app.repo.as_ref().unwrap().head().unwrap().target().unwrap();
     app.repo.as_ref().unwrap().reference("refs/remotes/other/topic", oid, true, "test").unwrap();
     app.branches.hidden_branch_names.insert("origin/topic".to_string());
@@ -350,7 +382,11 @@ fn delete_remote_confirmation_deletes_remote_and_prunes_hidden_remote_branches()
 
     app.on_select();
 
-    assert!(Repository::open(path).unwrap().find_remote("origin").is_err());
+    let repo = Repository::open(path).unwrap();
+    assert!(repo.find_remote("origin").is_err());
+    let config = repo.config().unwrap();
+    assert!(config.get_string(GUITAR_DEFAULT_REMOTE_CONFIG).is_err());
+    assert!(config.get_string(PUSH_DEFAULT_CONFIG).is_err());
     assert!(!app.branches.hidden_branch_names.contains("origin/topic"));
     assert!(app.branches.hidden_branch_names.contains("other/topic"));
     assert_eq!(app.focus, Focus::Viewport);
@@ -377,6 +413,11 @@ fn remote_modal_cancel_clears_pending_state_and_returns_to_settings() {
 #[test]
 fn selected_remote_fetch_uses_selected_remote_name() {
     let (_path, mut app) = remote_app("fetch-selected");
+    {
+        let mut config = app.repo.as_ref().unwrap().config().unwrap();
+        config.set_str(GUITAR_DEFAULT_REMOTE_CONFIG, "origin").unwrap();
+        config.set_str(PUSH_DEFAULT_CONFIG, "origin").unwrap();
+    }
     app.modal_remote_target = Some("upstream".to_string());
     app.modal_remote_selected = 0;
     app.focus = Focus::ModalRemoteAction;

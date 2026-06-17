@@ -3,14 +3,14 @@ use crate::{
     git::{
         actions::{
             network::NetworkRequest,
-            remotes::{add_remote, delete_remote, rename_remote, set_remote_push_url, set_remote_url},
+            remotes::{add_remote, delete_remote, rename_remote, set_default_remote, set_remote_push_url, set_remote_url},
         },
         queries::remotes::list_remotes,
     },
     helpers::branch_visibility::save_branch_visibility,
 };
 
-pub(crate) const REMOTE_ACTIONS: [&str; 5] = ["fetch", "rename", "edit fetch URL", "edit push URL", "delete"];
+pub(crate) const REMOTE_ACTIONS: [&str; 6] = ["fetch", "set as default", "rename", "edit fetch URL", "edit push URL", "delete"];
 
 impl App {
     pub(crate) fn begin_add_remote(&mut self) {
@@ -75,21 +75,35 @@ impl App {
                 self.start_network_request(NetworkRequest::Fetch { repo_path: repo_path.to_string(), remote_name });
             },
             1 => {
+                let Some(repo) = self.repo.clone() else {
+                    self.close_remote_modal();
+                    return;
+                };
+                match set_default_remote(&repo, &remote_name) {
+                    Ok(_) => {
+                        self.close_remote_modal();
+                        self.viewport = crate::app::app::Viewport::Settings;
+                        self.reload(None);
+                    },
+                    Err(error) => self.show_error(format!("Set default remote failed: {error}")),
+                }
+            },
+            2 => {
                 self.modal_remote_input_action = RemoteInputAction::Rename;
                 self.modal_input.set_value(remote_name);
                 self.focus = Focus::ModalRemoteName;
             },
-            2 => {
+            3 => {
                 self.modal_remote_input_action = RemoteInputAction::EditUrl;
                 self.prefill_remote_url(false);
                 self.focus = Focus::ModalRemoteUrl;
             },
-            3 => {
+            4 => {
                 self.modal_remote_input_action = RemoteInputAction::EditPushUrl;
                 self.prefill_remote_url(true);
                 self.focus = Focus::ModalRemoteUrl;
             },
-            4 => {
+            5 => {
                 self.focus = Focus::ModalRemoteDelete;
             },
             _ => {},

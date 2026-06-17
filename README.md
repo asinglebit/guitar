@@ -588,11 +588,11 @@ Normal key: `c`.
 
 Normal key: `f`.
 
-Fetch runs as a background network operation against `origin`.
+Fetch runs as a background network operation against the repository's default remote. The default remote is resolved from `guitar.defaultRemote`, `remote.pushDefault`, the current branch upstream, `origin`, then the first configured remote.
 
 It fetches:
 
-- `refs/heads/*` into `refs/remotes/origin/*`.
+- `refs/heads/*` into `refs/remotes/<default>/*`.
 - `refs/tags/*` into local tags.
 
 Pruning is enabled.
@@ -604,6 +604,7 @@ Remote management lives in settings. Open settings with `?`, select a remote row
 Remote rows can:
 
 - Fetch the selected remote with the same background auth/progress flow as normal fetch.
+- Set the selected remote as the default for normal fetch, force-push, and push-tags.
 - Rename the remote.
 - Edit the fetch URL.
 - Edit the push URL.
@@ -611,9 +612,9 @@ Remote rows can:
 
 The `+ add remote` row opens prompts for a remote name and fetch URL. Remote names are validated with Git's remote-name rules.
 
-Editing a push URL to an empty value clears the dedicated push URL, so Git falls back to the fetch URL. Deleting a remote removes local remote configuration and prunes matching hidden-branch visibility entries; it does not delete anything on the server.
+The default remote is saved in repo-local Git config as `guitar.defaultRemote` and mirrored to `remote.pushDefault`. Editing a push URL to an empty value clears the dedicated push URL, so Git falls back to the fetch URL. Deleting a remote removes local remote configuration and prunes matching hidden-branch visibility entries; it does not delete anything on the server.
 
-Normal-key `f`, force-push current branch, and push-tags still target `origin`.
+Normal-key `f`, force-push current branch, and push-tags target the default remote. Fetching from a selected remote row still targets that selected remote.
 
 ### Checkout
 
@@ -699,10 +700,10 @@ Force push current branch: action key `Ctrl+a`, then `Shift+P`.
 
 Push tags: action key `Ctrl+a`, then `Shift+V`.
 
-- Branch push targets `origin`.
+- Branch push targets the default remote.
 - Branch push is force push only and updates the current local branch on the remote branch with the same name.
 - Detached HEAD cannot be pushed.
-- Tag push pushes all local tags to `origin`.
+- Tag push pushes all local tags to the default remote.
 - If no local tags exist, push-tags succeeds without changing anything.
 
 ### Stash
@@ -931,7 +932,7 @@ The settings view includes app version and commit heatmap above these tabs:
 Selectable rows:
 
 - Recent repository rows: `d` removes, `Shift+K` moves up, and `Shift+J` moves down.
-- Remote rows: `Enter` opens fetch, rename, URL edit, push URL edit, and delete actions.
+- Remote rows: `Enter` opens fetch, set-default, rename, URL edit, push URL edit, and delete actions.
 - Add remote row: `Enter` opens name and URL prompts.
 - Theme rows: `Enter` activates and saves the selected theme.
 - Layout visibility rows: `Enter` toggles the row or resets layout.
@@ -1219,7 +1220,6 @@ Important source areas:
 ## Known Limitations
 
 - No filesystem watcher. Use reload when repository state changes outside the app.
-- Push operations still assume `origin`; settings can fetch a selected remote.
 - Current branch push is force push only.
 - No pull UI.
 - Conflict resolution editing is external.

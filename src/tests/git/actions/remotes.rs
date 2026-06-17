@@ -1,4 +1,5 @@
 use super::*;
+use crate::git::queries::remotes::{GUITAR_DEFAULT_REMOTE_CONFIG, PUSH_DEFAULT_CONFIG};
 use git2::Repository;
 use std::{
     fs,
@@ -91,6 +92,38 @@ fn empty_push_url_clears_dedicated_push_url() {
 }
 
 #[test]
+fn set_default_remote_writes_guitar_and_push_default_config() {
+    let (_path, repo) = temp_repo("set-default");
+    add_remote(&repo, "upstream", "https://example.com/repo.git").unwrap();
+
+    set_default_remote(&repo, "upstream").unwrap();
+
+    let config = repo.config().unwrap();
+    assert_eq!(config.get_string(GUITAR_DEFAULT_REMOTE_CONFIG).unwrap(), "upstream");
+    assert_eq!(config.get_string(PUSH_DEFAULT_CONFIG).unwrap(), "upstream");
+}
+
+#[test]
+fn set_default_remote_rejects_missing_remote() {
+    let (_path, repo) = temp_repo("set-default-missing");
+
+    assert!(set_default_remote(&repo, "missing").is_err());
+}
+
+#[test]
+fn rename_remote_preserves_matching_default_config() {
+    let (_path, repo) = temp_repo("rename-default");
+    add_remote(&repo, "origin", "https://example.com/repo.git").unwrap();
+    set_default_remote(&repo, "origin").unwrap();
+
+    rename_remote(&repo, "origin", "upstream").unwrap();
+
+    let config = repo.config().unwrap();
+    assert_eq!(config.get_string(GUITAR_DEFAULT_REMOTE_CONFIG).unwrap(), "upstream");
+    assert_eq!(config.get_string(PUSH_DEFAULT_CONFIG).unwrap(), "upstream");
+}
+
+#[test]
 fn delete_remote_removes_remote() {
     let (_path, repo) = temp_repo("delete");
     add_remote(&repo, "origin", "https://example.com/repo.git").unwrap();
@@ -98,6 +131,19 @@ fn delete_remote_removes_remote() {
     delete_remote(&repo, "origin").unwrap();
 
     assert!(repo.find_remote("origin").is_err());
+}
+
+#[test]
+fn delete_remote_clears_matching_default_config() {
+    let (_path, repo) = temp_repo("delete-default");
+    add_remote(&repo, "origin", "https://example.com/repo.git").unwrap();
+    set_default_remote(&repo, "origin").unwrap();
+
+    delete_remote(&repo, "origin").unwrap();
+
+    let config = repo.config().unwrap();
+    assert!(config.get_string(GUITAR_DEFAULT_REMOTE_CONFIG).is_err());
+    assert!(config.get_string(PUSH_DEFAULT_CONFIG).is_err());
 }
 
 #[test]

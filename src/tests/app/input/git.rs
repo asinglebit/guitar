@@ -2,6 +2,7 @@ use super::*;
 use crate::core::chunk::NONE;
 use crate::core::reflogs::HeadReflogAliasEntry;
 use crate::git::actions::merging::{MergeOutcome, start_merge};
+use crate::git::actions::remotes::set_default_remote;
 use crate::git::actions::reverting::{RevertOutcome, start_revert};
 use crate::git::auth::{AuthChallenge, AuthProtocol};
 use crate::helpers::keymap::{Command, InputMode, KeyBinding};
@@ -10,7 +11,7 @@ use indexmap::IndexMap;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::{
     fs,
-    path::Path,
+    path::{Path, PathBuf},
     rc::Rc,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -26,6 +27,20 @@ fn temp_repo(name: &str) -> (std::path::PathBuf, Repository) {
         config.set_str("user.email", "test@example.com").unwrap();
     }
     (path, repo)
+}
+
+fn add_local_bare_remote(repo: &Repository, name: &str) -> PathBuf {
+    let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+    let path = std::env::temp_dir().join(format!("guitar-input-git-remote-{name}-{id}"));
+    Repository::init_bare(&path).unwrap();
+    repo.remote(name, path.to_str().unwrap()).unwrap();
+    path
+}
+
+fn join_network_worker(app: &mut App) {
+    if let Some(handle) = app.network_handle.take() {
+        let _ = handle.join();
+    }
 }
 
 fn commit(repo: &Repository, file: &str, message: &str) -> git2::Oid {
@@ -102,6 +117,51 @@ fn file_search_modal_does_not_open_from_splash_or_settings() {
     let mut settings = App { repo: Some(repo), viewport: Viewport::Settings, focus: Focus::Viewport, ..Default::default() };
     settings.on_find_file();
     assert_eq!(settings.focus, Focus::Viewport);
+}
+
+#[test]
+fn fetch_all_uses_configured_default_remote() {
+    let (path, repo) = temp_repo("fetch-default-remote");
+    commit(&repo, "file.txt", "initial");
+    let _remote_path = add_local_bare_remote(&repo, "upstream");
+    set_default_remote(&repo, "upstream").unwrap();
+    let path_string = path.display().to_string();
+    let mut app = App { path: Some(path_string.clone()), repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+
+    app.on_fetch_all();
+
+    assert_eq!(app.pending_network_request, Some(NetworkRequest::Fetch { repo_path: path_string, remote_name: "upstream".to_string() }));
+    join_network_worker(&mut app);
+}
+
+#[test]
+fn force_push_uses_configured_default_remote() {
+    let (path, repo) = temp_repo("push-default-remote");
+    commit(&repo, "file.txt", "initial");
+    let _remote_path = add_local_bare_remote(&repo, "upstream");
+    set_default_remote(&repo, "upstream").unwrap();
+    let path_string = path.display().to_string();
+    let mut app = App { path: Some(path_string.clone()), repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+
+    app.on_force_push();
+
+    assert_eq!(app.pending_network_request, Some(NetworkRequest::PushBranch { repo_path: path_string, remote_name: "upstream".to_string(), branch: "master".to_string(), force: true }));
+    join_network_worker(&mut app);
+}
+
+#[test]
+fn push_tags_uses_configured_default_remote() {
+    let (path, repo) = temp_repo("push-tags-default-remote");
+    commit(&repo, "file.txt", "initial");
+    let _remote_path = add_local_bare_remote(&repo, "upstream");
+    set_default_remote(&repo, "upstream").unwrap();
+    let path_string = path.display().to_string();
+    let mut app = App { path: Some(path_string.clone()), repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+
+    app.on_push_tags();
+
+    assert_eq!(app.pending_network_request, Some(NetworkRequest::PushTags { repo_path: path_string, remote_name: "upstream".to_string() }));
+    join_network_worker(&mut app);
 }
 
 #[test]

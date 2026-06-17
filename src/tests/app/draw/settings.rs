@@ -1,6 +1,7 @@
 use super::*;
 use crate::{
     app::app::{SettingsTab, Viewport},
+    git::queries::remotes::GUITAR_DEFAULT_REMOTE_CONFIG,
     helpers::keymap::{Command, InputMode, KeyBinding},
 };
 use git2::Repository;
@@ -433,6 +434,28 @@ fn settings_renders_remote_rows_with_explicit_push_url() {
     assert_eq!(selection_lines.len(), 2);
     assert!(fetch_line.contains("https://example.com/repo.git"));
     assert!(push_line.contains("ssh://example.com/repo.git"));
+}
+
+#[test]
+fn settings_marks_effective_default_remote() {
+    let (_path, repo) = temp_repo("remote-default-marker");
+    repo.remote("origin", "https://example.com/origin.git").unwrap();
+    repo.remote("upstream", "https://example.com/upstream.git").unwrap();
+    repo.config().unwrap().set_str(GUITAR_DEFAULT_REMOTE_CONFIG, "upstream").unwrap();
+    let mut app = settings_app();
+    app.settings_tab = SettingsTab::Repo;
+    app.layout.graph = Rect::new(0, 0, 180, 140);
+    app.layout.app = Rect::new(0, 0, 180, 140);
+
+    let lines = app.settings_lines(&repo);
+    let rendered = lines.iter().map(line_text).collect::<Vec<_>>().join("\n");
+    let upstream_selection_texts = remote_selection_lines(&app, "upstream").iter().map(|line| line_text(&lines[*line])).collect::<Vec<_>>();
+    let origin_selection_texts = remote_selection_lines(&app, "origin").iter().map(|line| line_text(&lines[*line])).collect::<Vec<_>>();
+
+    assert!(rendered.contains("default remote:"));
+    assert!(rendered.contains("upstream"));
+    assert!(upstream_selection_texts.iter().any(|text| text.contains("default")));
+    assert!(!origin_selection_texts.iter().any(|text| text.contains("default")));
 }
 
 #[test]

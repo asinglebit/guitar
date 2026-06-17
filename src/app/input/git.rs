@@ -17,7 +17,7 @@ use crate::{
             tagging::untag,
         },
         auth::{AuthRequired, AuthSecret, NetworkResult},
-        queries::commits::get_current_branch,
+        queries::{commits::get_current_branch, remotes::effective_default_remote},
     },
     helpers::branch_visibility::save_branch_visibility,
 };
@@ -463,8 +463,11 @@ impl App {
 
     pub fn on_fetch_all(&mut self) {
         if self.viewport != Viewport::Settings {
+            let Some(remote_name) = self.default_remote_for_network("Fetch") else {
+                return;
+            };
             let repo_path = self.path.as_deref().unwrap_or(".");
-            self.start_network_request(NetworkRequest::Fetch { repo_path: repo_path.to_string(), remote_name: "origin".to_string() });
+            self.start_network_request(NetworkRequest::Fetch { repo_path: repo_path.to_string(), remote_name });
         }
     }
 
@@ -705,16 +708,19 @@ impl App {
     }
 
     pub fn on_force_push(&mut self) {
-        if let Some(repo) = &self.repo {
+        if let Some(repo) = self.repo.clone() {
             match self.viewport {
                 Viewport::Settings | Viewport::Viewer => {},
                 _ => {
-                    let repo_path = self.path.as_deref().unwrap_or(".");
-                    let Some(branch) = get_current_branch(repo) else {
+                    let repo_path = self.path.as_deref().unwrap_or(".").to_string();
+                    let Some(branch) = get_current_branch(&repo) else {
                         self.show_error("Push failed: detached HEAD has no current branch");
                         return;
                     };
-                    self.start_network_request(NetworkRequest::PushBranch { repo_path: repo_path.to_string(), remote_name: "origin".to_string(), branch, force: true });
+                    let Some(remote_name) = self.default_remote_for_network("Push") else {
+                        return;
+                    };
+                    self.start_network_request(NetworkRequest::PushBranch { repo_path, remote_name, branch, force: true });
                 },
             }
         }
@@ -725,10 +731,27 @@ impl App {
             match self.viewport {
                 Viewport::Settings | Viewport::Viewer => {},
                 _ => {
+                    let Some(remote_name) = self.default_remote_for_network("Push tags") else {
+                        return;
+                    };
                     let repo_path = self.path.as_deref().unwrap_or(".");
-                    self.start_network_request(NetworkRequest::PushTags { repo_path: repo_path.to_string(), remote_name: "origin".to_string() });
+                    self.start_network_request(NetworkRequest::PushTags { repo_path: repo_path.to_string(), remote_name });
                 },
             }
+        }
+    }
+
+    fn default_remote_for_network(&mut self, operation: &str) -> Option<String> {
+        let Some(repo) = self.repo.clone() else {
+            return None;
+        };
+
+        match effective_default_remote(&repo) {
+            Some(remote_name) => Some(remote_name),
+            None => {
+                self.show_error(format!("{operation} failed: no remotes configured"));
+                None
+            },
         }
     }
 

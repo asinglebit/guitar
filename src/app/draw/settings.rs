@@ -1,4 +1,4 @@
-use crate::git::queries::remotes::list_remotes;
+use crate::git::queries::remotes::{effective_default_remote, list_remotes};
 use crate::helpers::heatmap::heat_cell;
 use crate::helpers::keymap::{Command, InputMode, KeymapSelection, action_keymap_visible_entries, keybinding_to_visual_string};
 use crate::helpers::layout::scrollbar_content_length;
@@ -264,27 +264,37 @@ impl App {
         lines.push(self.settings_filled_line(" actions:", "select remote to manage | + add remote to create ", width, Style::default().fg(self.theme.COLOR_TEXT)));
         lines.push(Line::default());
 
-        lines.push(self.settings_filled_line(" + add remote", "(enter) ", width, Style::default().fg(self.theme.COLOR_GRASS).bg(self.theme.background_or_default(self.theme.COLOR_GREY_900))));
-        self.add_settings_selection(lines, SettingsSelectionKind::RemoteAdd);
-
         match list_remotes(repo) {
             Ok(remotes) if remotes.is_empty() => {
+                lines.push(self.settings_filled_line(" default remote:", " none ", width, Style::default().fg(self.theme.COLOR_TEXT)));
+                lines.push(Line::default());
+                lines.push(self.settings_filled_line(" + add remote", "(enter) ", width, Style::default().fg(self.theme.COLOR_GRASS).bg(self.theme.background_or_default(self.theme.COLOR_GREY_900))));
+                self.add_settings_selection(lines, SettingsSelectionKind::RemoteAdd);
                 lines.push(self.settings_filled_line(" no remotes", "", width, Style::default().fg(self.theme.COLOR_TEXT)));
             },
             Ok(remotes) => {
+                let default_remote = effective_default_remote(repo);
+                let default_label = default_remote.as_deref().unwrap_or("none");
+                lines.push(self.settings_filled_line(" default remote:", format!(" {default_label} ").as_str(), width, Style::default().fg(self.theme.COLOR_GRASS)));
+                lines.push(Line::default());
+                lines.push(self.settings_filled_line(" + add remote", "(enter) ", width, Style::default().fg(self.theme.COLOR_GRASS).bg(self.theme.background_or_default(self.theme.COLOR_GREY_900))));
+                self.add_settings_selection(lines, SettingsSelectionKind::RemoteAdd);
+
                 for (idx, remote) in remotes.iter().enumerate() {
                     let effective_push_url = remote.push_url.as_deref().filter(|url| !url.is_empty()).unwrap_or(remote.url.as_str());
+                    let is_default = default_remote.as_deref() == Some(remote.name.as_str());
+                    let marker = if is_default { " default" } else { "" };
 
-                    let mut style = Style::default().fg(self.theme.COLOR_TEXT);
+                    let mut style = Style::default().fg(if is_default { self.theme.COLOR_GRASS } else { self.theme.COLOR_TEXT });
                     if (idx + 1).is_multiple_of(2) {
                         style = style.bg(self.theme.background_or_default(self.theme.COLOR_GREY_900));
                     }
 
-                    lines.push(self.settings_filled_line(format!(" {} fetch:", remote.name).as_str(), format!(" {} ", remote.url).as_str(), width, style));
+                    lines.push(self.settings_filled_line(format!(" {} fetch:", remote.name).as_str(), format!(" {}{marker} ", remote.url).as_str(), width, style));
                     self.add_settings_selection(lines, SettingsSelectionKind::Remote(remote.name.clone()));
 
                     if !effective_push_url.is_empty() {
-                        lines.push(self.settings_filled_line(format!(" {} push:", remote.name).as_str(), format!(" {effective_push_url} ").as_str(), width, style));
+                        lines.push(self.settings_filled_line(format!(" {} push:", remote.name).as_str(), format!(" {effective_push_url}{marker} ").as_str(), width, style));
                         self.add_settings_selection(lines, SettingsSelectionKind::Remote(remote.name.clone()));
                     }
                 }
