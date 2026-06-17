@@ -315,7 +315,7 @@ impl App {
         self.reload(None);
     }
 
-    fn active_operation_kind(repo: &Repository) -> Option<OperationKind> {
+    pub(crate) fn active_operation_kind(repo: &Repository) -> Option<OperationKind> {
         match repo.state() {
             RepositoryState::Rebase | RepositoryState::RebaseInteractive | RepositoryState::RebaseMerge | RepositoryState::ApplyMailboxOrRebase => Some(OperationKind::Rebase),
             RepositoryState::CherryPick | RepositoryState::CherryPickSequence => Some(OperationKind::Cherrypick),
@@ -352,56 +352,82 @@ impl App {
     }
 
     pub fn on_drop(&mut self) {
-        if self.repo.is_some() && self.viewport == Viewport::Graph && self.focus == Focus::Viewport {
-            let Some(row) = self.graph_row_at(self.graph_selected) else {
-                return;
-            };
-            if !row.is_stash {
-                return;
-            }
-            let oid = row.oid;
+        if self.repo.is_none() || self.viewport != Viewport::Graph {
+            return;
+        }
 
-            let Some(path) = self.repo.as_ref().map(|repo| repo.path().to_path_buf()) else {
-                return;
-            };
-            let mut repo = match Repository::open(path) {
-                Ok(repo) => repo,
-                Err(error) => {
-                    self.show_error(format!("Open repository failed: {error}"));
+        let oid = match self.focus {
+            Focus::Viewport => {
+                let Some(row) = self.graph_row_at(self.graph_selected) else {
                     return;
-                },
-            };
-            match pop(&mut repo, &oid, false) {
-                Ok(_) => self.reload(None),
-                Err(error) => self.show_error(format!("Drop stash failed: {error}")),
-            }
+                };
+                if !row.is_stash {
+                    return;
+                }
+                row.oid
+            },
+            Focus::Stashes => {
+                let Some(alias) = self.stash_alias_at_pane_selection() else {
+                    return;
+                };
+                *self.oids.get_oid_by_alias(alias)
+            },
+            _ => return,
+        };
+
+        let Some(path) = self.repo.as_ref().map(|repo| repo.path().to_path_buf()) else {
+            return;
+        };
+        let mut repo = match Repository::open(path) {
+            Ok(repo) => repo,
+            Err(error) => {
+                self.show_error(format!("Open repository failed: {error}"));
+                return;
+            },
+        };
+        match pop(&mut repo, &oid, false) {
+            Ok(_) => self.reload(None),
+            Err(error) => self.show_error(format!("Drop stash failed: {error}")),
         }
     }
 
     pub fn on_pop(&mut self) {
-        if self.repo.is_some() && self.viewport == Viewport::Graph && self.focus == Focus::Viewport {
-            let Some(row) = self.graph_row_at(self.graph_selected) else {
-                return;
-            };
-            if !row.is_stash {
-                return;
-            }
-            let oid = row.oid;
+        if self.repo.is_none() || self.viewport != Viewport::Graph {
+            return;
+        }
 
-            let Some(path) = self.repo.as_ref().map(|repo| repo.path().to_path_buf()) else {
-                return;
-            };
-            let mut repo = match Repository::open(path) {
-                Ok(repo) => repo,
-                Err(error) => {
-                    self.show_error(format!("Open repository failed: {error}"));
+        let oid = match self.focus {
+            Focus::Viewport => {
+                let Some(row) = self.graph_row_at(self.graph_selected) else {
                     return;
-                },
-            };
-            match pop(&mut repo, &oid, true) {
-                Ok(_) => self.reload(None),
-                Err(error) => self.show_error(format!("Pop stash failed: {error}")),
-            }
+                };
+                if !row.is_stash {
+                    return;
+                }
+                row.oid
+            },
+            Focus::Stashes => {
+                let Some(alias) = self.stash_alias_at_pane_selection() else {
+                    return;
+                };
+                *self.oids.get_oid_by_alias(alias)
+            },
+            _ => return,
+        };
+
+        let Some(path) = self.repo.as_ref().map(|repo| repo.path().to_path_buf()) else {
+            return;
+        };
+        let mut repo = match Repository::open(path) {
+            Ok(repo) => repo,
+            Err(error) => {
+                self.show_error(format!("Open repository failed: {error}"));
+                return;
+            },
+        };
+        match pop(&mut repo, &oid, true) {
+            Ok(_) => self.reload(None),
+            Err(error) => self.show_error(format!("Pop stash failed: {error}")),
         }
     }
 

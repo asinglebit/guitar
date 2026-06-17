@@ -312,45 +312,57 @@ pub struct SettingsTabHitbox {
     pub end: u16,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ContextMenuAction {
+    Divider,
+    Spacer,
+    Command(Command),
+    GraphCommand(Command),
+    OpenRecentRepository(usize),
+    RemoteAction { name: String, index: usize },
+    SwitchSettingsTab(SettingsTab),
     Settings,
     Splash,
     Exit,
 }
 
-impl ContextMenuAction {
-    pub const ALL: [ContextMenuAction; 3] = [ContextMenuAction::Settings, ContextMenuAction::Splash, ContextMenuAction::Exit];
-
-    pub fn label(self) -> &'static str {
-        match self {
-            ContextMenuAction::Settings => "Settings",
-            ContextMenuAction::Splash => "Splash screen",
-            ContextMenuAction::Exit => "Exit",
-        }
-    }
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ContextMenuItem {
+    pub label: String,
+    pub action: ContextMenuAction,
+    pub enabled: bool,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ContextMenuState {
     pub column: u16,
     pub row: u16,
     pub selected: usize,
+    pub items: Vec<ContextMenuItem>,
 }
 
-pub const CONTEXT_MENU_LABEL_WIDTH: usize = 13;
-pub const CONTEXT_MENU_CONTENT_WIDTH: usize = CONTEXT_MENU_LABEL_WIDTH + 3;
-pub const CONTEXT_MENU_WIDTH: u16 = CONTEXT_MENU_CONTENT_WIDTH as u16 + 2;
-pub const CONTEXT_MENU_HEIGHT: u16 = ContextMenuAction::ALL.len() as u16 + 2;
-
 impl ContextMenuState {
-    pub fn area(self, bounds: Rect) -> Rect {
+    pub fn label_width(&self) -> usize {
+        self.items.iter().map(|item| item.label.chars().count()).max().unwrap_or(0)
+    }
+
+    pub fn width(&self) -> u16 {
+        let width = self.label_width().saturating_add(7);
+        width.min(u16::MAX as usize) as u16
+    }
+
+    pub fn height(&self) -> u16 {
+        let height = self.items.len().saturating_add(4);
+        height.min(u16::MAX as usize) as u16
+    }
+
+    pub fn area(&self, bounds: Rect) -> Rect {
         if bounds.width == 0 || bounds.height == 0 {
             return Rect::new(bounds.x, bounds.y, 0, 0);
         }
 
-        let width = CONTEXT_MENU_WIDTH.min(bounds.width);
-        let height = CONTEXT_MENU_HEIGHT.min(bounds.height);
+        let width = self.width().min(bounds.width);
+        let height = self.height().min(bounds.height);
         let max_x = bounds.x.saturating_add(bounds.width.saturating_sub(width));
         let max_y = bounds.y.saturating_add(bounds.height.saturating_sub(height));
         let x = self.column.clamp(bounds.x, max_x);

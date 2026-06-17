@@ -1300,6 +1300,67 @@ fn key_capture_esc_closes_without_capturing_key() {
 }
 
 #[test]
+fn raw_esc_exits_settings_even_without_keymap_binding() {
+    let mut app = App { viewport: Viewport::Settings, focus: Focus::Viewport, keymaps: Keymaps::new(), settings_selected: 12, settings_tab: SettingsTab::Shortcuts, ..Default::default() };
+
+    app.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+
+    assert_eq!(app.viewport, Viewport::Graph);
+    assert_eq!(app.focus, Focus::Viewport);
+    assert_eq!(app.mode, InputMode::Normal);
+}
+
+#[test]
+fn raw_esc_closes_choice_and_confirmation_modals() {
+    let mut checkout = App { focus: Focus::ModalCheckout, modal_checkout_selected: 3, ..Default::default() };
+    checkout.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert_eq!(checkout.focus, Focus::Viewport);
+    assert_eq!(checkout.modal_checkout_selected, 0);
+
+    let mut solo = App { focus: Focus::ModalSolo, modal_solo_selected: 2, modal_branch_action: BranchModalAction::Rename, ..Default::default() };
+    solo.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert_eq!(solo.focus, Focus::Viewport);
+    assert_eq!(solo.modal_solo_selected, 0);
+    assert_eq!(solo.modal_branch_action, BranchModalAction::Solo);
+
+    let mut delete_branch = App { focus: Focus::ModalDeleteBranch, modal_delete_branch_selected: 4, ..Default::default() };
+    delete_branch.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert_eq!(delete_branch.focus, Focus::Viewport);
+    assert_eq!(delete_branch.modal_delete_branch_selected, 0);
+
+    let mut delete_tag = App { focus: Focus::ModalDeleteTag, modal_delete_tag_selected: 5, ..Default::default() };
+    delete_tag.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert_eq!(delete_tag.focus, Focus::Viewport);
+    assert_eq!(delete_tag.modal_delete_tag_selected, 0);
+}
+
+#[test]
+fn raw_esc_closes_remote_action_modals() {
+    let mut action = App { focus: Focus::ModalRemoteAction, modal_remote_selected: 3, modal_remote_target: Some("origin".into()), ..Default::default() };
+    action.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert_eq!(action.focus, Focus::Viewport);
+    assert_eq!(action.modal_remote_selected, 0);
+    assert_eq!(action.modal_remote_target, None);
+
+    let mut delete = App { focus: Focus::ModalRemoteDelete, modal_remote_selected: 5, modal_remote_target: Some("origin".into()), ..Default::default() };
+    delete.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert_eq!(delete.focus, Focus::Viewport);
+    assert_eq!(delete.modal_remote_selected, 0);
+    assert_eq!(delete.modal_remote_target, None);
+}
+
+#[test]
+fn raw_esc_does_not_dismiss_live_progress_modals() {
+    let mut network = App { focus: Focus::ModalNetworkProgress, ..Default::default() };
+    network.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert_eq!(network.focus, Focus::ModalNetworkProgress);
+
+    let mut operation = App { focus: Focus::ModalOperationProgress, ..Default::default() };
+    operation.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert_eq!(operation.focus, Focus::ModalOperationProgress);
+}
+
+#[test]
 fn graph_branch_and_commit_jumps_refresh_current_diff() {
     let (mut app, _root_oid, _parent_oid, _child_oid) = graph_app_with_history();
 

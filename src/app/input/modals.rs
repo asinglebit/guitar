@@ -216,6 +216,11 @@ impl App {
     }
 
     pub(super) fn handle_modal_key_event(&mut self, key_event: KeyEvent) -> bool {
+        if key_event.code == KeyCode::Esc && key_event.modifiers == KeyModifiers::NONE && self.is_dismissible_modal_focus() {
+            self.on_back();
+            return true;
+        }
+
         if self.focus == Focus::ModalKeyCapture {
             return self.handle_key_capture_event(key_event);
         }
@@ -640,6 +645,35 @@ impl App {
             },
             _ => false,
         }
+    }
+
+    fn is_dismissible_modal_focus(&self) -> bool {
+        matches!(
+            self.focus,
+            Focus::ModalCheckout
+                | Focus::ModalSolo
+                | Focus::ModalCommit
+                | Focus::ModalCherrypick
+                | Focus::ModalRevert
+                | Focus::ModalCreateBranch
+                | Focus::ModalRenameBranch
+                | Focus::ModalCreateWorktreeName
+                | Focus::ModalCreateWorktreePath
+                | Focus::ModalDeleteBranch
+                | Focus::ModalWorktreeChooser
+                | Focus::ModalRemoveWorktree
+                | Focus::ModalLockWorktree
+                | Focus::ModalRemoteAction
+                | Focus::ModalRemoteDelete
+                | Focus::ModalRemoteName
+                | Focus::ModalRemoteUrl
+                | Focus::ModalGrep
+                | Focus::ModalFileSearch
+                | Focus::ModalTag
+                | Focus::ModalDeleteTag
+                | Focus::ModalKeyCapture
+                | Focus::ModalAuth
+        )
     }
 }
 

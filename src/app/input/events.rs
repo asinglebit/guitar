@@ -235,7 +235,7 @@ impl App {
         )
     }
 
-    fn select_mouse_target(&mut self, target: MouseSelectionTarget) {
+    pub(crate) fn select_mouse_target(&mut self, target: MouseSelectionTarget) {
         match target {
             MouseSelectionTarget::Graph(index) => {
                 self.focus = Focus::Viewport;
@@ -305,7 +305,7 @@ impl App {
         }
     }
 
-    fn mouse_selection_target_at(&self, column: u16, row: u16) -> Option<MouseSelectionTarget> {
+    pub(crate) fn mouse_selection_target_at(&self, column: u16, row: u16) -> Option<MouseSelectionTarget> {
         if self.is_modal_focus() {
             return None;
         }

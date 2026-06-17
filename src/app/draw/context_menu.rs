@@ -1,4 +1,4 @@
-use crate::app::app::{App, CONTEXT_MENU_LABEL_WIDTH, ContextMenuAction};
+use crate::app::app::{App, ContextMenuAction};
 use ratatui::{
     Frame,
     style::Style,
@@ -12,7 +12,7 @@ impl App {
             return;
         }
 
-        let Some(menu) = self.context_menu else {
+        let Some(menu) = self.context_menu.as_ref() else {
             return;
         };
         let Some(area) = self.context_menu_area_for_bounds(frame.area()) else {
@@ -26,19 +26,34 @@ impl App {
 
         let menu_bg = self.theme.background_or_default(self.theme.COLOR_GREY_900);
         let selected_bg = self.theme.background_or_default(self.theme.COLOR_GREY_800);
-        let items = ContextMenuAction::ALL
-            .iter()
-            .enumerate()
-            .map(|(index, &action)| {
-                let enabled = self.context_menu_action_enabled(action);
-                let selected = enabled && index == menu.selected;
-                let style = Style::default().fg(if enabled { self.theme.COLOR_TEXT } else { self.theme.COLOR_GREY_600 }).bg(if selected { selected_bg } else { menu_bg });
-                let marker = if selected { ">" } else { " " };
-                let text = format!("{marker} {:<width$} ", action.label(), width = CONTEXT_MENU_LABEL_WIDTH);
+        let label_width = menu.label_width();
+        let divider_width = label_width.saturating_add(3);
+        let mut items = Vec::with_capacity(menu.items.len().saturating_add(2));
+        items.push(ListItem::new(Line::from(Span::styled("", Style::default().bg(menu_bg)))).style(Style::default().bg(menu_bg)));
+        items.extend(
+            menu.items
+                .iter()
+                .enumerate()
+                .map(|(index, item)| {
+                    if item.action == ContextMenuAction::Divider {
+                        let text = format!(" {} ", "─".repeat(divider_width));
+                        return ListItem::new(Line::from(Span::styled(text, Style::default().fg(self.theme.COLOR_BORDER).bg(menu_bg)))).style(Style::default().bg(menu_bg));
+                    }
+                    if item.action == ContextMenuAction::Spacer {
+                        return ListItem::new(Line::from(Span::styled("", Style::default().bg(menu_bg)))).style(Style::default().bg(menu_bg));
+                    }
 
-                ListItem::new(Line::from(Span::styled(text, style))).style(style)
-            })
-            .collect::<Vec<_>>();
+                    let enabled = item.enabled;
+                    let selected = enabled && index == menu.selected;
+                    let style = Style::default().fg(if enabled { self.theme.COLOR_TEXT } else { self.theme.COLOR_GREY_600 }).bg(if selected { selected_bg } else { menu_bg });
+                    let marker = if selected { ">" } else { " " };
+                    let text = format!(" {marker} {:<width$}  ", item.label, width = label_width);
+
+                    ListItem::new(Line::from(Span::styled(text, style))).style(style)
+                })
+                .collect::<Vec<_>>(),
+        );
+        items.push(ListItem::new(Line::from(Span::styled("", Style::default().bg(menu_bg)))).style(Style::default().bg(menu_bg)));
 
         let block = Block::default().borders(Borders::ALL).border_style(Style::default().fg(self.theme.COLOR_BORDER).bg(menu_bg)).border_type(BorderType::Rounded).style(Style::default().bg(menu_bg));
 

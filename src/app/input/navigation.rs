@@ -334,7 +334,7 @@ impl App {
         self.tags.sorted.get(self.tags_selected).map(|(alias, _)| *alias)
     }
 
-    fn stash_alias_at_pane_selection(&self) -> Option<u32> {
+    pub(crate) fn stash_alias_at_pane_selection(&self) -> Option<u32> {
         if let Some(window) = &self.graph.stashes_window
             && self.stashes_selected >= window.start
             && self.stashes_selected < window.end
@@ -1984,6 +1984,19 @@ impl App {
             Focus::ModalWorktreeChooser | Focus::ModalRemoveWorktree => {
                 self.close_worktree_modal();
             },
+            Focus::ModalSolo => {
+                self.modal_solo_selected = 0;
+                self.modal_branch_action = BranchModalAction::Solo;
+                self.focus = Focus::Viewport;
+            },
+            Focus::ModalDeleteBranch => {
+                self.modal_delete_branch_selected = 0;
+                self.focus = Focus::Viewport;
+            },
+            Focus::ModalDeleteTag => {
+                self.modal_delete_tag_selected = 0;
+                self.focus = Focus::Viewport;
+            },
             Focus::ModalLockWorktree => {
                 self.modal_input.clear();
                 self.focus = Focus::Worktrees;
@@ -2008,6 +2021,10 @@ impl App {
             Focus::ModalNetworkProgress => {},
             Focus::ModalCheckout => {
                 self.modal_checkout_selected = 0;
+                self.focus = Focus::Viewport;
+            },
+            Focus::ModalGrep | Focus::ModalTag => {
+                self.modal_input.clear();
                 self.focus = Focus::Viewport;
             },
             Focus::Viewport => match self.viewport {

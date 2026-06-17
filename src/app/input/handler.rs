@@ -2,7 +2,7 @@ use crate::{
     app::app::{App, Focus, Viewport},
     helpers::keymap::{Command, InputMode, KeyBinding, command_for_key_binding, load_or_init_keymaps},
 };
-use ratatui::crossterm::event::KeyEvent;
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 impl App {
     pub fn load_keymap(&mut self) {
@@ -12,6 +12,12 @@ impl App {
     pub fn handle_key_event(&mut self, key_event: KeyEvent) {
         let key_binding = KeyBinding::new(key_event.code, key_event.modifiers);
         let current_mode = self.mode;
+
+        if key_event.code == KeyCode::Esc && key_event.modifiers == KeyModifiers::NONE && self.viewport == Viewport::Settings && self.focus == Focus::Viewport {
+            self.on_back();
+            self.mode = InputMode::Normal;
+            return;
+        }
 
         if self.handle_modal_key_event(key_event) {
             self.mode = InputMode::Normal;
@@ -37,7 +43,7 @@ impl App {
         }
     }
 
-    fn dispatch_command(&mut self, command: &Command) {
+    pub(crate) fn dispatch_command(&mut self, command: &Command) {
         match command {
             Command::WidenScope => self.on_widen_scope(),
             Command::NarrowScope => self.on_narrow_scope(),

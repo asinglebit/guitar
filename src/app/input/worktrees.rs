@@ -38,7 +38,7 @@ impl App {
         Vec::new()
     }
 
-    fn graph_open_worktree_indices(&self) -> Vec<usize> {
+    pub(crate) fn graph_open_worktree_indices(&self) -> Vec<usize> {
         self.graph_worktree_indices().into_iter().filter(|idx| self.worktrees.entries.get(*idx).is_some_and(|entry| entry.is_valid)).collect()
     }
 

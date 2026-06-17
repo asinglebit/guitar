@@ -70,7 +70,12 @@ fn context_menu_app() -> App {
     let mut app = graph_app();
     app.layout.app = Rect::new(0, 0, 80, 24);
     app.layout.graph = Rect::new(0, 0, 80, 24);
+    app.graph.total = 0;
     app
+}
+
+fn context_menu_labels(app: &App) -> Vec<String> {
+    app.context_menu.as_ref().map(|menu| menu.items.iter().map(|item| item.label.clone()).collect()).unwrap_or_default()
 }
 
 #[test]
@@ -81,7 +86,7 @@ fn right_click_opens_context_menu_with_first_enabled_item() {
 
     let menu = app.context_menu.unwrap();
     assert_eq!((menu.column, menu.row), (5, 3));
-    assert_eq!(ContextMenuAction::ALL[menu.selected], ContextMenuAction::Splash);
+    assert_eq!(menu.items[menu.selected].action, ContextMenuAction::Splash);
 }
 
 #[test]
@@ -113,7 +118,7 @@ fn left_click_context_menu_settings_opens_settings_when_repo_exists() {
     app.repo = Some(Rc::new(repo));
 
     app.handle_mouse_event(right_down(5, 5));
-    app.handle_mouse_event(left_down(6, 6));
+    app.handle_mouse_event(left_down(6, 11));
 
     assert!(app.context_menu.is_none());
     assert_eq!(app.viewport, Viewport::Settings);
@@ -121,11 +126,33 @@ fn left_click_context_menu_settings_opens_settings_when_repo_exists() {
 }
 
 #[test]
+fn repo_context_menu_includes_reload_global_action() {
+    let (_path, repo) = temp_repo("context-menu-reload");
+    let mut app = context_menu_app();
+    app.repo = Some(Rc::new(repo));
+
+    app.handle_mouse_event(right_down(5, 5));
+
+    let labels = context_menu_labels(&app);
+    assert_eq!(labels.iter().map(String::as_str).collect::<Vec<_>>(), vec!["Reload", "", "", "", "Settings", "Splash screen", "Exit"]);
+}
+
+#[test]
+fn context_menu_omits_reload_without_loaded_repo() {
+    let mut app = context_menu_app();
+
+    app.handle_mouse_event(right_down(5, 5));
+
+    let labels = context_menu_labels(&app);
+    assert!(!labels.iter().any(|label| label == "Reload"), "{labels:?}");
+}
+
+#[test]
 fn left_click_context_menu_disabled_settings_keeps_menu_open() {
     let mut app = context_menu_app();
 
     app.handle_mouse_event(right_down(5, 5));
-    app.handle_mouse_event(left_down(6, 6));
+    app.handle_mouse_event(left_down(6, 7));
 
     assert!(app.context_menu.is_some());
     assert_eq!(app.viewport, Viewport::Graph);
@@ -138,12 +165,147 @@ fn context_menu_keyboard_navigation_and_enter_activate_selected_item() {
     app.handle_mouse_event(right_down(5, 5));
     app.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
 
-    assert_eq!(ContextMenuAction::ALL[app.context_menu.unwrap().selected], ContextMenuAction::Exit);
+    let menu = app.context_menu.as_ref().unwrap();
+    assert_eq!(menu.items[menu.selected].action, ContextMenuAction::Exit);
 
     app.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
     assert!(app.context_menu.is_none());
     assert!(app.is_exit);
+}
+
+#[test]
+fn right_click_selects_graph_row_and_opens_contextual_actions() {
+    let mut app = graph_app();
+    app.graph_scroll.set(2);
+
+    app.handle_mouse_event(right_down(1, 3));
+
+    assert_eq!(app.focus, Focus::Viewport);
+    assert_eq!(app.viewport, Viewport::Graph);
+    assert_eq!(app.graph_selected, 5);
+    let labels = context_menu_labels(&app);
+    assert!(labels.iter().any(|label| label == "Show details"), "{labels:?}");
+    assert!(labels.iter().any(|label| label == "Create branch"), "{labels:?}");
+}
+
+#[test]
+fn right_click_selects_left_pane_row_and_opens_contextual_actions() {
+    let mut app = graph_app();
+    app.layout_config.is_branches = true;
+    app.layout.branches = Rect::new(0, 0, 20, 6);
+    app.branches.sorted = (0..10).map(|idx| (idx, format!("branch-{idx}"))).collect();
+    app.branches_scroll.set(2);
+
+    app.handle_mouse_event(right_down(1, 1));
+
+    assert_eq!((app.focus, app.branches_selected), (Focus::Branches, 3));
+    let labels = context_menu_labels(&app);
+    assert!(labels.iter().any(|label| label == "Open commit"), "{labels:?}");
+    assert!(labels.iter().any(|label| label == "Checkout branch"), "{labels:?}");
+    assert!(labels.iter().any(|label| label == "Toggle branch"), "{labels:?}");
+}
+
+#[test]
+fn right_click_selects_status_row_and_opens_contextual_actions() {
+    let mut app = graph_app();
+    app.layout_config.is_status = true;
+    app.layout.status_top = Rect::new(0, 0, 30, 6);
+    app.is_uncommitted_loaded = true;
+    app.uncommitted.is_staged = true;
+    app.uncommitted.staged.modified = vec!["a".into(), "b".into(), "c".into(), "d".into()];
+    app.status_top_scroll.set(1);
+
+    app.handle_mouse_event(right_down(1, 1));
+
+    assert_eq!((app.focus, app.status_top_selected), (Focus::StatusTop, 2));
+    let labels = context_menu_labels(&app);
+    assert!(labels.iter().any(|label| label == "Open file"), "{labels:?}");
+    assert!(labels.iter().any(|label| label == "Unstage file"), "{labels:?}");
+    assert!(labels.iter().any(|label| label == "Discard file changes"), "{labels:?}");
+}
+
+#[test]
+fn right_click_selects_splash_recent_repo_and_opens_contextual_actions() {
+    let mut app = App { viewport: Viewport::Splash, focus: Focus::Viewport, layout_config: LayoutConfig::default(), layout: Layout::default(), ..Default::default() };
+    app.layout.app = Rect::new(0, 0, 120, 20);
+    app.layout.graph = Rect::new(0, 0, 120, 20);
+    app.recent = vec!["/repo/a".into(), "/repo/b".into(), "/repo/c".into()];
+
+    app.handle_mouse_event(right_down(1, 17));
+
+    assert_eq!(app.splash_selected, 1);
+    let labels = context_menu_labels(&app);
+    assert!(labels.iter().any(|label| label == "Open repository"), "{labels:?}");
+    assert!(labels.iter().any(|label| label == "Move up"), "{labels:?}");
+    assert!(labels.iter().any(|label| label == "Move down"), "{labels:?}");
+    assert!(!labels.iter().any(|label| label == "Back"), "{labels:?}");
+    assert!(!labels.iter().any(|label| label == "Reload"), "{labels:?}");
+    assert!(!labels.iter().any(|label| label == "Splash screen"), "{labels:?}");
+    assert!(labels.iter().position(|label| label.is_empty()).is_some_and(|index| index < labels.iter().position(|label| label == "Exit").unwrap()), "{labels:?}");
+    assert!(labels.iter().any(|label| label == "Exit"), "{labels:?}");
+}
+
+#[test]
+fn splash_context_menu_back_returns_to_graph_when_repo_loaded() {
+    let (_path, repo) = temp_repo("splash-context-back");
+    let mut app = App { viewport: Viewport::Splash, focus: Focus::Viewport, repo: Some(Rc::new(repo)), layout_config: LayoutConfig::default(), layout: Layout::default(), ..Default::default() };
+    app.layout.app = Rect::new(0, 0, 80, 24);
+    app.layout.graph = Rect::new(0, 0, 80, 24);
+
+    app.handle_mouse_event(right_down(60, 20));
+
+    let labels = context_menu_labels(&app);
+    assert!(labels.iter().any(|label| label == "Back"), "{labels:?}");
+    assert!(labels.iter().any(|label| label == "Reload"), "{labels:?}");
+    assert!(!labels.iter().any(|label| label == "Splash screen"), "{labels:?}");
+    let back_index = labels.iter().position(|label| label == "Back").unwrap();
+    app.context_menu.as_mut().unwrap().selected = back_index;
+
+    app.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert_eq!(app.viewport, Viewport::Graph);
+    assert_eq!(app.focus, Focus::Viewport);
+    assert!(app.context_menu.is_none());
+}
+
+#[test]
+fn right_click_selects_settings_row_and_opens_contextual_actions() {
+    let (_path, repo) = temp_repo("settings-context-reload");
+    let mut app = App { viewport: Viewport::Settings, focus: Focus::Viewport, repo: Some(Rc::new(repo)), layout_config: LayoutConfig::default(), layout: Layout::default(), ..Default::default() };
+    app.layout.graph = Rect::new(0, 0, 40, 5);
+    app.settings_scroll.set(10);
+    app.settings_selections = vec![SettingsSelection { line: 12, kind: SettingsSelectionKind::Theme(0) }];
+
+    app.handle_mouse_event(right_down(1, 2));
+
+    assert_eq!(app.settings_selected, 12);
+    let labels = context_menu_labels(&app);
+    assert!(labels.iter().any(|label| label == "Apply theme"), "{labels:?}");
+    assert!(labels.iter().any(|label| label == "Back"), "{labels:?}");
+    assert!(labels.iter().any(|label| label == "Reload"), "{labels:?}");
+    assert!(!labels.iter().any(|label| label == "Settings"), "{labels:?}");
+    assert!(labels.iter().any(|label| label == "Splash screen"), "{labels:?}");
+    assert!(labels.iter().any(|label| label == "Exit"), "{labels:?}");
+    assert_eq!(labels.iter().map(String::as_str).collect::<Vec<_>>(), vec!["Reload", "Apply theme", "", "", "", "Back", "Splash screen", "Exit"]);
+}
+
+#[test]
+fn settings_context_menu_back_returns_to_graph() {
+    let mut app = App { viewport: Viewport::Settings, focus: Focus::Viewport, layout_config: LayoutConfig::default(), layout: Layout::default(), ..Default::default() };
+    app.layout.app = Rect::new(0, 0, 80, 24);
+    app.layout.graph = Rect::new(0, 0, 80, 24);
+
+    app.handle_mouse_event(right_down(60, 20));
+
+    let labels = context_menu_labels(&app);
+    assert_eq!(labels.first().map(String::as_str), Some("Back"), "{labels:?}");
+
+    app.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert_eq!(app.viewport, Viewport::Graph);
+    assert_eq!(app.focus, Focus::Viewport);
+    assert!(app.context_menu.is_none());
 }
 
 fn test_oid(byte: u8) -> Oid {
