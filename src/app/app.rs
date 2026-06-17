@@ -57,6 +57,7 @@ use indexmap::IndexMap;
 use ratatui::{
     DefaultTerminal, Frame,
     crossterm::event,
+    layout::Rect,
     style::Style,
     text::Span,
     widgets::{Block, Borders, ListItem},
@@ -247,7 +248,7 @@ impl GraphClientCache {
     }
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Direction {
     Down,
     Up,
@@ -309,6 +310,54 @@ pub struct SettingsTabHitbox {
     pub line: usize,
     pub start: u16,
     pub end: u16,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ContextMenuAction {
+    Settings,
+    Splash,
+    Exit,
+}
+
+impl ContextMenuAction {
+    pub const ALL: [ContextMenuAction; 3] = [ContextMenuAction::Settings, ContextMenuAction::Splash, ContextMenuAction::Exit];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            ContextMenuAction::Settings => "Settings",
+            ContextMenuAction::Splash => "Splash screen",
+            ContextMenuAction::Exit => "Exit",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ContextMenuState {
+    pub column: u16,
+    pub row: u16,
+    pub selected: usize,
+}
+
+pub const CONTEXT_MENU_LABEL_WIDTH: usize = 13;
+pub const CONTEXT_MENU_CONTENT_WIDTH: usize = CONTEXT_MENU_LABEL_WIDTH + 3;
+pub const CONTEXT_MENU_WIDTH: u16 = CONTEXT_MENU_CONTENT_WIDTH as u16 + 2;
+pub const CONTEXT_MENU_HEIGHT: u16 = ContextMenuAction::ALL.len() as u16 + 2;
+
+impl ContextMenuState {
+    pub fn area(self, bounds: Rect) -> Rect {
+        if bounds.width == 0 || bounds.height == 0 {
+            return Rect::new(bounds.x, bounds.y, 0, 0);
+        }
+
+        let width = CONTEXT_MENU_WIDTH.min(bounds.width);
+        let height = CONTEXT_MENU_HEIGHT.min(bounds.height);
+        let max_x = bounds.x.saturating_add(bounds.width.saturating_sub(width));
+        let max_y = bounds.y.saturating_add(bounds.height.saturating_sub(height));
+        let x = self.column.clamp(bounds.x, max_x);
+        let y = self.row.clamp(bounds.y, max_y);
+
+        Rect::new(x, y, width, height)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -453,6 +502,7 @@ pub struct App {
     pub layout_config: LayoutConfig,
     pub mouse_drag: Option<MouseDrag>,
     pub last_mouse_click: Option<(MouseSelectionTarget, Instant)>,
+    pub context_menu: Option<ContextMenuState>,
     pub viewport: Viewport,
     pub focus: Focus,
 
@@ -799,6 +849,10 @@ impl App {
             }
         } else {
             self.draw_splash(frame);
+        }
+
+        if self.context_menu.is_some() && !self.is_modal_focus() {
+            self.draw_context_menu(frame);
         }
     }
 

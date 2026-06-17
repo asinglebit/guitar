@@ -82,20 +82,33 @@ impl App {
 
     fn handle_mouse_event(&mut self, mouse_event: MouseEvent) {
         match mouse_event.kind {
+            MouseEventKind::Down(MouseButton::Right) => {
+                self.open_context_menu(mouse_event.column, mouse_event.row);
+            },
             MouseEventKind::Down(MouseButton::Left) => {
-                self.handle_mouse_down(mouse_event.column, mouse_event.row);
+                if !self.handle_context_menu_left_click(mouse_event.column, mouse_event.row) {
+                    self.handle_mouse_down(mouse_event.column, mouse_event.row);
+                }
             },
             MouseEventKind::Drag(MouseButton::Left) => {
-                self.handle_mouse_drag(mouse_event.column, mouse_event.row);
+                if self.context_menu.is_none() {
+                    self.handle_mouse_drag(mouse_event.column, mouse_event.row);
+                }
             },
             MouseEventKind::Up(MouseButton::Left) => {
-                self.finish_mouse_drag();
+                if self.context_menu.is_none() {
+                    self.finish_mouse_drag();
+                }
             },
             MouseEventKind::ScrollUp => {
-                self.handle_mouse_scroll(mouse_event.column, mouse_event.row, Direction::Up);
+                if self.context_menu.is_none() {
+                    self.handle_mouse_scroll(mouse_event.column, mouse_event.row, Direction::Up);
+                }
             },
             MouseEventKind::ScrollDown => {
-                self.handle_mouse_scroll(mouse_event.column, mouse_event.row, Direction::Down);
+                if self.context_menu.is_none() {
+                    self.handle_mouse_scroll(mouse_event.column, mouse_event.row, Direction::Down);
+                }
             },
             _ => {},
         }

@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     app::{
-        app::{SettingsSelection, SettingsSelectionKind, SettingsTab},
+        app::{ContextMenuAction, SettingsSelection, SettingsSelectionKind, SettingsTab},
         state::defaults::ViewerMode,
         state::layout::Layout,
     },
@@ -18,7 +18,7 @@ use crate::{
 };
 use git2::{Oid, Repository, Signature};
 use ratatui::{
-    crossterm::event::{KeyCode, KeyModifiers},
+    crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
     layout::Rect,
     widgets::ListItem,
 };
@@ -54,11 +54,96 @@ fn left_up(column: u16, row: u16) -> MouseEvent {
     MouseEvent { kind: MouseEventKind::Up(MouseButton::Left), column, row, modifiers: KeyModifiers::NONE }
 }
 
+fn right_down(column: u16, row: u16) -> MouseEvent {
+    MouseEvent { kind: MouseEventKind::Down(MouseButton::Right), column, row, modifiers: KeyModifiers::NONE }
+}
+
 fn graph_app() -> App {
     let mut app = App { viewport: Viewport::Graph, focus: Focus::Viewport, layout_config: LayoutConfig::default(), layout: Layout::default(), ..Default::default() };
+    app.layout.app = Rect::new(0, 0, 30, 8);
     app.layout.graph = Rect::new(0, 0, 30, 8);
     app.graph.total = 20;
     app
+}
+
+fn context_menu_app() -> App {
+    let mut app = graph_app();
+    app.layout.app = Rect::new(0, 0, 80, 24);
+    app.layout.graph = Rect::new(0, 0, 80, 24);
+    app
+}
+
+#[test]
+fn right_click_opens_context_menu_with_first_enabled_item() {
+    let mut app = context_menu_app();
+
+    app.handle_mouse_event(right_down(5, 3));
+
+    let menu = app.context_menu.unwrap();
+    assert_eq!((menu.column, menu.row), (5, 3));
+    assert_eq!(ContextMenuAction::ALL[menu.selected], ContextMenuAction::Splash);
+}
+
+#[test]
+fn right_click_does_not_open_context_menu_over_modal_focus() {
+    let mut app = context_menu_app();
+    app.focus = Focus::ModalCommit;
+
+    app.handle_mouse_event(right_down(5, 3));
+
+    assert!(app.context_menu.is_none());
+}
+
+#[test]
+fn left_click_outside_context_menu_dismisses_without_selecting_underlying_row() {
+    let mut app = context_menu_app();
+    app.graph_selected = 4;
+
+    app.handle_mouse_event(right_down(20, 10));
+    app.handle_mouse_event(left_down(1, 1));
+
+    assert!(app.context_menu.is_none());
+    assert_eq!(app.graph_selected, 4);
+}
+
+#[test]
+fn left_click_context_menu_settings_opens_settings_when_repo_exists() {
+    let (_path, repo) = temp_repo("context-menu-settings");
+    let mut app = context_menu_app();
+    app.repo = Some(Rc::new(repo));
+
+    app.handle_mouse_event(right_down(5, 5));
+    app.handle_mouse_event(left_down(6, 6));
+
+    assert!(app.context_menu.is_none());
+    assert_eq!(app.viewport, Viewport::Settings);
+    assert_eq!(app.focus, Focus::Viewport);
+}
+
+#[test]
+fn left_click_context_menu_disabled_settings_keeps_menu_open() {
+    let mut app = context_menu_app();
+
+    app.handle_mouse_event(right_down(5, 5));
+    app.handle_mouse_event(left_down(6, 6));
+
+    assert!(app.context_menu.is_some());
+    assert_eq!(app.viewport, Viewport::Graph);
+}
+
+#[test]
+fn context_menu_keyboard_navigation_and_enter_activate_selected_item() {
+    let mut app = context_menu_app();
+
+    app.handle_mouse_event(right_down(5, 5));
+    app.handle_key_event(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+
+    assert_eq!(ContextMenuAction::ALL[app.context_menu.unwrap().selected], ContextMenuAction::Exit);
+
+    app.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert!(app.context_menu.is_none());
+    assert!(app.is_exit);
 }
 
 fn test_oid(byte: u8) -> Oid {

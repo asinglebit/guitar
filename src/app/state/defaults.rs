@@ -95,6 +95,7 @@ impl Default for App {
             layout_config: load_layout_config(),
             mouse_drag: None,
             last_mouse_click: None,
+            context_menu: None,
             viewport: Viewport::Splash,
             focus: Focus::Viewport,
 

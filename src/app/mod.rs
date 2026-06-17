@@ -3,6 +3,7 @@ pub mod app;
 
 pub mod draw {
     pub mod branches;
+    pub mod context_menu;
     pub mod graph;
     pub mod inspector;
     pub mod modals {
@@ -37,6 +38,7 @@ pub mod draw {
 }
 
 pub mod input {
+    pub mod context_menu;
     pub mod events;
     pub mod git;
     pub mod handler;

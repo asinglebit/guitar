@@ -18,6 +18,11 @@ impl App {
             return;
         }
 
+        if self.handle_context_menu_key_event(key_event) {
+            self.mode = InputMode::Normal;
+            return;
+        }
+
         let command = self.keymaps.get(&self.mode).and_then(|mode_map| command_for_key_binding(mode_map, &key_binding));
         if let Some(command) = command {
             if self.viewport == Viewport::Splash && self.focus == Focus::Viewport {
