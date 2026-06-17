@@ -145,3 +145,71 @@ fn file_search_plain_l_is_inserted_into_input() {
 
     assert_eq!(app.modal_input.value(), "l");
 }
+
+#[test]
+fn rename_branch_submit_renames_and_clears_modal_state() {
+    let (path, repo) = temp_repo("rename-submit");
+    commit_files(&repo, &["file.txt"], "initial");
+    let target = repo.head().unwrap().peel_to_commit().unwrap();
+    repo.branch("feature", &target, false).unwrap();
+    drop(target);
+
+    let mut app = App {
+        path: Some(path.display().to_string()),
+        recent: vec![path.display().to_string()],
+        repo: Some(Rc::new(repo)),
+        viewport: Viewport::Graph,
+        focus: Focus::ModalRenameBranch,
+        modal_rename_branch_source: Some("feature".to_string()),
+        ..Default::default()
+    };
+    app.modal_input.set_value("topic");
+
+    app.handle_modal_key_event(key(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert_eq!(app.focus, Focus::Viewport);
+    assert!(app.modal_input.value().is_empty());
+    assert_eq!(app.modal_rename_branch_source, None);
+
+    let repo = Repository::open(path).unwrap();
+    assert!(repo.find_branch("feature", git2::BranchType::Local).is_err());
+    assert!(repo.find_branch("topic", git2::BranchType::Local).is_ok());
+}
+
+#[test]
+fn rename_branch_error_returns_to_input_with_text_preserved() {
+    let (_path, repo) = temp_repo("rename-error");
+    commit_files(&repo, &["file.txt"], "initial");
+    let target = repo.head().unwrap().peel_to_commit().unwrap();
+    repo.branch("feature", &target, false).unwrap();
+    repo.branch("existing", &target, false).unwrap();
+    drop(target);
+
+    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::ModalRenameBranch, modal_rename_branch_source: Some("feature".to_string()), ..Default::default() };
+    app.modal_input.set_value("existing");
+
+    app.handle_modal_key_event(key(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert_eq!(app.focus, Focus::ModalError);
+    assert_eq!(app.modal_error_return_focus, Focus::ModalRenameBranch);
+    assert_eq!(app.modal_input.value(), "existing");
+    assert_eq!(app.modal_rename_branch_source.as_deref(), Some("feature"));
+
+    app.handle_modal_key_event(key(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert_eq!(app.focus, Focus::ModalRenameBranch);
+    assert_eq!(app.modal_input.value(), "existing");
+}
+
+#[test]
+fn rename_branch_esc_closes_and_clears_modal_state() {
+    let (_path, repo) = temp_repo("rename-esc");
+    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::ModalRenameBranch, modal_rename_branch_source: Some("feature".to_string()), ..Default::default() };
+    app.modal_input.set_value("topic");
+
+    app.handle_modal_key_event(key(KeyCode::Esc, KeyModifiers::NONE));
+
+    assert_eq!(app.focus, Focus::Viewport);
+    assert!(app.modal_input.value().is_empty());
+    assert_eq!(app.modal_rename_branch_source, None);
+}

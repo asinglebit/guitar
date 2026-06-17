@@ -86,6 +86,7 @@ fn existing_keymaps_do_not_override_search_conflicts() {
     action.insert(KeyBinding::new(Char('s'), KeyModifiers::CONTROL), Command::ToggleSearch);
     action.insert(KeyBinding::new(Char('F'), KeyModifiers::SHIFT), Command::FetchAll);
     action.insert(KeyBinding::new(Char('f'), KeyModifiers::CONTROL), Command::FindFile);
+    action.insert(KeyBinding::new(Char('B'), KeyModifiers::SHIFT), Command::RenameBranch);
     maps.insert(InputMode::Normal, normal);
     maps.insert(InputMode::Action, action);
 
@@ -132,11 +133,39 @@ fn defaults_include_operation_bindings() {
     let maps = default_keymaps();
     let action = maps.get(&InputMode::Action).unwrap();
 
+    assert_eq!(action.get(&KeyBinding::new(Char('B'), KeyModifiers::SHIFT)), Some(&Command::RenameBranch));
     assert_eq!(action.get(&KeyBinding::new(Char('r'), KeyModifiers::NONE)), Some(&Command::Rebase));
     assert_eq!(action.get(&KeyBinding::new(Char('R'), KeyModifiers::SHIFT)), Some(&Command::Revert));
     assert_eq!(action.get(&KeyBinding::new(Char('m'), KeyModifiers::NONE)), Some(&Command::Merge));
     assert_eq!(action.get(&KeyBinding::new(Char('C'), KeyModifiers::SHIFT)), Some(&Command::ContinueOperation));
     assert_eq!(action.get(&KeyBinding::new(Char('A'), KeyModifiers::SHIFT)), Some(&Command::AbortOperation));
+}
+
+#[test]
+fn existing_keymaps_gain_rename_branch_when_available() {
+    let mut maps = IndexMap::new();
+    maps.insert(InputMode::Normal, IndexMap::new());
+    maps.insert(InputMode::Action, IndexMap::new());
+
+    assert!(ensure_default_keymap_bindings(&mut maps));
+
+    let action = maps.get(&InputMode::Action).unwrap();
+    assert_eq!(action.get(&KeyBinding::new(Char('B'), KeyModifiers::SHIFT)), Some(&Command::RenameBranch));
+}
+
+#[test]
+fn existing_keymaps_do_not_override_rename_branch_conflicts() {
+    let mut maps = IndexMap::new();
+    maps.insert(InputMode::Normal, IndexMap::new());
+    let mut action = IndexMap::new();
+    action.insert(KeyBinding::new(Char('B'), KeyModifiers::SHIFT), Command::CreateBranch);
+    maps.insert(InputMode::Action, action);
+
+    assert!(ensure_default_keymap_bindings(&mut maps));
+
+    let action = maps.get(&InputMode::Action).unwrap();
+    assert_eq!(action.get(&KeyBinding::new(Char('B'), KeyModifiers::SHIFT)), Some(&Command::CreateBranch));
+    assert!(!action.values().any(|command| command == &Command::RenameBranch));
 }
 
 #[test]

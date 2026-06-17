@@ -1,5 +1,5 @@
 use crate::{
-    app::app::{App, AuthInputField, Focus, OperationKind, PendingOperationAction, Viewport},
+    app::app::{App, AuthInputField, BranchModalAction, Focus, OperationKind, PendingOperationAction, Viewport},
     core::graph_service::GraphPaneRow,
     git::{
         actions::{
@@ -727,6 +727,60 @@ impl App {
 
     pub fn clear_pending_branch_target(&mut self) {
         self.pending_branch_target_oid = None;
+    }
+
+    pub(crate) fn open_branch_rename_modal(&mut self, branch: String) {
+        self.modal_input.set_value(branch.clone());
+        self.modal_rename_branch_source = Some(branch);
+        self.focus = Focus::ModalRenameBranch;
+    }
+
+    pub fn on_rename_branch(&mut self) {
+        let Some(repo) = self.repo.clone() else { return };
+
+        match self.viewport {
+            Viewport::Settings | Viewport::Viewer => return,
+            _ => {},
+        }
+
+        match self.focus {
+            Focus::Branches => {
+                let Some(branch) = self.branch_name_at_pane_selection() else {
+                    return;
+                };
+
+                if repo.find_branch(&branch, BranchType::Local).is_ok() {
+                    self.open_branch_rename_modal(branch);
+                } else {
+                    self.show_error("Rename branch failed: only local branches can be renamed");
+                }
+            },
+            Focus::Viewport => {
+                if self.viewport != Viewport::Graph || self.graph_selected == 0 {
+                    return;
+                }
+
+                let Some(alias) = self.graph_alias_at(self.graph_selected) else {
+                    return;
+                };
+                let branch_names = self.graph_branch_choices(alias);
+                if branch_names.is_empty() {
+                    return;
+                }
+
+                let local_branch_names = self.graph_local_branch_choices(alias);
+                match local_branch_names.as_slice() {
+                    [] => self.show_error("Rename branch failed: only local branches can be renamed"),
+                    [branch] => self.open_branch_rename_modal(branch.clone()),
+                    _ => {
+                        self.modal_branch_action = BranchModalAction::Rename;
+                        self.modal_solo_selected = 0;
+                        self.focus = Focus::ModalSolo;
+                    },
+                }
+            },
+            _ => {},
+        }
     }
 
     pub(crate) fn delete_branch_from_ui(&mut self, branch: &str) {

@@ -91,6 +91,7 @@ pub enum Command {
     ToggleBranch,
     CreateBranch,
     DeleteBranch,
+    RenameBranch,
     Tag,
     Untag,
     Cherrypick,
@@ -476,6 +477,9 @@ fn default_action_keymap() -> IndexMap<KeyBinding, Command> {
     // 'D' for delete branch (vim uses 'D' to delete to end of line)
     map.insert(KeyBinding::new(Char('D'), KeyModifiers::SHIFT), Command::DeleteBranch);
 
+    // 'B' renames a local branch; paired with normal-mode 'b' branch creation.
+    map.insert(KeyBinding::new(Char('B'), KeyModifiers::SHIFT), Command::RenameBranch);
+
     // 'U' for untag (capital U to match vim's "undo whole line" conceptually)
     map.insert(KeyBinding::new(Char('U'), KeyModifiers::SHIFT), Command::Untag);
 
@@ -531,6 +535,12 @@ fn ensure_default_keymap_bindings(maps: &mut Keymaps) -> bool {
     let reload_all_key = KeyBinding::new(Char('R'), KeyModifiers::SHIFT);
     if !normal_map.values().any(|existing| existing == &Command::ReloadAllBranches) && !normal_map.contains_key(&reload_all_key) {
         normal_map.insert(reload_all_key, Command::ReloadAllBranches);
+        changed = true;
+    }
+    let action_map = maps.entry(InputMode::Action).or_default();
+    let rename_branch_key = KeyBinding::new(Char('B'), KeyModifiers::SHIFT);
+    if !action_map.values().any(|existing| existing == &Command::RenameBranch) && !action_map.contains_key(&rename_branch_key) {
+        action_map.insert(rename_branch_key, Command::RenameBranch);
         changed = true;
     }
     changed

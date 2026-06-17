@@ -172,6 +172,7 @@ impl Default for App {
             pending_cherrypick_oid: None,
             pending_revert_oid: None,
             pending_branch_target_oid: None,
+            modal_rename_branch_source: None,
             modal_worktree_name: String::new(),
             modal_worktree_selected: 0,
             modal_worktree_candidates: Vec::new(),

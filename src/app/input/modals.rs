@@ -2,7 +2,7 @@ use crate::{
     app::app::{App, AuthInputField, Focus, OperationKind, PendingGraphLookup},
     core::graph_service::GraphLookupKind,
     git::actions::{
-        branching::create_branch,
+        branching::{create_branch, rename_branch},
         cherrypicking::{CherrypickOutcome, start_cherrypick},
         committing::commit_staged,
         reverting::{RevertOutcome, start_revert},
@@ -10,7 +10,10 @@ use crate::{
         worktrees::{create_worktree, is_valid_worktree_name, lock_worktree},
     },
     git::queries::{diffs::get_filenames_diff_at_oid, files::search_tracked_files},
-    helpers::keymap::{KeyBinding, rebind_keymap_selection, save_keymaps, save_keymaps_to_path},
+    helpers::{
+        branch_visibility::save_branch_visibility,
+        keymap::{KeyBinding, rebind_keymap_selection, save_keymaps, save_keymaps_to_path},
+    },
 };
 use git2::Oid;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -390,6 +393,44 @@ impl App {
                                     self.focus = Focus::Viewport;
                                 },
                                 Err(error) => self.show_error(format!("Create branch failed: {error}")),
+                            }
+                        }
+                    },
+                    _ => {
+                        self.modal_input.on_key(key_event);
+                    },
+                }
+                true
+            },
+            Focus::ModalRenameBranch => {
+                match key_event.code {
+                    KeyCode::Esc => {
+                        self.focus = Focus::Viewport;
+                        self.modal_rename_branch_source = None;
+                        self.modal_input.clear();
+                    },
+                    KeyCode::Enter => {
+                        if let Some(repo) = self.repo.clone() {
+                            let Some(source) = self.modal_rename_branch_source.clone() else {
+                                self.show_error("Rename branch failed: no branch is pending");
+                                return true;
+                            };
+                            let new_name = self.modal_input.value().trim().to_string();
+                            match rename_branch(&repo, &source, &new_name) {
+                                Ok(_) => {
+                                    if self.branches.hidden_branch_names.contains(source.as_str()) {
+                                        self.branches.hidden_branch_names.remove(source.as_str());
+                                        self.branches.hidden_branch_names.insert(new_name);
+                                        if let Some(path) = &self.path {
+                                            save_branch_visibility(path, &self.branches.hidden_branch_names);
+                                        }
+                                    }
+                                    self.modal_input.clear();
+                                    self.modal_rename_branch_source = None;
+                                    self.reload(None);
+                                    self.focus = Focus::Viewport;
+                                },
+                                Err(error) => self.show_error(format!("Rename branch failed: {error}")),
                             }
                         }
                     },

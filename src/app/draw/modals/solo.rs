@@ -20,13 +20,14 @@ impl App {
         let line_text = match self.modal_branch_action {
             BranchModalAction::Solo => "select a branch to solo",
             BranchModalAction::Toggle => "select a branch to toggle",
+            BranchModalAction::Rename => "select a branch to rename",
         };
         lines.push(Line::default());
         lines.push(Line::from(vec![Span::styled(line_text, Style::default().fg(self.theme.COLOR_TEXT))]));
         lines.push(Line::default());
 
         // Modal choices mirror the branches currently selectable from the graph row.
-        let branches = self.graph_branch_choices(alias);
+        let branches = self.modal_branch_action_choices(alias);
 
         branches.iter().enumerate().for_each(|(idx, branch)| {
             height += 1;

@@ -262,6 +262,100 @@ fn create_branch_from_reflog_uses_reflog_commit_target() {
 }
 
 #[test]
+fn rename_branch_from_pane_opens_prefilled_modal_for_local_branch() {
+    let (_path, repo) = temp_repo("rename-pane-local");
+    let oid = commit(&repo, "file.txt", "initial");
+    let target = repo.find_commit(oid).unwrap();
+    repo.branch("feature", &target, false).unwrap();
+    drop(target);
+
+    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Branches, ..Default::default() };
+    app.branches.sorted = vec![(1, "feature".to_string())];
+
+    app.on_rename_branch();
+
+    assert_eq!(app.focus, Focus::ModalRenameBranch);
+    assert_eq!(app.modal_rename_branch_source.as_deref(), Some("feature"));
+    assert_eq!(app.modal_input.value(), "feature");
+}
+
+#[test]
+fn rename_branch_from_pane_rejects_remote_branch() {
+    let (_path, repo) = temp_repo("rename-pane-remote");
+    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Branches, ..Default::default() };
+    app.branches.sorted = vec![(1, "origin/feature".to_string())];
+
+    app.on_rename_branch();
+
+    assert_eq!(app.focus, Focus::ModalError);
+    assert!(app.modal_error_message.contains("only local branches"));
+    assert_eq!(app.modal_rename_branch_source, None);
+}
+
+#[test]
+fn rename_branch_from_graph_single_local_label_opens_modal() {
+    let (_path, repo) = temp_repo("rename-graph-single");
+    let oid = commit(&repo, "file.txt", "initial");
+    let target = repo.find_commit(oid).unwrap();
+    repo.branch("feature", &target, false).unwrap();
+    drop(target);
+
+    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, graph_selected: 1, ..Default::default() };
+    let alias = app.oids.get_alias_by_oid(oid);
+    app.oids.sorted_aliases = vec![NONE, alias];
+    app.branches.sorted = vec![(alias, "feature".to_string())];
+
+    app.on_rename_branch();
+
+    assert_eq!(app.focus, Focus::ModalRenameBranch);
+    assert_eq!(app.modal_rename_branch_source.as_deref(), Some("feature"));
+}
+
+#[test]
+fn rename_branch_from_graph_multiple_local_labels_uses_branch_choice_modal() {
+    let (_path, repo) = temp_repo("rename-graph-multiple");
+    let oid = commit(&repo, "file.txt", "initial");
+    let target = repo.find_commit(oid).unwrap();
+    repo.branch("feature", &target, false).unwrap();
+    repo.branch("topic", &target, false).unwrap();
+    drop(target);
+
+    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, graph_selected: 1, ..Default::default() };
+    let alias = app.oids.get_alias_by_oid(oid);
+    app.oids.sorted_aliases = vec![NONE, alias];
+    app.branches.sorted = vec![(alias, "feature".to_string()), (alias, "topic".to_string())];
+
+    app.on_rename_branch();
+
+    assert_eq!(app.focus, Focus::ModalSolo);
+    assert_eq!(app.modal_branch_action, BranchModalAction::Rename);
+
+    app.modal_solo_selected = 1;
+    app.on_select();
+
+    assert_eq!(app.focus, Focus::ModalRenameBranch);
+    assert_eq!(app.modal_rename_branch_source.as_deref(), Some("topic"));
+    assert_eq!(app.modal_input.value(), "topic");
+}
+
+#[test]
+fn rename_branch_from_graph_rejects_remote_only_labels() {
+    let (_path, repo) = temp_repo("rename-graph-remote");
+    let oid = commit(&repo, "file.txt", "initial");
+    repo.reference("refs/remotes/origin/feature", oid, true, "remote").unwrap();
+
+    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, graph_selected: 1, ..Default::default() };
+    let alias = app.oids.get_alias_by_oid(oid);
+    app.oids.sorted_aliases = vec![NONE, alias];
+    app.branches.sorted = vec![(alias, "origin/feature".to_string())];
+
+    app.on_rename_branch();
+
+    assert_eq!(app.focus, Focus::ModalError);
+    assert!(app.modal_error_message.contains("only local branches"));
+}
+
+#[test]
 fn auth_required_network_result_opens_auth_modal() {
     let challenge = AuthChallenge {
         url: "https://github.com/asinglebit/guitar.git".to_string(),

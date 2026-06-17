@@ -15,6 +15,7 @@ use crate::{
         palette::Theme,
     },
 };
+use git2::BranchType;
 use ratatui::layout::Rect;
 
 #[derive(Clone, Copy)]
@@ -592,15 +593,26 @@ impl App {
                 let Some(alias) = self.graph_alias_at(self.graph_selected) else {
                     return;
                 };
-                let branch_names = self.graph_branch_choices(alias);
+                let branch_names = self.modal_branch_action_choices(alias);
                 let mut should_reload = false;
 
-                if let Some(branch) = branch_names.get(self.modal_solo_selected as usize) {
+                if let Some(branch) = branch_names.get(self.modal_solo_selected as usize).cloned() {
                     match self.modal_branch_action {
-                        BranchModalAction::Solo => self.solo_branch_name(branch),
-                        BranchModalAction::Toggle => self.toggle_branch_name(branch),
+                        BranchModalAction::Solo => {
+                            self.solo_branch_name(&branch);
+                            should_reload = true;
+                        },
+                        BranchModalAction::Toggle => {
+                            self.toggle_branch_name(&branch);
+                            should_reload = true;
+                        },
+                        BranchModalAction::Rename => {
+                            self.modal_solo_selected = 0;
+                            self.modal_branch_action = BranchModalAction::Solo;
+                            self.open_branch_rename_modal(branch);
+                            return;
+                        },
                     }
-                    should_reload = true;
                 }
 
                 self.modal_solo_selected = 0;
@@ -1099,7 +1111,7 @@ impl App {
             },
             Focus::ModalSolo => {
                 if let Some(alias) = self.graph_alias_at(self.graph_selected) {
-                    let branch_names = self.graph_branch_choices(alias);
+                    let branch_names = self.modal_branch_action_choices(alias);
                     Self::wrap_modal_selection(&mut self.modal_solo_selected, branch_names.len(), Direction::Up);
                 }
             },
@@ -1183,7 +1195,7 @@ impl App {
             },
             Focus::ModalSolo => {
                 if let Some(alias) = self.graph_alias_at(self.graph_selected) {
-                    let branch_names = self.graph_branch_choices(alias);
+                    let branch_names = self.modal_branch_action_choices(alias);
                     Self::wrap_modal_selection(&mut self.modal_solo_selected, branch_names.len(), Direction::Down);
                 }
             },
@@ -1674,7 +1686,7 @@ impl App {
         };
     }
 
-    fn branch_name_at_pane_selection(&self) -> Option<String> {
+    pub(crate) fn branch_name_at_pane_selection(&self) -> Option<String> {
         if let Some(window) = &self.graph.branches_window
             && self.branches_selected >= window.start
             && self.branches_selected < window.end
@@ -1759,6 +1771,25 @@ impl App {
         choices
     }
 
+    pub(crate) fn is_local_branch_name(&self, branch: &str) -> bool {
+        if let Some(repo) = &self.repo {
+            return repo.find_branch(branch, BranchType::Local).is_ok();
+        }
+
+        self.branches.local.values().any(|branches| branches.iter().any(|local| local.as_str() == branch))
+    }
+
+    pub(crate) fn graph_local_branch_choices(&self, alias: u32) -> Vec<String> {
+        self.graph_branch_choices(alias).into_iter().filter(|branch| self.is_local_branch_name(branch)).collect()
+    }
+
+    pub(crate) fn modal_branch_action_choices(&self, alias: u32) -> Vec<String> {
+        match self.modal_branch_action {
+            BranchModalAction::Rename => self.graph_local_branch_choices(alias),
+            BranchModalAction::Solo | BranchModalAction::Toggle => self.graph_branch_choices(alias),
+        }
+    }
+
     fn apply_graph_branch_action(&mut self, action: BranchModalAction) {
         if self.viewport != Viewport::Graph || self.graph_selected == 0 {
             return;
@@ -1772,11 +1803,18 @@ impl App {
         match branch_names.as_slice() {
             [] => {},
             [branch] => {
+                let mut should_reload = true;
                 match action {
                     BranchModalAction::Solo => self.solo_branch_name(branch),
                     BranchModalAction::Toggle => self.toggle_branch_name(branch),
+                    BranchModalAction::Rename => {
+                        self.open_branch_rename_modal(branch.clone());
+                        should_reload = false;
+                    },
                 }
-                self.reload(None);
+                if should_reload {
+                    self.reload(None);
+                }
             },
             _ => {
                 self.modal_branch_action = action;
@@ -1831,6 +1869,11 @@ impl App {
             Focus::ModalCreateBranch => {
                 self.modal_input.clear();
                 self.clear_pending_branch_target();
+                self.focus = Focus::Viewport;
+            },
+            Focus::ModalRenameBranch => {
+                self.modal_input.clear();
+                self.modal_rename_branch_source = None;
                 self.focus = Focus::Viewport;
             },
             Focus::ModalCreateWorktreeName | Focus::ModalCreateWorktreePath => {
@@ -1936,12 +1979,19 @@ impl App {
                 self.pending_revert_oid = None;
                 self.focus = Focus::Viewport;
             },
-            Focus::ModalCommit | Focus::ModalCreateBranch | Focus::ModalCreateWorktreeName | Focus::ModalCreateWorktreePath | Focus::ModalLockWorktree | Focus::ModalFileSearch => {
+            Focus::ModalCommit
+            | Focus::ModalCreateBranch
+            | Focus::ModalRenameBranch
+            | Focus::ModalCreateWorktreeName
+            | Focus::ModalCreateWorktreePath
+            | Focus::ModalLockWorktree
+            | Focus::ModalFileSearch => {
                 self.modal_input.clear();
                 self.modal_file_search_results.clear();
                 self.modal_file_search_selected = 0;
                 self.modal_file_search_scroll.set(0);
                 self.clear_pending_branch_target();
+                self.modal_rename_branch_source = None;
                 self.focus = Focus::Viewport;
             },
             Focus::ModalAuth | Focus::ModalNetworkProgress => {

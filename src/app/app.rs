@@ -13,7 +13,7 @@ use crate::{
         branch_visibility::{current_branch_names, load_branch_visibility, prune_hidden_branches, save_branch_visibility},
         copy::{
             STR_CHERRYPICK_COMMIT, STR_CREATE_BRANCH, STR_CREATE_COMMIT, STR_CREATE_TAG, STR_CREATE_WORKTREE_NAME, STR_CREATE_WORKTREE_PATH, STR_FIND_FILE, STR_FIND_SHA, STR_LOCK_WORKTREE,
-            STR_REVERT_COMMIT,
+            STR_RENAME_BRANCH, STR_REVERT_COMMIT,
         },
         heatmap::{DAYS, WEEKS, empty_heatmap},
         keymap::{Command, KeyBinding, KeymapEditError, KeymapSelection},
@@ -96,6 +96,7 @@ pub enum Focus {
     ModalCherrypick,
     ModalRevert,
     ModalCreateBranch,
+    ModalRenameBranch,
     ModalCreateWorktreeName,
     ModalCreateWorktreePath,
     ModalDeleteBranch,
@@ -164,6 +165,7 @@ pub enum AuthInputField {
 pub enum BranchModalAction {
     Solo,
     Toggle,
+    Rename,
 }
 
 #[derive(Default)]
@@ -459,6 +461,7 @@ pub struct App {
     pub pending_cherrypick_oid: Option<Oid>,
     pub pending_revert_oid: Option<Oid>,
     pub pending_branch_target_oid: Option<Oid>,
+    pub modal_rename_branch_source: Option<String>,
     pub modal_worktree_name: String,
     pub modal_worktree_selected: i32,
     pub modal_worktree_candidates: Vec<usize>,
@@ -674,6 +677,9 @@ impl App {
                 },
                 Focus::ModalCreateBranch => {
                     self.draw_surface(frame, DrawSurface::Modal, |app, surface| app.draw_modal_input(surface, STR_CREATE_BRANCH));
+                },
+                Focus::ModalRenameBranch => {
+                    self.draw_surface(frame, DrawSurface::Modal, |app, surface| app.draw_modal_input(surface, STR_RENAME_BRANCH));
                 },
                 Focus::ModalCreateWorktreeName => {
                     self.draw_surface(frame, DrawSurface::Modal, |app, surface| app.draw_modal_input(surface, STR_CREATE_WORKTREE_NAME));

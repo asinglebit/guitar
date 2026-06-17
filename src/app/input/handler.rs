@@ -101,6 +101,7 @@ impl App {
             Command::PushTags => self.on_push_tags(),
             Command::CreateBranch => self.on_create_branch(),
             Command::DeleteBranch => self.on_delete_branch(),
+            Command::RenameBranch => self.on_rename_branch(),
             Command::CreateWorktree => self.on_create_worktree(),
             Command::RemoveWorktree => self.on_remove_worktree(),
             Command::ToggleWorktreeLock => self.on_toggle_worktree_lock(),

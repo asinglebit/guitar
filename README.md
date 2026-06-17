@@ -519,6 +519,7 @@ Press `Ctrl+a`, then one of these keys.
 | Force Push | `Shift+P` |
 | Push Tags | `Shift+V` |
 | Delete Branch | `Shift+D` |
+| Rename Branch | `Shift+B` |
 | Remove Worktree | `Shift+W` |
 | Toggle Worktree Lock | `Shift+L` |
 | Delete Tag | `Shift+U` |
@@ -625,6 +626,17 @@ Action key: `Ctrl+a`, then `Shift+D`.
 - Remote branch deletion pushes an empty source refspec to the selected remote branch.
 
 Remote deletion derives the remote from the branch name. For example, `origin/topic` deletes `topic` from `origin`.
+
+### Rename Branch
+
+Action key: `Ctrl+a`, then `Shift+B`.
+
+- Branch pane focus renames the selected local branch.
+- Graph focus renames a local branch label attached to the selected commit.
+- If multiple local branch labels are present, a modal lets you choose.
+- Remote branches cannot be renamed from `guitar`.
+- Rename opens a single-line branch name prompt. Invalid, unchanged, or existing names show the error modal and return to the prompt.
+- Renaming a branch does not push, delete, or rename any remote branch.
 
 ### Tags
 
@@ -1150,7 +1162,7 @@ Important source areas:
 - Tag creation is lightweight only.
 - No annotated-tag message flow.
 - No remote tag deletion flow.
-- Branch rename, remote management, and branch upstream editing are not implemented.
+- Remote management and branch upstream editing are not implemented.
 - Search matches loaded commit SHA prefixes only.
 - Search does not match commit messages, authors, branches, tags, filenames, or unloaded history.
 - Recent repositories are append-only from inside the app.

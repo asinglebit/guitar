@@ -1079,6 +1079,7 @@ impl App {
                 | Focus::ModalCherrypick
                 | Focus::ModalRevert
                 | Focus::ModalCreateBranch
+                | Focus::ModalRenameBranch
                 | Focus::ModalCreateWorktreeName
                 | Focus::ModalCreateWorktreePath
                 | Focus::ModalDeleteBranch
