@@ -216,9 +216,61 @@ fn settings_renders_layout_visibility_rows_with_states() {
     assert!(rendered.contains("8 SHAs:"));
     assert!(rendered.contains("\\ submodules:"));
     assert!(rendered.contains("0 reset layout:"));
-    assert!(rendered.contains("[*]"));
-    assert!(rendered.contains("[ ]"));
+    assert!(rendered.contains("🞕"));
+    assert!(rendered.contains("🞎"));
+    assert!(!rendered.contains("[*]"));
+    assert!(!rendered.contains("[ ]"));
     assert!(rendered.contains("(enter)"));
+}
+
+#[test]
+fn settings_renders_theme_rows_with_unicode_markers() {
+    let (_path, repo) = temp_repo("theme-markers");
+    let mut app = settings_app();
+    app.settings_tab = SettingsTab::Display;
+    app.layout.graph = Rect::new(0, 0, 120, 120);
+    app.layout.app = Rect::new(0, 0, 120, 120);
+
+    let rendered = rendered_settings(&mut app, &repo, 120, 120);
+
+    assert!(rendered.contains("themes:"));
+    assert!(rendered.contains("🞊"));
+    assert!(rendered.contains("🞅"));
+    assert!(!rendered.contains("(*)"));
+    assert!(!rendered.contains("( )"));
+}
+
+#[test]
+fn settings_narrow_tab_bar_uses_compact_bullets() {
+    let (_path, repo) = temp_repo("compact-tabs");
+    let mut app = settings_app();
+    app.layout.graph = Rect::new(0, 0, 30, 80);
+    app.layout.app = Rect::new(0, 0, 30, 80);
+
+    let lines = app.settings_lines(&repo);
+    let tab_line = app.settings_tab_hitboxes.first().unwrap().line;
+    let tab_text = line_text(&lines[tab_line]);
+
+    assert!(tab_text.contains("• • • • •"));
+    assert!(!tab_text.contains("paths"));
+    assert!(!tab_text.contains("display"));
+    assert!(!tab_text.contains("shortcuts"));
+    assert_eq!(app.settings_tab_hitboxes.len(), 5);
+    assert!(app.settings_tab_hitboxes.iter().all(|hitbox| hitbox.end.saturating_sub(hitbox.start) == 1));
+
+    let mut tiny_app = settings_app();
+    tiny_app.layout.graph = Rect::new(0, 0, 12, 80);
+    tiny_app.layout.app = Rect::new(0, 0, 12, 80);
+
+    let tiny_lines = tiny_app.settings_lines(&repo);
+    let tiny_tab_line = tiny_app.settings_tab_hitboxes.first().unwrap().line;
+    let tiny_tab_text = line_text(&tiny_lines[tiny_tab_line]);
+    let rendered_bullets = tiny_tab_text.chars().filter(|&character| character == '•').count();
+
+    assert_eq!(rendered_bullets, 2);
+    assert_eq!(tiny_app.settings_tab_hitboxes.len(), rendered_bullets);
+    assert!(!tiny_tab_text.contains(' '));
+    assert!(!tiny_tab_text.contains("paths"));
 }
 
 #[test]

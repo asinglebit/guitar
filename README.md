@@ -1231,10 +1231,7 @@ Important source areas:
 - No annotated-tag message flow.
 - No remote tag deletion flow.
 - Branch upstream editing is not implemented.
-- Search matches loaded commit SHA prefixes only.
 - Search does not match commit messages, authors, branches, tags, filenames, or unloaded history.
-- Recent repositories are append-only from inside the app.
-- Text prompts are single-line.
 
 ## Roadmap
 

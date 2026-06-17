@@ -36,6 +36,12 @@ const SETTINGS_LAYOUT_COMMANDS: &[(char, Command, &str)] = &[
     ('0', Command::ResetLayout, "reset layout"),
 ];
 
+const SETTINGS_TAB_COMPACT_LABEL: &str = "•";
+const SETTINGS_LAYOUT_OFF: &str = "🞎";
+const SETTINGS_LAYOUT_ON: &str = "🞕";
+const SETTINGS_THEME_OFF: &str = "🞅";
+const SETTINGS_THEME_ON: &str = "🞊";
+
 impl App {
     fn settings_section_line(&self, label: &str, width: usize) -> Line<'static> {
         Line::from(Span::styled(fill_width(label, "", width), Style::default().fg(self.theme.COLOR_HIGHLIGHTED))).centered()
@@ -52,79 +58,79 @@ impl App {
         match command {
             Command::ToggleBranches => {
                 if self.layout_config.is_branches {
-                    "[*]"
+                    SETTINGS_LAYOUT_ON
                 } else {
-                    "[ ]"
+                    SETTINGS_LAYOUT_OFF
                 }
             },
             Command::ToggleTags => {
                 if self.layout_config.is_tags {
-                    "[*]"
+                    SETTINGS_LAYOUT_ON
                 } else {
-                    "[ ]"
+                    SETTINGS_LAYOUT_OFF
                 }
             },
             Command::ToggleStashes => {
                 if self.layout_config.is_stashes {
-                    "[*]"
+                    SETTINGS_LAYOUT_ON
                 } else {
-                    "[ ]"
+                    SETTINGS_LAYOUT_OFF
                 }
             },
             Command::ToggleStatus => {
                 if self.layout_config.is_status {
-                    "[*]"
+                    SETTINGS_LAYOUT_ON
                 } else {
-                    "[ ]"
+                    SETTINGS_LAYOUT_OFF
                 }
             },
             Command::ToggleInspector => {
                 if self.layout_config.is_inspector {
-                    "[*]"
+                    SETTINGS_LAYOUT_ON
                 } else {
-                    "[ ]"
+                    SETTINGS_LAYOUT_OFF
                 }
             },
             Command::ToggleWorktrees => {
                 if self.layout_config.is_worktrees {
-                    "[*]"
+                    SETTINGS_LAYOUT_ON
                 } else {
-                    "[ ]"
+                    SETTINGS_LAYOUT_OFF
                 }
             },
             Command::ToggleSubmodules => {
                 if self.layout_config.is_submodules {
-                    "[*]"
+                    SETTINGS_LAYOUT_ON
                 } else {
-                    "[ ]"
+                    SETTINGS_LAYOUT_OFF
                 }
             },
             Command::ToggleReflogs => {
                 if self.layout_config.is_reflogs {
-                    "[*]"
+                    SETTINGS_LAYOUT_ON
                 } else {
-                    "[ ]"
+                    SETTINGS_LAYOUT_OFF
                 }
             },
             Command::ToggleSearch => {
                 if self.layout_config.is_search {
-                    "[*]"
+                    SETTINGS_LAYOUT_ON
                 } else {
-                    "[ ]"
+                    SETTINGS_LAYOUT_OFF
                 }
             },
             Command::ToggleShas => {
                 if self.layout_config.is_shas {
-                    "[*]"
+                    SETTINGS_LAYOUT_ON
                 } else {
-                    "[ ]"
+                    SETTINGS_LAYOUT_OFF
                 }
             },
             Command::ToggleGraphReflogs => {
                 if self.layout_config.is_graph_reflogs {
-                    "[*]"
+                    SETTINGS_LAYOUT_ON
                 } else {
-                    "[ ]"
+                    SETTINGS_LAYOUT_OFF
                 }
             },
             Command::ResetLayout => "(enter)",
@@ -148,9 +154,7 @@ impl App {
         x.saturating_add(width.saturating_sub(text_width as u16) / 2)
     }
 
-    fn settings_tab_bar_line(&mut self, width: usize, line: usize) -> Line<'static> {
-        let tab_gap = "  ";
-        let labels: Vec<(SettingsTab, String)> = SettingsTab::ALL.iter().map(|&tab| (tab, format!(" {} ", tab.label()))).collect();
+    fn settings_tab_bar_from_labels(&mut self, width: usize, line: usize, tab_gap: &'static str, labels: &[(SettingsTab, String)]) -> Line<'static> {
         let base_width = labels.iter().map(|(_, label)| label.chars().count()).sum::<usize>().saturating_add(tab_gap.chars().count().saturating_mul(labels.len().saturating_sub(1)));
         let pad = width.saturating_sub(base_width);
         let left_pad = pad / 2;
@@ -189,6 +193,22 @@ impl App {
         }
 
         Line::from(spans).centered()
+    }
+
+    fn settings_tab_bar_line(&mut self, width: usize, line: usize) -> Line<'static> {
+        let full_tab_gap = "  ";
+        let full_labels: Vec<(SettingsTab, String)> = SettingsTab::ALL.iter().map(|&tab| (tab, format!(" {} ", tab.label()))).collect();
+        let full_width = full_labels.iter().map(|(_, label)| label.chars().count()).sum::<usize>().saturating_add(full_tab_gap.chars().count().saturating_mul(full_labels.len().saturating_sub(1)));
+
+        if full_width <= width {
+            return self.settings_tab_bar_from_labels(width, line, full_tab_gap, &full_labels);
+        }
+
+        let compact_tab_gap = if width >= SettingsTab::ALL.len().saturating_mul(2).saturating_sub(1) { " " } else { "" };
+        let visible_tabs = if compact_tab_gap.is_empty() { width.min(SettingsTab::ALL.len()) } else { SettingsTab::ALL.len() };
+        let compact_labels: Vec<(SettingsTab, String)> = SettingsTab::ALL.iter().take(visible_tabs).map(|&tab| (tab, SETTINGS_TAB_COMPACT_LABEL.to_string())).collect();
+
+        self.settings_tab_bar_from_labels(width, line, compact_tab_gap, &compact_labels)
     }
 
     fn add_settings_selection(&mut self, lines: &[Line<'static>], kind: SettingsSelectionKind) {
@@ -316,7 +336,7 @@ impl App {
 
         for (idx, preset) in Theme::presets().iter().enumerate() {
             let label = format!(" {}", preset.label);
-            let marker = format!("({}) ", if self.theme.name == preset.theme.name { "*" } else { " " });
+            let marker = format!("{} ", if self.theme.name == preset.theme.name { SETTINGS_THEME_ON } else { SETTINGS_THEME_OFF });
             let mut style = Style::default().fg(self.theme.COLOR_TEXT);
             if idx.is_multiple_of(2) {
                 style = style.bg(self.theme.background_or_default(self.theme.COLOR_GREY_900));
