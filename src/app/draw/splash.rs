@@ -17,12 +17,16 @@ impl App {
             .unwrap_or_else(|| fallback.to_string())
     }
 
-    pub(crate) fn recent_repository_actions_text(&self) -> String {
+    pub(crate) fn recent_repository_actions_detail_text(&self) -> String {
         let remove = self.recent_repository_command_key(&Command::RemoveRecentRepository, "d");
         let move_up = self.recent_repository_command_key(&Command::MoveRecentRepositoryUp, "Shift + K");
         let move_down = self.recent_repository_command_key(&Command::MoveRecentRepositoryDown, "Shift + J");
 
-        format!("actions: remove ({remove}) | move up ({move_up}) | move down ({move_down})")
+        format!("remove ({remove}) | move up ({move_up}) | move down ({move_down})")
+    }
+
+    pub(crate) fn recent_repository_actions_text(&self) -> String {
+        format!("actions: {}", self.recent_repository_actions_detail_text())
     }
 
     #[rustfmt::skip]

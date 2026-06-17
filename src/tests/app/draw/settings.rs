@@ -58,6 +58,20 @@ fn rendered_settings(app: &mut App, repo: &Repository, width: u16, height: u16) 
     terminal.backend().buffer().content().iter().map(|cell| cell.symbol()).collect::<String>()
 }
 
+fn line_text(line: &ratatui::text::Line<'_>) -> String {
+    line.spans.iter().map(|span| span.content.as_ref()).collect::<String>()
+}
+
+fn remote_selection_lines(app: &App, remote_name: &str) -> Vec<usize> {
+    app.settings_selections
+        .iter()
+        .filter_map(|selection| match &selection.kind {
+            SettingsSelectionKind::Remote(name) if name == remote_name => Some(selection.line),
+            _ => None,
+        })
+        .collect()
+}
+
 #[test]
 fn settings_scroll_keeps_visible_selection_without_recentering() {
     let (_path, repo) = temp_repo("visible");
@@ -200,11 +214,32 @@ fn settings_renders_recent_repositories_section_with_actions_and_selectable_rows
 
     assert!(rendered.contains("recent file:"));
     assert!(rendered.contains("recent repositories:"));
-    assert!(rendered.contains("actions: remove (d) | move up (Shift + K) | move down (Shift + J)"));
+    assert!(rendered.contains("actions:"));
+    assert!(rendered.contains("remove (d) | move up (Shift + K) | move down (Shift + J)"));
+    assert!(!rendered.contains("actions: remove (d)"));
     assert!(rendered.contains("/repo/a"));
     assert!(rendered.contains("/repo/b"));
     assert!(app.settings_selections.iter().any(|selection| selection.kind == SettingsSelectionKind::RecentRepository(0)));
     assert!(app.settings_selections.iter().any(|selection| selection.kind == SettingsSelectionKind::RecentRepository(1)));
+}
+
+#[test]
+fn settings_recent_repository_actions_use_split_row_and_current_keymap_bindings() {
+    let (_path, repo) = temp_repo("recent-actions-keymap");
+    let mut app = settings_app();
+    app.layout.graph = Rect::new(0, 0, 140, 120);
+    app.layout.app = Rect::new(0, 0, 140, 120);
+    let normal = app.keymaps.get_mut(&InputMode::Normal).unwrap();
+    normal.insert(KeyBinding::new(KeyCode::Char('x'), KeyModifiers::NONE), Command::RemoveRecentRepository);
+    normal.insert(KeyBinding::new(KeyCode::Char('U'), KeyModifiers::SHIFT), Command::MoveRecentRepositoryUp);
+    normal.insert(KeyBinding::new(KeyCode::F(2), KeyModifiers::NONE), Command::MoveRecentRepositoryDown);
+
+    let lines = app.settings_lines(&repo);
+    let actions = lines.iter().map(line_text).find(|line| line.contains("remove (x) | move up (Shift + U) | move down (F(2))")).unwrap();
+
+    assert!(actions.starts_with(" actions:"));
+    assert!(actions.contains("actions:  "));
+    assert!(actions.ends_with("remove (x) | move up (Shift + U) | move down (F(2)) "));
 }
 
 #[test]
@@ -240,17 +275,41 @@ fn settings_renders_remotes_section_with_add_and_empty_state() {
 fn settings_renders_remote_rows_with_fetch_and_push_urls() {
     let (_path, repo) = temp_repo("remote-rows");
     repo.remote("origin", "https://example.com/repo.git").unwrap();
+    let mut app = settings_app();
+    app.layout.graph = Rect::new(0, 0, 180, 140);
+    app.layout.app = Rect::new(0, 0, 180, 140);
+
+    let lines = app.settings_lines(&repo);
+    let rendered = lines.iter().map(line_text).collect::<Vec<_>>().join("\n");
+    let selection_lines = remote_selection_lines(&app, "origin");
+    let selection_texts = selection_lines.iter().map(|line| line_text(&lines[*line])).collect::<Vec<_>>();
+
+    assert!(rendered.contains("origin fetch:"));
+    assert!(rendered.contains("origin push:"));
+    assert_eq!(rendered.matches("https://example.com/repo.git").count(), 2);
+    assert_eq!(selection_lines.len(), 2);
+    assert!(selection_texts.iter().any(|text| text.contains("origin fetch:")));
+    assert!(selection_texts.iter().any(|text| text.contains("origin push:")));
+}
+
+#[test]
+fn settings_renders_remote_rows_with_explicit_push_url() {
+    let (_path, repo) = temp_repo("remote-push-url");
+    repo.remote("origin", "https://example.com/repo.git").unwrap();
     repo.remote_set_pushurl("origin", Some("ssh://example.com/repo.git")).unwrap();
     let mut app = settings_app();
     app.layout.graph = Rect::new(0, 0, 180, 140);
     app.layout.app = Rect::new(0, 0, 180, 140);
 
-    let rendered = rendered_settings(&mut app, &repo, 180, 140);
+    let lines = app.settings_lines(&repo);
+    let selection_lines = remote_selection_lines(&app, "origin");
+    let selection_texts = selection_lines.iter().map(|line| line_text(&lines[*line])).collect::<Vec<_>>();
+    let fetch_line = selection_texts.iter().find(|text| text.contains("origin fetch:")).unwrap();
+    let push_line = selection_texts.iter().find(|text| text.contains("origin push:")).unwrap();
 
-    assert!(rendered.contains("origin:"));
-    assert!(rendered.contains("fetch: https://example.com/repo.git"));
-    assert!(rendered.contains("push: ssh://example.com/repo.git"));
-    assert!(app.settings_selections.iter().any(|selection| selection.kind == SettingsSelectionKind::Remote("origin".to_string())));
+    assert_eq!(selection_lines.len(), 2);
+    assert!(fetch_line.contains("https://example.com/repo.git"));
+    assert!(push_line.contains("ssh://example.com/repo.git"));
 }
 
 #[test]
@@ -264,7 +323,7 @@ fn settings_truncates_long_remote_urls() {
 
     let rendered = rendered_settings(&mut app, &repo, 80, 120);
 
-    assert!(rendered.contains("origin:"));
+    assert!(rendered.contains("origin fetch:"));
     assert!(rendered.contains("..."));
     assert!(!rendered.contains(long_url));
 }

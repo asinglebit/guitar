@@ -207,7 +207,10 @@ impl App {
         lines.push(Line::default());
         lines.push(self.settings_section_line(" recent repositories:", heatmap_width));
         lines.push(Line::default());
-        lines.push(Line::from(Span::styled(self.recent_repository_actions_text(), Style::default().fg(self.theme.COLOR_TEXT))).centered());
+        lines.push(
+            Line::from(Span::styled(fill_width(" actions:", format!("{} ", self.recent_repository_actions_detail_text()).as_str(), heatmap_width), Style::default().fg(self.theme.COLOR_TEXT)))
+                .centered(),
+        );
         lines.push(Line::default());
 
         if self.recent.is_empty() {
@@ -244,19 +247,19 @@ impl App {
             },
             Ok(remotes) => {
                 for (idx, remote) in remotes.iter().enumerate() {
-                    let mut details = format!("fetch: {}", remote.url);
-                    if let Some(push_url) = &remote.push_url
-                        && !push_url.is_empty()
-                    {
-                        details.push_str(format!(" | push: {push_url}").as_str());
-                    }
+                    let effective_push_url = remote.push_url.as_deref().filter(|url| !url.is_empty()).unwrap_or(remote.url.as_str());
 
                     let mut style = Style::default().fg(self.theme.COLOR_TEXT);
                     if (idx + 1).is_multiple_of(2) {
                         style = style.bg(self.theme.background_or_default(self.theme.COLOR_GREY_900));
                     }
-                    lines.push(Line::from(Span::styled(fill_width(format!(" {}:", remote.name).as_str(), format!(" {details} ").as_str(), heatmap_width), style)).centered());
+                    lines.push(Line::from(Span::styled(fill_width(format!(" {} fetch:", remote.name).as_str(), format!(" {} ", remote.url).as_str(), heatmap_width), style)).centered());
                     self.settings_selections.push(SettingsSelection { line: lines.len().saturating_sub(1), kind: SettingsSelectionKind::Remote(remote.name.clone()) });
+
+                    if !effective_push_url.is_empty() {
+                        lines.push(Line::from(Span::styled(fill_width(format!(" {} push:", remote.name).as_str(), format!(" {effective_push_url} ").as_str(), heatmap_width), style)).centered());
+                        self.settings_selections.push(SettingsSelection { line: lines.len().saturating_sub(1), kind: SettingsSelectionKind::Remote(remote.name.clone()) });
+                    }
                 }
             },
             Err(error) => {
