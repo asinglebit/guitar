@@ -371,6 +371,18 @@ fn branch_toggle_uses_git_branch_universe_when_pane_window_is_partial() {
 }
 
 #[test]
+fn reload_all_branches_clears_hidden_branch_layer() {
+    let mut app = App { path: Some(temp_non_repo_path("reload-all-branches")), viewport: Viewport::Graph, focus: Focus::Branches, ..Default::default() };
+    app.branches.hidden_branch_names.insert("main".to_string());
+    app.branches.hidden_branch_names.insert("origin/archive".to_string());
+
+    app.on_reload_all_branches();
+
+    assert!(app.branches.hidden_branch_names.is_empty());
+    assert_eq!(app.focus, Focus::Branches);
+}
+
+#[test]
 fn search_pane_navigation_uses_result_count() {
     let (_path, repo) = temp_repo("search-nav");
     let oid = commit_file(&repo, "target.txt", "target");

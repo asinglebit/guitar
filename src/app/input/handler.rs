@@ -113,6 +113,7 @@ impl App {
             Command::ContinueOperation => self.on_continue_operation(),
             Command::AbortOperation => self.on_abort_operation(),
             Command::Reload => self.on_reload(),
+            Command::ReloadAllBranches => self.on_reload_all_branches(),
         }
     }
 

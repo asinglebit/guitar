@@ -34,6 +34,16 @@ fn defaults_include_numeric_ui_toggles() {
 }
 
 #[test]
+fn defaults_bind_normal_shift_r_to_reload_all_and_action_shift_r_to_revert() {
+    let maps = default_keymaps();
+    let normal = maps.get(&InputMode::Normal).unwrap();
+    let action = maps.get(&InputMode::Action).unwrap();
+
+    assert_eq!(normal.get(&KeyBinding::new(Char('R'), KeyModifiers::SHIFT)), Some(&Command::ReloadAllBranches));
+    assert_eq!(action.get(&KeyBinding::new(Char('R'), KeyModifiers::SHIFT)), Some(&Command::Revert));
+}
+
+#[test]
 fn defaults_include_file_search_binding() {
     let maps = default_keymaps();
 
@@ -58,6 +68,8 @@ fn existing_keymaps_gain_search_toggle_when_available() {
     assert_eq!(maps.get(&InputMode::Action).unwrap().get(&KeyBinding::new(Char('`'), KeyModifiers::NONE)), Some(&Command::ToggleSearch));
     assert_eq!(maps.get(&InputMode::Normal).unwrap().get(&KeyBinding::new(Char('F'), KeyModifiers::SHIFT)), Some(&Command::FindFile));
     assert_eq!(maps.get(&InputMode::Action).unwrap().get(&KeyBinding::new(Char('F'), KeyModifiers::SHIFT)), Some(&Command::FindFile));
+    assert_eq!(maps.get(&InputMode::Normal).unwrap().get(&KeyBinding::new(Char('R'), KeyModifiers::SHIFT)), Some(&Command::ReloadAllBranches));
+    assert_eq!(maps.get(&InputMode::Action).unwrap().get(&KeyBinding::new(Char('R'), KeyModifiers::SHIFT)), None);
 }
 
 #[test]
@@ -68,6 +80,7 @@ fn existing_keymaps_do_not_override_search_conflicts() {
     normal.insert(KeyBinding::new(Char('s'), KeyModifiers::CONTROL), Command::ToggleSearch);
     normal.insert(KeyBinding::new(Char('F'), KeyModifiers::SHIFT), Command::FetchAll);
     normal.insert(KeyBinding::new(Char('f'), KeyModifiers::CONTROL), Command::FindFile);
+    normal.insert(KeyBinding::new(Char('R'), KeyModifiers::SHIFT), Command::Revert);
     let mut action = IndexMap::new();
     action.insert(KeyBinding::new(Char('`'), KeyModifiers::NONE), Command::Reload);
     action.insert(KeyBinding::new(Char('s'), KeyModifiers::CONTROL), Command::ToggleSearch);

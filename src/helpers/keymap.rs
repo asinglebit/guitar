@@ -103,6 +103,7 @@ pub enum Command {
     RemoveWorktree,
     ToggleWorktreeLock,
     Reload,
+    ReloadAllBranches,
 }
 
 pub type ModeKeymap = IndexMap<KeyBinding, Command>;
@@ -390,6 +391,9 @@ fn default_navigation_keymap() -> IndexMap<KeyBinding, Command> {
     // 'r' for reload (similar to vim's :e to reload file)
     map.insert(KeyBinding::new(Char('r'), KeyModifiers::NONE), Command::Reload);
 
+    // 'R' reloads and clears branch visibility filters.
+    map.insert(KeyBinding::new(Char('R'), KeyModifiers::SHIFT), Command::ReloadAllBranches);
+
     // 'q' for quit (vim standard)
     map.insert(KeyBinding::new(Char('q'), KeyModifiers::NONE), Command::Exit);
 
@@ -513,15 +517,21 @@ fn default_keymaps() -> Keymaps {
 
 fn ensure_default_keymap_bindings(maps: &mut Keymaps) -> bool {
     let mut changed = false;
-    let defaults = [(KeyBinding::new(Char('`'), KeyModifiers::NONE), Command::ToggleSearch), (KeyBinding::new(Char('F'), KeyModifiers::SHIFT), Command::FindFile)];
+    let shared_defaults = [(KeyBinding::new(Char('`'), KeyModifiers::NONE), Command::ToggleSearch), (KeyBinding::new(Char('F'), KeyModifiers::SHIFT), Command::FindFile)];
     for mode in [InputMode::Normal, InputMode::Action] {
         let mode_map = maps.entry(mode).or_default();
-        for (key, command) in defaults.iter() {
+        for (key, command) in shared_defaults.iter() {
             if !mode_map.values().any(|existing| existing == command) && !mode_map.contains_key(key) {
                 mode_map.insert(key.clone(), command.clone());
                 changed = true;
             }
         }
+    }
+    let normal_map = maps.entry(InputMode::Normal).or_default();
+    let reload_all_key = KeyBinding::new(Char('R'), KeyModifiers::SHIFT);
+    if !normal_map.values().any(|existing| existing == &Command::ReloadAllBranches) && !normal_map.contains_key(&reload_all_key) {
+        normal_map.insert(reload_all_key, Command::ReloadAllBranches);
+        changed = true;
     }
     changed
 }

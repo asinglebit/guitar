@@ -1910,6 +1910,17 @@ impl App {
 
     pub fn on_reload(&mut self) {
         self.reload(None);
+        self.cleanup_after_reload();
+    }
+
+    pub fn on_reload_all_branches(&mut self) {
+        self.branches.hidden_branch_names.clear();
+        self.save_hidden_branch_names();
+        self.reload(None);
+        self.cleanup_after_reload();
+    }
+
+    fn cleanup_after_reload(&mut self) {
         match self.focus {
             Focus::ModalWorktreeChooser | Focus::ModalRemoveWorktree => {
                 self.clear_worktree_modal_state();

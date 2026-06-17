@@ -488,6 +488,7 @@ Defaults are written to `keymap.json` on first run. User-edited keymaps can diff
 | Action Mode | `Ctrl+a` |
 | Minimize | `.` |
 | Reload | `r` |
+| Reload and Show All Branches | `Shift+R` |
 | Exit | `q` |
 | Remove Recent Repository | `d` |
 | Move Recent Repository Up | `Shift+K` |
