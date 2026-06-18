@@ -30,6 +30,11 @@ use std::path::Path;
 impl App {
     const MAX_AUTH_ATTEMPTS: usize = 3;
 
+    fn submodule_name_for_status_path(repo: &Repository, path: &str) -> Option<String> {
+        let target = Path::new(path);
+        repo.submodules().ok()?.into_iter().find(|submodule| submodule.path() == target).map(|submodule| submodule.name().map(str::to_string).unwrap_or_else(|| path.to_string()))
+    }
+
     pub(crate) fn start_network_request(&mut self, request: NetworkRequest) {
         if self.network_handle.is_some() {
             self.show_error(errors::GIT_NETWORK_ALREADY_RUNNING);
@@ -658,6 +663,13 @@ impl App {
                         let Some(file) = self.selected_staged_status_file_name() else {
                             return;
                         };
+                        if let Some(name) = Self::submodule_name_for_status_path(repo, &file) {
+                            match unstage_submodule(repo, &name) {
+                                Ok(_) => self.reload(None),
+                                Err(error) => self.show_error(errors::with_error(errors::UNSTAGE_SUBMODULE, error)),
+                            }
+                            return;
+                        }
                         match unstage_file(repo, Path::new(&file)) {
                             Ok(_) => self.reload(None),
                             Err(error) => self.show_error(errors::with_error(errors::UNSTAGE_FILE, error)),
@@ -702,6 +714,13 @@ impl App {
                         let Some(file) = self.selected_unstaged_status_file_name() else {
                             return;
                         };
+                        if let Some(name) = Self::submodule_name_for_status_path(repo, &file) {
+                            match stage_submodule_head(repo, &name) {
+                                Ok(_) => self.reload(None),
+                                Err(error) => self.show_error(errors::with_error(errors::STAGE_SUBMODULE, error)),
+                            }
+                            return;
+                        }
                         match stage_file(repo, Path::new(&file)) {
                             Ok(_) => self.reload(None),
                             Err(error) => self.show_error(errors::with_error(errors::STAGE_FILE, error)),

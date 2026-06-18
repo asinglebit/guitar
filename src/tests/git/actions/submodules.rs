@@ -1,5 +1,5 @@
 use super::*;
-use crate::{git::auth::NetworkResult, git::queries::submodules::list_submodules};
+use crate::{git::actions::staging::stage_all, git::auth::NetworkResult, git::queries::submodules::list_submodules};
 use git2::{Repository, Signature};
 use std::{
     env, fs,
@@ -88,6 +88,23 @@ fn stages_and_unstages_submodule_pointer() {
     unstage_submodule(&parent, "deps/child").unwrap();
     let unstaged = list_submodules(&parent).unwrap()[0].clone();
     assert_eq!(unstaged.index, original);
+}
+
+#[test]
+fn stage_all_stages_submodule_pointer_without_staging_inner_content() {
+    let dir = TestDir::new("stage-all-pointer");
+    let (parent, _child_path) = parent_with_submodule(&dir);
+    let sub_repo = Repository::open(parent.workdir().unwrap().join("deps/child")).unwrap();
+
+    let advanced = commit_file(&sub_repo, "file.txt", "changed\n", "advance child");
+    fs::write(sub_repo.workdir().unwrap().join("file.txt"), "dirty\n").unwrap();
+
+    stage_all(&parent).unwrap();
+
+    let entry = list_submodules(&parent).unwrap()[0].clone();
+    assert_eq!(entry.index, Some(advanced));
+    assert_eq!(entry.workdir, Some(advanced));
+    assert!(entry.has_modified_content);
 }
 
 #[test]

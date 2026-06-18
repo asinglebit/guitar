@@ -2,7 +2,7 @@ use crate::{
     git::queries::helpers::{ConflictFile, FileChange, FileStatus, Hunk, UncommittedChanges, deduplicate, diff_to_hunks, walk_tree},
     helpers::text::{decode, sanitize},
 };
-use git2::{Delta, DiffOptions, Error, Oid, Repository, StatusOptions};
+use git2::{Delta, DiffOptions, Error, Oid, Repository, StatusOptions, Submodule, SubmoduleIgnore, SubmoduleStatus};
 use std::path::Path;
 
 // Collect staged and unstaged changes separately so the status panes can act on each side.
@@ -13,7 +13,8 @@ pub fn get_filenames_diff_at_workdir(repo: &Repository) -> Result<UncommittedCha
     let statuses = repo.statuses(Some(&mut options))?;
     let mut changes = UncommittedChanges::default();
     let workdir = repo.workdir().expect("Bare repo not supported");
-    let submodule_paths = repo.submodules().map(|entries| entries.into_iter().map(|entry| entry.path().to_path_buf()).collect::<Vec<_>>()).unwrap_or_default();
+    let submodules = repo.submodules().unwrap_or_default();
+    let submodule_paths = submodules.iter().map(|entry| entry.path().to_path_buf()).collect::<Vec<_>>();
 
     for entry in statuses.iter() {
         let rel_path = entry.path().unwrap_or("");
@@ -72,6 +73,8 @@ pub fn get_filenames_diff_at_workdir(repo: &Repository) -> Result<UncommittedCha
         }
     }
 
+    add_submodule_pointer_changes(repo, &submodules, &mut changes);
+
     // Counts are deduplicated because the same path can be both staged and unstaged.
     changes.modified_count = deduplicate(&changes.staged.modified, &changes.unstaged.modified);
     changes.added_count = deduplicate(&changes.staged.added, &changes.unstaged.added);
@@ -83,6 +86,39 @@ pub fn get_filenames_diff_at_workdir(repo: &Repository) -> Result<UncommittedCha
     changes.is_clean = !changes.is_staged && !changes.is_unstaged && !changes.has_conflicts;
 
     Ok(changes)
+}
+
+fn add_submodule_pointer_changes(repo: &Repository, submodules: &[Submodule<'_>], changes: &mut UncommittedChanges) {
+    for submodule in submodules {
+        let path = submodule.path();
+        let path_text = path.to_string_lossy().to_string();
+        let name = submodule.name().unwrap_or(path_text.as_str());
+        let status = submodule_status_for(repo, name, path);
+
+        if status.is_index_added() {
+            push_unique(&mut changes.staged.added, path_text.clone());
+        }
+        if status.is_index_deleted() {
+            push_unique(&mut changes.staged.deleted, path_text.clone());
+        }
+        if status.is_index_modified() {
+            push_unique(&mut changes.staged.modified, path_text.clone());
+        }
+
+        if status.is_wd_added() {
+            push_unique(&mut changes.unstaged.added, path_text.clone());
+        } else if status.is_wd_deleted() {
+            push_unique(&mut changes.unstaged.deleted, path_text.clone());
+        } else if status.is_wd_modified() || submodule.workdir_id().zip(submodule.index_id()).is_some_and(|(workdir, index)| workdir != index) {
+            push_unique(&mut changes.unstaged.modified, path_text.clone());
+        }
+    }
+}
+
+fn submodule_status_for(repo: &Repository, name: &str, path: &Path) -> SubmoduleStatus {
+    repo.submodule_status(name, SubmoduleIgnore::None)
+        .or_else(|_| path.to_str().map(|path| repo.submodule_status(path, SubmoduleIgnore::None)).unwrap_or_else(|| Err(Error::from_str("invalid submodule path"))))
+        .unwrap_or_else(|_| SubmoduleStatus::empty())
 }
 
 fn is_submodule_status_path(path: &str, submodule_paths: &[std::path::PathBuf]) -> bool {

@@ -5,6 +5,7 @@ use crate::git::actions::merging::{MergeOutcome, start_merge};
 use crate::git::actions::remotes::set_default_remote;
 use crate::git::actions::reverting::{RevertOutcome, start_revert};
 use crate::git::auth::{AuthChallenge, AuthProtocol};
+use crate::git::queries::diffs::get_filenames_diff_at_workdir;
 use crate::helpers::keymap::{Command, InputMode, KeyBinding};
 use git2::{Signature, build::CheckoutBuilder};
 use indexmap::IndexMap;
@@ -73,6 +74,32 @@ fn commit_with_content(repo: &Repository, file: &str, content: &str, message: &s
     repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents).unwrap()
 }
 
+fn commit_index(repo: &Repository, message: &str) -> git2::Oid {
+    let mut index = repo.index().unwrap();
+    let tree_oid = index.write_tree().unwrap();
+    let tree = repo.find_tree(tree_oid).unwrap();
+    let sig = Signature::now("Test User", "test@example.com").unwrap();
+    let parent = repo.head().ok().and_then(|head| head.peel_to_commit().ok());
+    let parents: Vec<&git2::Commit<'_>> = parent.iter().collect();
+    repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents).unwrap()
+}
+
+fn parent_with_submodule(name: &str) -> (PathBuf, Repository) {
+    let (child_path, child) = temp_repo(&format!("{name}-child"));
+    commit(&child, "file.txt", "initial child");
+    drop(child);
+
+    let (parent_path, parent) = temp_repo(&format!("{name}-parent"));
+    commit(&parent, "file.txt", "initial parent");
+    let mut submodule = parent.submodule(child_path.to_str().unwrap(), Path::new("deps/child"), true).unwrap();
+    submodule.clone(None).unwrap();
+    submodule.add_finalize().unwrap();
+    commit_index(&parent, "add submodule");
+    drop(submodule);
+
+    (parent_path, parent)
+}
+
 fn checkout_new_branch(repo: &Repository, name: &str) {
     let head = repo.head().unwrap().peel_to_commit().unwrap();
     repo.branch(name, &head, false).unwrap();
@@ -117,6 +144,43 @@ fn file_search_modal_does_not_open_from_splash_or_settings() {
     let mut settings = App { repo: Some(repo), viewport: Viewport::Settings, focus: Focus::Viewport, ..Default::default() };
     settings.on_find_file();
     assert_eq!(settings.focus, Focus::Viewport);
+}
+
+#[test]
+fn status_panes_stage_and_unstage_submodule_pointer_change() {
+    let (parent_path, parent) = parent_with_submodule("status-submodule-pointer");
+    let sub_repo = Repository::open(parent.workdir().unwrap().join("deps/child")).unwrap();
+    commit_with_content(&sub_repo, "file.txt", "advanced\n", "advance child");
+
+    let mut app = App {
+        path: Some(parent_path.display().to_string()),
+        repo: Some(Rc::new(parent)),
+        viewport: Viewport::Graph,
+        focus: Focus::StatusBottom,
+        graph_selected: 0,
+        is_uncommitted_loaded: true,
+        recent_save_path: Some(parent_path.join("recent.json")),
+        ..Default::default()
+    };
+    app.uncommitted = get_filenames_diff_at_workdir(app.repo.as_ref().unwrap()).unwrap();
+    app.status_bottom_selected = 0;
+
+    app.on_stage();
+
+    let staged = get_filenames_diff_at_workdir(app.repo.as_ref().unwrap()).unwrap();
+    assert_eq!(staged.staged.modified, vec!["deps/child".to_string()]);
+    assert!(staged.unstaged.modified.is_empty());
+
+    app.uncommitted = staged;
+    app.is_uncommitted_loaded = true;
+    app.focus = Focus::StatusTop;
+    app.status_top_selected = 0;
+
+    app.on_unstage();
+
+    let unstaged = get_filenames_diff_at_workdir(app.repo.as_ref().unwrap()).unwrap();
+    assert!(unstaged.staged.modified.is_empty());
+    assert_eq!(unstaged.unstaged.modified, vec!["deps/child".to_string()]);
 }
 
 #[test]

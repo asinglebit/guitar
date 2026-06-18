@@ -1,5 +1,8 @@
 use super::*;
-use crate::git::actions::rebasing::{RebaseOutcome, start_rebase};
+use crate::git::actions::{
+    rebasing::{RebaseOutcome, start_rebase},
+    submodules::{stage_submodule_head, unstage_submodule},
+};
 use git2::{Repository, Signature, build::CheckoutBuilder};
 use std::{
     fs,
@@ -188,7 +191,7 @@ fn workdir_diff_ignores_uninitialized_submodule() {
 }
 
 #[test]
-fn workdir_diff_ignores_changed_submodule_pointer() {
+fn workdir_diff_lists_changed_submodule_pointer_as_unstaged_modified() {
     let dir = TestDir::new("submodule-pointer");
     let parent = parent_with_submodule(&dir);
     let sub_repo = Repository::open(parent.workdir().unwrap().join("deps/child")).unwrap();
@@ -197,7 +200,37 @@ fn workdir_diff_ignores_changed_submodule_pointer() {
 
     let changes = get_filenames_diff_at_workdir(&parent).unwrap();
 
-    assert_no_file_status_rows(&changes);
+    assert!(changes.staged.modified.is_empty());
+    assert_eq!(changes.unstaged.modified, vec!["deps/child".to_string()]);
+    assert_eq!(changes.modified_count, 1);
+    assert!(changes.is_unstaged);
+    assert!(!changes.is_staged);
+    assert!(!changes.is_clean);
+}
+
+#[test]
+fn workdir_diff_lists_staged_submodule_pointer_as_staged_modified() {
+    let dir = TestDir::new("submodule-pointer-staged");
+    let parent = parent_with_submodule(&dir);
+    let sub_repo = Repository::open(parent.workdir().unwrap().join("deps/child")).unwrap();
+    write(sub_repo.workdir().unwrap(), "file.txt", "advanced\n");
+    commit(&sub_repo, "file.txt", "advance child");
+
+    stage_submodule_head(&parent, "deps/child").unwrap();
+    let changes = get_filenames_diff_at_workdir(&parent).unwrap();
+
+    assert_eq!(changes.staged.modified, vec!["deps/child".to_string()]);
+    assert!(changes.unstaged.modified.is_empty());
+    assert_eq!(changes.modified_count, 1);
+    assert!(changes.is_staged);
+    assert!(!changes.is_unstaged);
+    assert!(!changes.is_clean);
+
+    unstage_submodule(&parent, "deps/child").unwrap();
+    let changes = get_filenames_diff_at_workdir(&parent).unwrap();
+
+    assert!(changes.staged.modified.is_empty());
+    assert_eq!(changes.unstaged.modified, vec!["deps/child".to_string()]);
 }
 
 #[test]
