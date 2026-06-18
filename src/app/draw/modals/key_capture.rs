@@ -5,6 +5,7 @@ use crate::{
     },
     helpers::{
         keymap::{KeymapEditError, command_to_visual_string, input_mode_to_visual_string, keybinding_to_visual_string},
+        localisation::modal,
         text::wrap_words,
     },
 };
@@ -23,33 +24,27 @@ impl App {
         };
 
         let mut lines = Vec::new();
-        lines.push(Line::from(Span::styled("set shortcut", Style::default().fg(self.theme.COLOR_TEXT))));
+        lines.push(Line::from(Span::styled(modal::SET_SHORTCUT, Style::default().fg(self.theme.COLOR_TEXT))));
         lines.push(Line::default());
         lines.push(Line::from(Span::styled(format!("{} / {}", input_mode_to_visual_string(selection.mode), command_to_visual_string(&selection.command)), Style::default().fg(self.theme.COLOR_TEXT))));
-        lines.push(Line::from(Span::styled(format!("current: {}", keybinding_to_visual_string(&selection.key)), Style::default().fg(self.theme.COLOR_GREY_600))));
+        lines.push(Line::from(Span::styled(format!("{} {}", modal::CURRENT_SHORTCUT, keybinding_to_visual_string(&selection.key)), Style::default().fg(self.theme.COLOR_GREY_600))));
 
         if let Some(candidate) = &self.modal_key_capture_candidate {
             let color = if self.modal_key_capture_error.is_some() { self.theme.COLOR_ORANGE } else { self.theme.COLOR_GRASS };
-            lines.push(Line::from(Span::styled(format!("new: {}", keybinding_to_visual_string(candidate)), Style::default().fg(color))));
+            lines.push(Line::from(Span::styled(format!("{} {}", modal::NEW_SHORTCUT, keybinding_to_visual_string(candidate)), Style::default().fg(color))));
         } else {
-            lines.push(Line::from(Span::styled("new: waiting for key", Style::default().fg(self.theme.COLOR_GREY_600))));
+            lines.push(Line::from(Span::styled(modal::NEW_SHORTCUT_WAITING, Style::default().fg(self.theme.COLOR_GREY_600))));
         }
 
         if let Some(error) = &self.modal_key_capture_error {
             lines.push(Line::default());
             let message = match error {
-                KeymapEditError::Conflict { mode, key, command } => {
-                    format!("conflict: {} {} already runs {}", input_mode_to_visual_string(*mode), keybinding_to_visual_string(key), command_to_visual_string(command))
+                KeymapEditError::Conflict { mode, key, command } => modal::keymap_conflict(&input_mode_to_visual_string(*mode), &keybinding_to_visual_string(key), &command_to_visual_string(command)),
+                KeymapEditError::MissingMode(mode) => modal::keymap_missing_mode(&input_mode_to_visual_string(*mode)),
+                KeymapEditError::MissingBinding { mode, key } => modal::keymap_missing_binding(&input_mode_to_visual_string(*mode), &keybinding_to_visual_string(key)),
+                KeymapEditError::CommandChanged { mode, key, expected, actual } => {
+                    modal::keymap_binding_changed(&input_mode_to_visual_string(*mode), &keybinding_to_visual_string(key), &command_to_visual_string(expected), &command_to_visual_string(actual))
                 },
-                KeymapEditError::MissingMode(mode) => format!("missing keymap mode: {}", input_mode_to_visual_string(*mode)),
-                KeymapEditError::MissingBinding { mode, key } => format!("missing binding: {} {}", input_mode_to_visual_string(*mode), keybinding_to_visual_string(key)),
-                KeymapEditError::CommandChanged { mode, key, expected, actual } => format!(
-                    "binding changed: {} {} was {}, now {}",
-                    input_mode_to_visual_string(*mode),
-                    keybinding_to_visual_string(key),
-                    command_to_visual_string(expected),
-                    command_to_visual_string(actual)
-                ),
             };
             for line in wrap_words(message, 64) {
                 lines.push(Line::from(Span::styled(line, Style::default().fg(self.theme.COLOR_ORANGE))));
@@ -58,9 +53,9 @@ impl App {
 
         lines.push(Line::default());
         let line = if self.modal_key_capture_candidate.is_some() && self.modal_key_capture_error.is_none() {
-            action_row(&[("save", "enter")], Style::default().fg(self.theme.COLOR_HIGHLIGHTED))
+            action_row(&[(modal::ACTION_SAVE, modal::KEY_ENTER)], Style::default().fg(self.theme.COLOR_HIGHLIGHTED))
         } else {
-            Line::from(Span::styled("press key", Style::default().fg(self.theme.COLOR_HIGHLIGHTED)))
+            Line::from(Span::styled(modal::PRESS_KEY, Style::default().fg(self.theme.COLOR_HIGHLIGHTED)))
         };
         lines.push(line);
 

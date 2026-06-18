@@ -1,5 +1,5 @@
 use crate::app::{app::App, draw::modals::shared::modal_block};
-use crate::helpers::symbols::SYM_TAG;
+use crate::helpers::{localisation::modal, symbols::entity};
 use ratatui::Frame;
 use ratatui::{
     layout::{Alignment, Rect},
@@ -16,7 +16,7 @@ impl App {
             return;
         };
         let mut lines = Vec::new();
-        let line_text = "select a tag to delete";
+        let line_text = modal::SELECT_TAG_DELETE;
         lines.push(Line::default());
         lines.push(Line::from(vec![Span::styled(line_text, Style::default().fg(self.theme.COLOR_TEXT))]));
         lines.push(Line::default());
@@ -27,7 +27,7 @@ impl App {
         tags.iter().enumerate().for_each(|(idx, tag)| {
             height += 1;
             let is_selected = idx == self.modal_delete_tag_selected as usize;
-            let line_text = format!("{} {} ", SYM_TAG, tag);
+            let line_text = format!("{} {} ", entity::TAG, tag);
             length = length.max(line_text.len());
 
             let style = Style::default().fg(if is_selected { self.theme.COLOR_GRASS } else { self.theme.COLOR_TEXT });

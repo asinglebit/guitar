@@ -1,6 +1,9 @@
 use crate::helpers::layout::scrollbar_content_length;
-use crate::helpers::symbols::SYM_TAG;
 use crate::helpers::text::{center_line, empty_state_top_padding};
+use crate::helpers::{
+    localisation::empty,
+    symbols::{border, empty_state, entity, scrollbar},
+};
 use crate::{
     app::{
         app::{App, Focus},
@@ -60,7 +63,7 @@ impl App {
                 if let Some(GraphPaneRow::Tag { name, lane, .. }) = row {
                     let truncated = truncate_with_ellipsis(name, max_text_width.saturating_sub(1));
                     let color = lane.map(|lane| color_picker.get_lane(lane)).unwrap_or(self.theme.COLOR_TEXT);
-                    lines.push(Line::from(Span::styled(format!("{SYM_TAG} {truncated}"), Style::default().fg(color))));
+                    lines.push(Line::from(Span::styled(format!("{} {truncated}", entity::TAG), Style::default().fg(color))));
                 } else {
                     lines.push(Line::default());
                 }
@@ -70,7 +73,7 @@ impl App {
                 let truncated = truncate_with_ellipsis(tag_name, max_text_width.saturating_sub(1));
                 let color = self.tags.get_color(&self.theme, tag_alias);
 
-                lines.push(Line::from(Span::styled(format!("{SYM_TAG} {truncated}"), Style::default().fg(color))));
+                lines.push(Line::from(Span::styled(format!("{} {truncated}", entity::TAG), Style::default().fg(color))));
             }
         } else if !known_empty {
             lines = blank_lines(if total_lines == 0 { visible_height } else { end.saturating_sub(start) });
@@ -84,7 +87,8 @@ impl App {
             for _ in 0..blank_lines_before {
                 lines.push(Line::default());
             }
-            lines.push(Line::from(Span::styled(center_line(&truncate_with_ellipsis("⊘ no tags", max_text_width), max_text_width + 3), Style::default().fg(self.theme.COLOR_GREY_800))));
+            let empty_text = format!("{} {}", empty_state::MARK, empty::NO_TAGS);
+            lines.push(Line::from(Span::styled(center_line(&truncate_with_ellipsis(&empty_text, max_text_width), max_text_width + 3), Style::default().fg(self.theme.COLOR_GREY_800))));
         }
 
         // Selection is skipped for the synthetic empty row; striping still fills the pane.
@@ -101,10 +105,10 @@ impl App {
             let scroll_range = scrollbar_content_length(total_lines, visible_height);
             let mut scrollbar_state = ScrollbarState::new(scroll_range).position(self.tags_scroll.get());
             let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-                .begin_symbol(Some("╮"))
-                .end_symbol(Some("╯"))
-                .track_symbol(Some("│"))
-                .thumb_symbol(if total_lines > visible_height { "▌" } else { "│" })
+                .begin_symbol(Some(scrollbar::BEGIN))
+                .end_symbol(Some(scrollbar::END))
+                .track_symbol(Some(scrollbar::TRACK))
+                .thumb_symbol(if total_lines > visible_height { scrollbar::THUMB } else { scrollbar::INACTIVE_THUMB })
                 .track_style(Style::default().fg(self.theme.COLOR_BORDER))
                 .thumb_style(Style::default().fg(if total_lines > visible_height && self.focus == Focus::Tags { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 
@@ -115,7 +119,7 @@ impl App {
 
         // Normal mode draws a top separator when this pane is stacked under another pane.
         if self.layout_config.is_branches || self.layout_config.is_tags {
-            let top_border = Paragraph::new("─".repeat(self.layout.tags.width.saturating_sub(1) as usize)).style(Style::default().fg(self.theme.COLOR_BORDER));
+            let top_border = Paragraph::new(border::HORIZONTAL.repeat(self.layout.tags.width.saturating_sub(1) as usize)).style(Style::default().fg(self.theme.COLOR_BORDER));
             frame.render_widget(top_border, Rect { x: self.layout.tags.x + 1, y: self.layout.tags.y.saturating_sub(1), width: self.layout.tags.width, height: 1 });
         }
         let list = List::new(list_items).block(Block::default().padding(padding));
@@ -125,10 +129,14 @@ impl App {
         let scroll_range = scrollbar_content_length(total_lines, visible_height);
         let mut scrollbar_state = ScrollbarState::new(scroll_range).position(self.tags_scroll.get());
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(Some(if self.layout_config.is_branches { "│" } else { "─" }))
-            .end_symbol(Some(if self.layout_config.is_stashes || self.layout_config.is_reflogs || self.layout_config.is_worktrees || self.layout_config.is_search { "│" } else { "─" }))
-            .track_symbol(Some("│"))
-            .thumb_symbol(if total_lines > visible_height { "▌" } else { "│" })
+            .begin_symbol(Some(if self.layout_config.is_branches { border::VERTICAL } else { border::HORIZONTAL }))
+            .end_symbol(Some(if self.layout_config.is_stashes || self.layout_config.is_reflogs || self.layout_config.is_worktrees || self.layout_config.is_search {
+                border::VERTICAL
+            } else {
+                border::HORIZONTAL
+            }))
+            .track_symbol(Some(scrollbar::TRACK))
+            .thumb_symbol(if total_lines > visible_height { scrollbar::THUMB } else { scrollbar::INACTIVE_THUMB })
             .track_style(Style::default().fg(self.theme.COLOR_BORDER))
             .thumb_style(Style::default().fg(if total_lines > visible_height && self.focus == Focus::Tags { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 

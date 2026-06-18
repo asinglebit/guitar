@@ -3,7 +3,10 @@ use crate::{
         app::{App, Focus},
         draw::modals::shared::{action_row, modal_block},
     },
-    helpers::text::wrap_words,
+    helpers::{
+        localisation::{common, modal, operations},
+        text::wrap_words,
+    },
 };
 use ratatui::Frame;
 use ratatui::{
@@ -17,8 +20,8 @@ impl App {
     pub fn draw_modal_rebase(&mut self, frame: &mut Frame) {
         let title = match self.focus {
             Focus::ModalOperationProgress => self.modal_operation_kind.label().to_string(),
-            Focus::ModalOperationConflict => format!("{} conflict", self.modal_operation_kind.label()),
-            Focus::ModalOperationSuccess => format!("{} complete", self.modal_operation_kind.label()),
+            Focus::ModalOperationConflict => format!("{} {}", self.modal_operation_kind.label(), operations::CONFLICT),
+            Focus::ModalOperationSuccess => format!("{} {}", self.modal_operation_kind.label(), operations::COMPLETE),
             _ => self.modal_operation_kind.label().to_string(),
         };
 
@@ -34,13 +37,13 @@ impl App {
         }
         lines.push(Line::default());
         if self.focus == Focus::ModalOperationConflict {
-            lines.push(Line::from(Span::styled("resolve conflicts in your editor, then action+Shift+C", Style::default().fg(self.theme.COLOR_TEXT))));
+            lines.push(Line::from(Span::styled(operations::RESOLVE_CONFLICTS, Style::default().fg(self.theme.COLOR_TEXT))));
             lines.push(Line::default());
         }
         let action_line = if self.focus == Focus::ModalOperationProgress {
-            Line::from(Span::styled("working...", Style::default().fg(self.theme.COLOR_HIGHLIGHTED)))
+            Line::from(Span::styled(common::WORKING, Style::default().fg(self.theme.COLOR_HIGHLIGHTED)))
         } else {
-            action_row(&[("ok", "enter")], Style::default().fg(self.theme.COLOR_HIGHLIGHTED))
+            action_row(&[(modal::ACTION_OK, modal::KEY_ENTER)], Style::default().fg(self.theme.COLOR_HIGHLIGHTED))
         };
         lines.push(action_line);
 

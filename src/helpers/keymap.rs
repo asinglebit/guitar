@@ -1,4 +1,7 @@
-use crate::helpers::text::{modifiers_to_string, pascal_to_spaced};
+use crate::helpers::{
+    localisation::keymap as keymap_text,
+    text::{modifiers_to_string, pascal_to_spaced},
+};
 use facet::Facet;
 use indexmap::IndexMap;
 use ratatui::crossterm::event::{KeyCode, KeyCode::*, KeyModifiers};
@@ -149,8 +152,8 @@ pub fn action_keymap_visible_entries(normal: Option<&ModeKeymap>, action: &ModeK
 
 pub fn input_mode_to_visual_string(mode: InputMode) -> &'static str {
     match mode {
-        InputMode::Normal => "normal",
-        InputMode::Action => "action",
+        InputMode::Normal => keymap_text::NORMAL_MODE,
+        InputMode::Action => keymap_text::ACTION_MODE,
     }
 }
 
@@ -850,31 +853,31 @@ pub fn keycode_to_string(code: KeyCode) -> String {
 
 pub fn keycode_to_visual_string(code: KeyCode) -> String {
     match code {
-        KeyCode::Backspace => "Backspace".into(),
-        KeyCode::Enter => "Enter".into(),
-        KeyCode::Left => "Left".into(),
-        KeyCode::Right => "Right".into(),
-        KeyCode::Up => "Up".into(),
-        KeyCode::Down => "Down".into(),
-        KeyCode::Home => "Home".into(),
-        KeyCode::End => "End".into(),
-        KeyCode::PageUp => "PageUp".into(),
-        KeyCode::PageDown => "PageDown".into(),
-        KeyCode::Tab => "Tab".into(),
-        KeyCode::BackTab => "BackTab".into(),
-        KeyCode::Delete => "Delete".into(),
-        KeyCode::Insert => "Insert".into(),
+        KeyCode::Backspace => keymap_text::BACKSPACE.into(),
+        KeyCode::Enter => keymap_text::ENTER.into(),
+        KeyCode::Left => keymap_text::LEFT.into(),
+        KeyCode::Right => keymap_text::RIGHT.into(),
+        KeyCode::Up => keymap_text::UP.into(),
+        KeyCode::Down => keymap_text::DOWN.into(),
+        KeyCode::Home => keymap_text::HOME.into(),
+        KeyCode::End => keymap_text::END.into(),
+        KeyCode::PageUp => keymap_text::PAGE_UP.into(),
+        KeyCode::PageDown => keymap_text::PAGE_DOWN.into(),
+        KeyCode::Tab => keymap_text::TAB.into(),
+        KeyCode::BackTab => keymap_text::BACK_TAB.into(),
+        KeyCode::Delete => keymap_text::DELETE.into(),
+        KeyCode::Insert => keymap_text::INSERT.into(),
         KeyCode::F(n) => format!("F({})", n),
-        KeyCode::Char(' ') => "Space".into(),
+        KeyCode::Char(' ') => keymap_text::SPACE.into(),
         KeyCode::Char(c) => format!("{c}"),
-        KeyCode::Null => "Null".into(),
-        KeyCode::Esc => "Esc".into(),
-        KeyCode::CapsLock => "CapsLock".into(),
-        KeyCode::ScrollLock => "ScrollLock".into(),
-        KeyCode::NumLock => "NumLock".into(),
-        KeyCode::PrintScreen => "PrintScreen".into(),
-        KeyCode::Pause => "Pause".into(),
-        _ => "Unsupported".into(),
+        KeyCode::Null => keymap_text::NULL.into(),
+        KeyCode::Esc => keymap_text::ESC.into(),
+        KeyCode::CapsLock => keymap_text::CAPS_LOCK.into(),
+        KeyCode::ScrollLock => keymap_text::SCROLL_LOCK.into(),
+        KeyCode::NumLock => keymap_text::NUM_LOCK.into(),
+        KeyCode::PrintScreen => keymap_text::PRINT_SCREEN.into(),
+        KeyCode::Pause => keymap_text::PAUSE.into(),
+        _ => keymap_text::UNSUPPORTED.into(),
     }
 }
 

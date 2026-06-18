@@ -1,3 +1,4 @@
+use crate::helpers::localisation::{errors, modal, network};
 use git2::{Config, Cred, CredentialType, Error, ErrorClass, ErrorCode};
 use std::{
     collections::HashMap,
@@ -19,11 +20,11 @@ pub enum AuthProtocol {
 impl AuthProtocol {
     pub fn label(self) -> &'static str {
         match self {
-            AuthProtocol::Https => "HTTPS",
-            AuthProtocol::Http => "HTTP",
-            AuthProtocol::Ssh => "SSH",
-            AuthProtocol::Local => "local",
-            AuthProtocol::Other => "remote",
+            AuthProtocol::Https => network::PROTOCOL_HTTPS,
+            AuthProtocol::Http => network::PROTOCOL_HTTP,
+            AuthProtocol::Ssh => network::PROTOCOL_SSH,
+            AuthProtocol::Local => network::PROTOCOL_LOCAL,
+            AuthProtocol::Other => network::PROTOCOL_REMOTE,
         }
     }
 
@@ -50,7 +51,7 @@ pub struct AuthChallenge {
 
 impl AuthChallenge {
     pub fn title(&self) -> String {
-        format!("{} authentication", self.protocol.label())
+        modal::auth_title(self.protocol.label())
     }
 }
 
@@ -278,7 +279,7 @@ pub fn network_result(label: &str, attempt: &AuthAttempt, result: Result<(), Err
         Ok(_) => NetworkResult::Success,
         Err(error) => match attempt.auth_required(&error) {
             Some(auth) => NetworkResult::AuthRequired(auth),
-            None => NetworkResult::Failure(format!("{label} failed: {error}")),
+            None => NetworkResult::Failure(errors::operation_failed(label, error)),
         },
     }
 }

@@ -6,6 +6,7 @@ use crate::git::{
     },
     auth::{AuthSession, NetworkResult},
 };
+use crate::helpers::localisation::network;
 use std::thread;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -20,27 +21,27 @@ pub enum NetworkRequest {
 impl NetworkRequest {
     pub fn label(&self) -> &'static str {
         match self {
-            NetworkRequest::Fetch { .. } => "Fetch",
-            NetworkRequest::PushBranch { .. } => "Push",
-            NetworkRequest::PushTags { .. } => "Push tags",
-            NetworkRequest::DeleteRemoteBranch { .. } => "Delete remote branch",
-            NetworkRequest::UpdateSubmodule { .. } => "Update submodule",
+            NetworkRequest::Fetch { .. } => network::FETCH,
+            NetworkRequest::PushBranch { .. } => network::PUSH,
+            NetworkRequest::PushTags { .. } => network::PUSH_TAGS,
+            NetworkRequest::DeleteRemoteBranch { .. } => network::DELETE_REMOTE_BRANCH,
+            NetworkRequest::UpdateSubmodule { .. } => network::UPDATE_SUBMODULE,
         }
     }
 
     pub fn progress_message(&self) -> String {
         match self {
-            NetworkRequest::Fetch { remote_name, .. } => format!("Fetching {remote_name}..."),
+            NetworkRequest::Fetch { remote_name, .. } => network::fetching(remote_name),
             NetworkRequest::PushBranch { remote_name, branch, force, .. } => {
                 if *force {
-                    format!("Force pushing {branch} to {remote_name}...")
+                    network::force_pushing(branch, remote_name)
                 } else {
-                    format!("Pushing {branch} to {remote_name}...")
+                    network::pushing(branch, remote_name)
                 }
             },
-            NetworkRequest::PushTags { remote_name, .. } => format!("Pushing local tags to {remote_name}..."),
-            NetworkRequest::DeleteRemoteBranch { remote_name, branch, .. } => format!("Deleting {remote_name}/{branch}..."),
-            NetworkRequest::UpdateSubmodule { name, .. } => format!("Updating submodule {name}..."),
+            NetworkRequest::PushTags { remote_name, .. } => network::pushing_tags(remote_name),
+            NetworkRequest::DeleteRemoteBranch { remote_name, branch, .. } => network::deleting_remote_branch(remote_name, branch),
+            NetworkRequest::UpdateSubmodule { name, .. } => network::updating_submodule(name),
         }
     }
 

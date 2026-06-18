@@ -1,5 +1,6 @@
 use crate::helpers::layout::scrollbar_content_length;
-use crate::helpers::symbols::SYM_COMMIT_STASH;
+use crate::helpers::localisation::empty;
+use crate::helpers::symbols::{border, empty_state, graph, scrollbar};
 use crate::helpers::text::{center_line, empty_state_top_padding};
 use crate::{
     app::{
@@ -60,7 +61,7 @@ impl App {
                 if let Some(GraphPaneRow::Stash { summary, lane, .. }) = row {
                     let truncated = truncate_with_ellipsis(summary.as_str(), max_text_width.saturating_sub(1));
                     let color = lane.map(|lane| color_picker.get_lane(lane)).unwrap_or(self.theme.COLOR_TEXT);
-                    lines.push(Line::from(Span::styled(format!("{SYM_COMMIT_STASH} {truncated}"), Style::default().fg(color))));
+                    lines.push(Line::from(Span::styled(format!("{} {truncated}", graph::COMMIT_STASH), Style::default().fg(color))));
                 } else {
                     lines.push(Line::default());
                 }
@@ -69,12 +70,12 @@ impl App {
             for stash_alias in &self.oids.stashes {
                 let oid = self.oids.get_oid_by_alias(*stash_alias);
                 let commit = repo.find_commit(*oid).unwrap();
-                let message = commit.summary().unwrap_or("⊘ no message").to_string();
+                let message = commit.summary().unwrap_or(empty::NO_MESSAGE).to_string();
 
                 let truncated = truncate_with_ellipsis(message.as_str(), max_text_width.saturating_sub(1));
                 let color = if let Some(color) = self.stashes.colors.get(stash_alias) { *color } else { self.theme.COLOR_TEXT };
 
-                lines.push(Line::from(Span::styled(format!("{SYM_COMMIT_STASH} {truncated}"), Style::default().fg(color))));
+                lines.push(Line::from(Span::styled(format!("{} {truncated}", graph::COMMIT_STASH), Style::default().fg(color))));
             }
         } else if !known_empty {
             lines = blank_lines(if total_lines == 0 { visible_height } else { end.saturating_sub(start) });
@@ -88,7 +89,8 @@ impl App {
             for _ in 0..blank_lines_before {
                 lines.push(Line::default());
             }
-            lines.push(Line::from(Span::styled(center_line(&truncate_with_ellipsis("⊘ no stashes", max_text_width), max_text_width + 3), Style::default().fg(self.theme.COLOR_GREY_800))));
+            let empty_text = format!("{} {}", empty_state::MARK, empty::NO_STASHES);
+            lines.push(Line::from(Span::styled(center_line(&truncate_with_ellipsis(&empty_text, max_text_width), max_text_width + 3), Style::default().fg(self.theme.COLOR_GREY_800))));
         }
 
         // Selection is skipped for the synthetic empty row; striping still fills the pane.
@@ -105,10 +107,10 @@ impl App {
             let scroll_range = scrollbar_content_length(total_lines, visible_height);
             let mut scrollbar_state = ScrollbarState::new(scroll_range).position(self.stashes_scroll.get());
             let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-                .begin_symbol(Some("╮"))
-                .end_symbol(Some("╯"))
-                .track_symbol(Some("│"))
-                .thumb_symbol(if total_lines > visible_height { "▌" } else { "│" })
+                .begin_symbol(Some(scrollbar::BEGIN))
+                .end_symbol(Some(scrollbar::END))
+                .track_symbol(Some(scrollbar::TRACK))
+                .thumb_symbol(if total_lines > visible_height { scrollbar::THUMB } else { scrollbar::INACTIVE_THUMB })
                 .track_style(Style::default().fg(self.theme.COLOR_BORDER))
                 .thumb_style(Style::default().fg(if total_lines > visible_height && self.focus == Focus::Stashes { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 
@@ -119,7 +121,7 @@ impl App {
 
         // Normal mode draws a top separator when this pane is stacked under another pane.
         if self.layout_config.is_branches || self.layout_config.is_tags {
-            let top_border = Paragraph::new("─".repeat(self.layout.stashes.width.saturating_sub(1) as usize)).style(Style::default().fg(self.theme.COLOR_BORDER));
+            let top_border = Paragraph::new(border::HORIZONTAL.repeat(self.layout.stashes.width.saturating_sub(1) as usize)).style(Style::default().fg(self.theme.COLOR_BORDER));
             frame.render_widget(top_border, Rect { x: self.layout.stashes.x + 1, y: self.layout.stashes.y.saturating_sub(1), width: self.layout.stashes.width, height: 1 });
         }
         let list = List::new(list_items).block(Block::default().padding(padding));
@@ -129,10 +131,10 @@ impl App {
         let scroll_range = scrollbar_content_length(total_lines, visible_height);
         let mut scrollbar_state = ScrollbarState::new(scroll_range).position(self.stashes_scroll.get());
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(Some(if self.layout_config.is_branches || self.layout_config.is_tags { "│" } else { "─" }))
-            .end_symbol(Some(if self.layout_config.is_reflogs || self.layout_config.is_worktrees || self.layout_config.is_search { "│" } else { "─" }))
-            .track_symbol(Some("│"))
-            .thumb_symbol(if total_lines > visible_height { "▌" } else { "│" })
+            .begin_symbol(Some(if self.layout_config.is_branches || self.layout_config.is_tags { border::VERTICAL } else { border::HORIZONTAL }))
+            .end_symbol(Some(if self.layout_config.is_reflogs || self.layout_config.is_worktrees || self.layout_config.is_search { border::VERTICAL } else { border::HORIZONTAL }))
+            .track_symbol(Some(scrollbar::TRACK))
+            .thumb_symbol(if total_lines > visible_height { scrollbar::THUMB } else { scrollbar::INACTIVE_THUMB })
             .track_style(Style::default().fg(self.theme.COLOR_BORDER))
             .thumb_style(Style::default().fg(if total_lines > visible_height && self.focus == Focus::Stashes { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 

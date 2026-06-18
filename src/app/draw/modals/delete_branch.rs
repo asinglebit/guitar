@@ -1,6 +1,7 @@
 use crate::{
     app::{app::App, draw::modals::shared::modal_block},
     git::queries::commits::get_current_branch,
+    helpers::{localisation::modal, symbols::branch as branch_symbol},
 };
 use ratatui::Frame;
 use ratatui::{
@@ -18,7 +19,7 @@ impl App {
             return;
         };
         let mut lines = Vec::new();
-        let line_text = "select a branch to delete";
+        let line_text = modal::SELECT_BRANCH_DELETE;
         lines.push(Line::default());
         lines.push(Line::from(vec![Span::styled(line_text, Style::default().fg(self.theme.COLOR_TEXT))]));
         lines.push(Line::default());
@@ -32,7 +33,8 @@ impl App {
             let is_selected = idx == self.modal_delete_branch_selected as usize;
             let is_local = self.branches.local.values().any(|branches| branches.iter().any(|b| b.as_str() == branch));
 
-            let line_text = format!("{} {} ", if is_local { "●" } else { "◆" }, branch);
+            let marker = if is_local { branch_symbol::LOCAL_VISIBLE } else { branch_symbol::REMOTE_VISIBLE };
+            let line_text = format!("{marker} {branch} ");
             length = length.max(line_text.len());
 
             let style = Style::default().fg(if is_selected { self.theme.COLOR_GRASS } else { self.theme.COLOR_TEXT });

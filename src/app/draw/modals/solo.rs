@@ -2,6 +2,7 @@ use crate::app::{
     app::{App, BranchModalAction},
     draw::modals::shared::modal_block,
 };
+use crate::helpers::{localisation::modal, symbols::branch as branch_symbol};
 use ratatui::Frame;
 use ratatui::{
     layout::{Alignment, Rect},
@@ -19,9 +20,9 @@ impl App {
         };
         let mut lines = Vec::new();
         let line_text = match self.modal_branch_action {
-            BranchModalAction::Solo => "select a branch to solo",
-            BranchModalAction::Toggle => "select a branch to toggle",
-            BranchModalAction::Rename => "select a branch to rename",
+            BranchModalAction::Solo => modal::SELECT_BRANCH_SOLO,
+            BranchModalAction::Toggle => modal::SELECT_BRANCH_TOGGLE,
+            BranchModalAction::Rename => modal::SELECT_BRANCH_RENAME,
         };
         lines.push(Line::default());
         lines.push(Line::from(vec![Span::styled(line_text, Style::default().fg(self.theme.COLOR_TEXT))]));
@@ -36,7 +37,8 @@ impl App {
             let is_local = self.branches.local.values().any(|branches| branches.iter().any(|b| b.as_str() == branch));
             length = (10 + branch.len()).max(length);
             let style = Style::default().fg(if is_selected { self.theme.COLOR_GRASS } else { self.theme.COLOR_TEXT });
-            lines.push(Line::from(Span::styled(format!("{} {} ", if is_local { "●" } else { "◆" }, branch), style)));
+            let marker = if is_local { branch_symbol::LOCAL_VISIBLE } else { branch_symbol::REMOTE_VISIBLE };
+            lines.push(Line::from(Span::styled(format!("{marker} {branch} "), style)));
         });
 
         // Paint a plain overlay before clearing the modal rectangle.

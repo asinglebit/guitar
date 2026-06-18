@@ -12,7 +12,7 @@ use crate::{
     },
     core::{branches::Branches, oids::Oids, tags::Tags},
     git::queries::helpers::UncommittedChanges,
-    helpers::{colors::ColorPicker, palette::*, spinner::Spinner},
+    helpers::{colors::ColorPicker, palette::*, spinner::Spinner, symbols::splash},
 };
 use indexmap::IndexMap;
 use ratatui::{style::Style, text::Span, widgets::ListItem};
@@ -37,7 +37,7 @@ impl Default for App {
         let theme = Theme::default();
         let color = Rc::new(RefCell::new(ColorPicker::from_theme(&theme)));
         let heatmap = empty_heatmap();
-        let logo = vec![Span::styled("  guita", Style::default().fg(theme.COLOR_GRASS)), Span::styled("╭", Style::default().fg(theme.COLOR_GREEN))];
+        let logo = vec![Span::styled(splash::LOGO_WORD_PREFIX, Style::default().fg(theme.COLOR_GRASS)), Span::styled(splash::LOGO_CORNER, Style::default().fg(theme.COLOR_GREEN))];
 
         App {
             // General

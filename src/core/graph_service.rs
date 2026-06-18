@@ -8,6 +8,8 @@ use crate::{
     git::queries::{file_history::changed_file_status_at_commit, helpers::FileStatus, reflogs::HeadReflogEntry},
     helpers::{
         heatmap::{DAYS, WEEKS, build_heatmap},
+        localisation::{common, empty, errors, status as status_text},
+        symbols::empty_state,
         time::timestamp_to_utc_date_time,
     },
 };
@@ -160,7 +162,7 @@ fn run_graph_service(config: GraphServiceConfig, rx: Receiver<GraphCommand>, tx:
     let mut walk_ctx = match Walker::new(config.path, config.amount, config.hidden_branch_names.clone(), config.include_head_reflog_roots) {
         Ok(walker) => walker,
         Err(error) => {
-            let _ = tx.send(GraphEvent::Error { generation, message: format!("Walker failed: {error}") });
+            let _ = tx.send(GraphEvent::Error { generation, message: errors::walker_failed(error) });
             return;
         },
     };
@@ -319,12 +321,16 @@ fn file_history_rows(walk_ctx: &Walker, path: &str) -> Result<Vec<GraphFileHisto
             continue;
         };
 
-        let summary = repo.find_commit(oid).ok().and_then(|commit| commit.summary().map(str::to_string)).unwrap_or_else(|| "⊘ no message".to_string());
+        let summary = repo.find_commit(oid).ok().and_then(|commit| commit.summary().map(str::to_string)).unwrap_or_else(no_message);
         let short_oid = oid.to_string().chars().take(8).collect();
         rows.push(GraphFileHistoryRow { graph_index, oid, short_oid, summary, status });
     }
 
     Ok(rows)
+}
+
+fn no_message() -> String {
+    format!("{} {}", empty_state::MARK, empty::NO_MESSAGE)
 }
 
 fn graph_rows(walk_ctx: &Walker, worktrees: &Worktrees, hidden_branch_names: &HashSet<String>, start: usize, end: usize) -> Vec<GraphRow> {
@@ -339,13 +345,13 @@ fn graph_rows(walk_ctx: &Walker, worktrees: &Worktrees, hidden_branch_names: &Ha
         let (summary, committer_date, committer_name) = if is_uncommitted {
             (String::new(), String::new(), String::new())
         } else if let Ok(commit) = repo.find_commit(oid) {
-            let summary = commit.summary().map(str::to_string).unwrap_or_else(|| "⊘ no message".to_string());
+            let summary = commit.summary().map(str::to_string).unwrap_or_else(no_message);
             let committer = commit.committer();
             let committer_date = timestamp_to_utc_date_time(committer.when());
-            let committer_name = committer.name().unwrap_or("-").to_string();
+            let committer_name = committer.name().unwrap_or(common::UNKNOWN).to_string();
             (summary, committer_date, committer_name)
         } else {
-            ("⊘ no message".to_string(), String::new(), String::new())
+            (no_message(), String::new(), String::new())
         };
 
         let local = walk_ctx.branches_local.get(&alias).cloned().unwrap_or_default();
@@ -409,7 +415,7 @@ fn pane_rows(pane: GraphPane, walk_ctx: &Walker) -> Vec<GraphPaneRow> {
                 .iter()
                 .map(|&alias| {
                     let oid = *walk_ctx.oids.get_oid_by_alias(alias);
-                    let summary = repo.find_commit(oid).ok().and_then(|commit| commit.summary().map(str::to_string)).unwrap_or_else(|| "stash".to_string());
+                    let summary = repo.find_commit(oid).ok().and_then(|commit| commit.summary().map(str::to_string)).unwrap_or_else(|| status_text::STASH.to_string());
                     GraphPaneRow::Stash { alias, summary, lane: walk_ctx.stashes_lanes.get(&alias).copied(), graph_index: index_map.get(&alias).copied() }
                 })
                 .collect()

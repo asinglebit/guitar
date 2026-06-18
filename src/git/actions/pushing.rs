@@ -1,4 +1,7 @@
-use crate::git::auth::{AuthAttempt, AuthSession, NetworkResult, network_result};
+use crate::{
+    git::auth::{AuthAttempt, AuthSession, NetworkResult, network_result},
+    helpers::localisation::network,
+};
 use git2::{PushOptions, RemoteCallbacks, Repository};
 use std::thread;
 
@@ -27,7 +30,7 @@ pub fn push_branch(repo_path: &str, remote_name: &str, branch: &str, force: bool
     let branch = branch.to_string();
 
     thread::spawn(move || {
-        let attempt = AuthAttempt::new(auth_session, "Push");
+        let attempt = AuthAttempt::new(auth_session, network::PUSH);
         let result = (|| -> Result<(), git2::Error> {
             let repo = Repository::open(&repo_path)?;
             let mut remote = repo.find_remote(&remote_name)?;
@@ -47,7 +50,7 @@ pub fn push_branch(repo_path: &str, remote_name: &str, branch: &str, force: bool
             Ok(())
         })();
 
-        network_result("Push", &attempt, result)
+        network_result(network::PUSH, &attempt, result)
     })
 }
 
@@ -56,7 +59,7 @@ pub fn push_tags(repo_path: &str, remote_name: &str, auth_session: AuthSession) 
     let remote_name = remote_name.to_string();
 
     thread::spawn(move || {
-        let attempt = AuthAttempt::new(auth_session, "Push tags");
+        let attempt = AuthAttempt::new(auth_session, network::PUSH_TAGS);
         let result = (|| -> Result<(), git2::Error> {
             let repo = Repository::open(&repo_path)?;
             let mut remote = repo.find_remote(&remote_name)?;
@@ -78,7 +81,7 @@ pub fn push_tags(repo_path: &str, remote_name: &str, auth_session: AuthSession) 
             Ok(())
         })();
 
-        network_result("Push tags", &attempt, result)
+        network_result(network::PUSH_TAGS, &attempt, result)
     })
 }
 
@@ -88,7 +91,7 @@ pub fn delete_remote_branch(repo_path: &str, remote_name: &str, branch: &str, au
     let branch = branch.to_string();
 
     thread::spawn(move || {
-        let attempt = AuthAttempt::new(auth_session, "Delete remote branch");
+        let attempt = AuthAttempt::new(auth_session, network::DELETE_REMOTE_BRANCH);
         let result = (|| -> Result<(), git2::Error> {
             let repo = Repository::open(&repo_path)?;
             let mut remote = repo.find_remote(&remote_name)?;
@@ -105,6 +108,6 @@ pub fn delete_remote_branch(repo_path: &str, remote_name: &str, branch: &str, au
             Ok(())
         })();
 
-        network_result("Delete remote branch", &attempt, result)
+        network_result(network::DELETE_REMOTE_BRANCH, &attempt, result)
     })
 }

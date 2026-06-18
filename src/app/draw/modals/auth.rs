@@ -4,7 +4,10 @@ use crate::{
         draw::modals::shared::{action_row, modal_block, render_modal_text_input},
     },
     git::auth::AuthProtocol,
-    helpers::text::{truncate_start_with_ellipsis, wrap_words},
+    helpers::{
+        localisation::{common, modal},
+        text::{truncate_start_with_ellipsis, wrap_words},
+    },
 };
 use ratatui::Frame;
 use ratatui::{
@@ -25,7 +28,7 @@ impl App {
         lines.push(Line::default());
         lines.extend(wrapped_message.into_iter().map(|line| Line::from(Span::styled(line, Style::default().fg(self.theme.COLOR_TEXT)))));
         lines.push(Line::default());
-        lines.push(Line::from(Span::styled("working...", Style::default().fg(self.theme.COLOR_HIGHLIGHTED))));
+        lines.push(Line::from(Span::styled(common::WORKING, Style::default().fg(self.theme.COLOR_HIGHLIGHTED))));
 
         self.draw_auth_text_modal(frame, lines, self.theme.COLOR_BORDER);
     }
@@ -49,11 +52,11 @@ impl App {
         if challenge.protocol == AuthProtocol::Ssh {
             lines.push(Line::default());
             if let Some(username) = &challenge.username {
-                lines.push(Line::from(Span::styled(format!("user: {username}"), Style::default().fg(self.theme.COLOR_GREY_600))));
+                lines.push(Line::from(Span::styled(format!("{} {username}", modal::AUTH_USER), Style::default().fg(self.theme.COLOR_GREY_600))));
             }
             if let Some(path) = &challenge.key_path {
                 lines.push(Line::from(Span::styled(
-                    format!("key: {}", truncate_start_with_ellipsis(&path.display().to_string(), inner_width.saturating_sub(5))),
+                    format!("{} {}", modal::AUTH_KEY, truncate_start_with_ellipsis(&path.display().to_string(), inner_width.saturating_sub(5))),
                     Style::default().fg(self.theme.COLOR_GREY_600),
                 )));
             }
@@ -68,7 +71,7 @@ impl App {
             lines.extend(vec![Line::default(); 5]);
         }
         lines.push(Line::default());
-        lines.push(action_row(&[("submit", "enter"), ("switch field", "tab")], Style::default().fg(self.theme.COLOR_GREY_600)));
+        lines.push(action_row(&[(modal::ACTION_SUBMIT, modal::KEY_ENTER), (modal::ACTION_SWITCH_FIELD, modal::KEY_TAB)], Style::default().fg(self.theme.COLOR_GREY_600)));
 
         let desired_height = lines.len().saturating_add(4);
         let max_modal_height = (frame.area().height as usize).max(1);
@@ -89,10 +92,10 @@ impl App {
         let field_x = modal_area.x + 7;
         let first_field_y = modal_area.y + 2 + field_offsets[0] as u16;
         if challenge.protocol.is_http() {
-            self.draw_auth_field(frame, Rect::new(field_x, first_field_y, field_width, 5), "username", AuthInputField::Username, false);
-            self.draw_auth_field(frame, Rect::new(field_x, modal_area.y + 2 + field_offsets[1] as u16, field_width, 5), "password / token", AuthInputField::Secret, true);
+            self.draw_auth_field(frame, Rect::new(field_x, first_field_y, field_width, 5), modal::AUTH_USERNAME, AuthInputField::Username, false);
+            self.draw_auth_field(frame, Rect::new(field_x, modal_area.y + 2 + field_offsets[1] as u16, field_width, 5), modal::AUTH_PASSWORD_TOKEN, AuthInputField::Secret, true);
         } else {
-            self.draw_auth_field(frame, Rect::new(field_x, first_field_y, field_width, 5), "passphrase", AuthInputField::Secret, true);
+            self.draw_auth_field(frame, Rect::new(field_x, first_field_y, field_width, 5), modal::AUTH_PASSPHRASE, AuthInputField::Secret, true);
         }
     }
 

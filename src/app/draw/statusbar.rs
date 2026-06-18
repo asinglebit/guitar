@@ -4,7 +4,8 @@ use crate::{
     helpers::{
         branch_visibility::current_branch_names,
         keymap::InputMode,
-        symbols::{SYM_SUBMODULE, SYM_WORKTREE},
+        localisation::status as status_text,
+        symbols::{branch as branch_symbol, graph, submodule, worktree},
     },
 };
 use ratatui::Frame;
@@ -20,22 +21,22 @@ impl App {
         let root = first.parent_path.file_name().and_then(|value| value.to_str()).map(str::to_string).unwrap_or_else(|| first.parent_path.display().to_string());
         let mut parts = vec![root];
         parts.extend(self.submodule_stack.iter().map(|entry| entry.submodule_path.display().to_string()));
-        Some(format!("{SYM_SUBMODULE} {} ", parts.join(" › ")))
+        Some(format!("{} {} ", submodule::DEFAULT, parts.join(submodule::STACK_SEPARATOR)))
     }
 
     pub fn draw_statusbar(&mut self, frame: &mut Frame, repo: &git2::Repository) {
         let mut left_spans: Vec<Span> = match self.worktrees.current_name() {
-            Some(name) => vec![Span::styled(format!("  {SYM_WORKTREE}{name} "), Style::default().fg(self.theme.COLOR_GRASS))],
+            Some(name) => vec![Span::styled(format!("  {}{name} ", worktree::CURRENT), Style::default().fg(self.theme.COLOR_GRASS))],
             None => vec![Span::raw("  ")],
         };
         if let Some(label) = self.submodule_stack_status_label() {
             left_spans.push(Span::styled(label, Style::default().fg(self.theme.COLOR_TEAL)));
         }
         match get_current_branch(repo) {
-            Some(branch) => left_spans.push(Span::styled(format!("● {}", branch), Style::default().fg(self.theme.COLOR_GRASS))),
+            Some(branch) => left_spans.push(Span::styled(format!("{} {}", branch_symbol::LOCAL_VISIBLE, branch), Style::default().fg(self.theme.COLOR_GRASS))),
             None => match repo.head().ok().and_then(|h| h.target()) {
-                Some(oid) => left_spans.push(Span::styled(format!("detached head: #{:.6}", oid), Style::default().fg(self.theme.COLOR_TEXT))),
-                None => left_spans.push(Span::styled("no head (no commits yet)", Style::default().fg(self.theme.COLOR_TEXT))),
+                Some(oid) => left_spans.push(Span::styled(format!("{} #{:.6}", status_text::DETACHED_HEAD, oid), Style::default().fg(self.theme.COLOR_TEXT))),
+                None => left_spans.push(Span::styled(status_text::NO_HEAD_NO_COMMITS, Style::default().fg(self.theme.COLOR_TEXT))),
             },
         }
         let lines = Line::from(left_spans);
@@ -97,11 +98,11 @@ impl App {
         let icon_spinner = if self.spinner.is_running() { format!("{} ", self.spinner.get_char()) } else { "".to_string() };
 
         // Action mode indicator (moved here)
-        let mut action_hint = if self.mode == InputMode::Action { vec![Span::styled("● ", Style::default().fg(self.theme.COLOR_GRAPEFRUIT))] } else { Vec::new() };
+        let mut action_hint = if self.mode == InputMode::Action { vec![Span::styled(format!("{} ", graph::COMMIT_BRANCH), Style::default().fg(self.theme.COLOR_GRAPEFRUIT))] } else { Vec::new() };
 
         // Zen mode indicator
         if self.layout_config.is_zen {
-            action_hint.push(Span::styled("● ", Style::default().fg(self.theme.COLOR_GRASS)));
+            action_hint.push(Span::styled(format!("{} ", graph::COMMIT_BRANCH), Style::default().fg(self.theme.COLOR_GRASS)));
         }
 
         let mut right_spans = vec![Span::styled(if total == 0 { "".to_string() } else { format!("{}/{}{} ", cursor, total, icon_spinner) }, Style::default().fg(self.theme.COLOR_TEXT))];

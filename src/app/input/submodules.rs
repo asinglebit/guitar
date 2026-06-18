@@ -2,6 +2,7 @@ use crate::{
     app::app::{App, Focus, Viewport},
     core::submodules::SubmoduleStackEntry,
     git::actions::{network::NetworkRequest, submodules::sync_submodule},
+    helpers::localisation::errors,
 };
 use std::path::PathBuf;
 
@@ -16,7 +17,7 @@ impl App {
         };
 
         if !entry.can_open() {
-            self.show_error("Open submodule failed: submodule is not initialized. Run update/init first.");
+            self.show_error(errors::OPEN_SUBMODULE_NOT_INITIALIZED);
             return;
         }
 
@@ -74,7 +75,7 @@ impl App {
                 self.focus = Focus::Submodules;
                 self.reload(None);
             },
-            Err(error) => self.show_error(format!("Sync submodule failed: {error}")),
+            Err(error) => self.show_error(errors::with_error(errors::SYNC_SUBMODULE, error)),
         }
     }
 }

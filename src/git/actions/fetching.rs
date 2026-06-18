@@ -1,4 +1,7 @@
-use crate::git::auth::{AuthAttempt, AuthSession, NetworkResult, network_result};
+use crate::{
+    git::auth::{AuthAttempt, AuthSession, NetworkResult, network_result},
+    helpers::localisation::network,
+};
 use git2::FetchPrune;
 use git2::{FetchOptions, RemoteCallbacks, Repository};
 use std::thread;
@@ -10,7 +13,7 @@ pub fn fetch_remote(repo_path: &str, remote_name: &str, auth_session: AuthSessio
     let remote_name = remote_name.to_string();
 
     thread::spawn(move || {
-        let attempt = AuthAttempt::new(auth_session, "Fetch");
+        let attempt = AuthAttempt::new(auth_session, network::FETCH);
         let result = (|| -> Result<(), git2::Error> {
             let repo = Repository::open(repo_path)?;
             let mut remote = repo.find_remote(&remote_name)?;
@@ -35,6 +38,6 @@ pub fn fetch_remote(repo_path: &str, remote_name: &str, auth_session: AuthSessio
             Ok(())
         })();
 
-        network_result("Fetch", &attempt, result)
+        network_result(network::FETCH, &attempt, result)
     })
 }

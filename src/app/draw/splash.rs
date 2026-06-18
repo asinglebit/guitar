@@ -1,5 +1,6 @@
 use crate::app::app::{App, Focus};
 use crate::helpers::keymap::{Command, InputMode, keybinding_to_visual_string};
+use crate::helpers::{localisation::splash as splash_text, symbols::splash as splash_symbol};
 use ratatui::Frame;
 use ratatui::{
     style::Style,
@@ -16,15 +17,15 @@ impl App {
     }
 
     pub(crate) fn recent_repository_actions_detail_text(&self) -> String {
-        let remove = self.recent_repository_command_key(&Command::RemoveRecentRepository, "d");
-        let move_up = self.recent_repository_command_key(&Command::MoveRecentRepositoryUp, "Shift + K");
-        let move_down = self.recent_repository_command_key(&Command::MoveRecentRepositoryDown, "Shift + J");
+        let remove = self.recent_repository_command_key(&Command::RemoveRecentRepository, splash_text::KEY_REMOVE_FALLBACK);
+        let move_up = self.recent_repository_command_key(&Command::MoveRecentRepositoryUp, splash_text::KEY_MOVE_UP_FALLBACK);
+        let move_down = self.recent_repository_command_key(&Command::MoveRecentRepositoryDown, splash_text::KEY_MOVE_DOWN_FALLBACK);
 
-        format!("remove ({remove}) | move up ({move_up}) | move down ({move_down})")
+        splash_text::recent_actions(&remove, &move_up, &move_down)
     }
 
     pub(crate) fn recent_repository_actions_text(&self) -> String {
-        format!("actions: {}", self.recent_repository_actions_detail_text())
+        splash_text::actions(&self.recent_repository_actions_detail_text())
     }
 
     #[rustfmt::skip]
@@ -89,45 +90,33 @@ impl App {
         }
 
         if self.layout.app.width < 80 {
-            lines.push(Line::from(Span::styled("guita╭".to_string(), Style::default().fg(self.theme.COLOR_GRASS))).centered());
+            lines.push(Line::from(Span::styled(splash_symbol::LOGO_COMPACT.to_string(), Style::default().fg(self.theme.COLOR_GRASS))).centered());
         } else if self.layout.app.width < 120 {
-            lines.push(Line::from(Span::styled("                    :#   :#                 ".to_string(), Style::default().fg(self.theme.COLOR_GRASS))).centered());
-            lines.push(Line::from(Span::styled("                         L#                 ".to_string(), Style::default().fg(self.theme.COLOR_GRASS))).centered());
-            lines.push(Line::from(Span::styled("  .##5#^.  .#   .#  :C  #C6#   #?##:        ".to_string(), Style::default().fg(self.theme.COLOR_GRASS))).centered());
-            lines.push(Line::from(Span::styled("  #B   #G  C#   #B  #7   B?        G#       ".to_string(), Style::default().fg(self.theme.COLOR_GRASS))).centered());
-            lines.push(Line::from(Span::styled("  #4   B5  B5   B5  B5   B5    1B5B#G  .a###".to_string(), Style::default().fg(self.theme.COLOR_GREEN))).centered());
-            lines.push(Line::from(Span::styled("  #b   5?  ?B   B5  B5   B5   ##   ##  B?   ".to_string(), Style::default().fg(self.theme.COLOR_GREEN))).centered());
-            lines.push(Line::from(Span::styled("  .#B~6G!  .#6#~G.  #5   ~##  .##Y~#.  !#   ".to_string(), Style::default().fg(self.theme.COLOR_GREEN))).centered());
-            lines.push(Line::from(Span::styled("      .##                              !B   ".to_string(), Style::default().fg(self.theme.COLOR_GREEN))).centered());
-            lines.push(Line::from(Span::styled("     ~G#                               ~?   ".to_string(), Style::default().fg(self.theme.COLOR_GREEN))).centered());
+            for (idx, row) in splash_symbol::LOGO_NARROW.iter().enumerate() {
+                let color = if idx < 4 { self.theme.COLOR_GRASS } else { self.theme.COLOR_GREEN };
+                lines.push(Line::from(Span::styled(row.to_string(), Style::default().fg(color))).centered());
+            }
         } else {
-            lines.push(Line::from(Span::styled("                                 :GG~        .?Y.                                ".to_string(), Style::default().fg(self.theme.COLOR_GRASS))).centered());
-            lines.push(Line::from(Span::styled("       ....        ..      ..   .....      . ^BG: ..       .....                 ".to_string(), Style::default().fg(self.theme.COLOR_GRASS))).centered());
-            lines.push(Line::from(Span::styled("    .7555YY7JP^   ~PJ     ~PJ  ?YY5PP~    7YY5BGYYYYJ.   J555YY557.              ".to_string(), Style::default().fg(self.theme.COLOR_GRASS))).centered());
-            lines.push(Line::from(Span::styled("   .5B?.  :JBB~   !#5     !#5  ...PB~     ...^BG:....    ~:.   .7#5           :^^".to_string(), Style::default().fg(self.theme.COLOR_GRASS))).centered());
-            lines.push(Line::from(Span::styled("   7#5     .GB~   !B5     !B5     PB~        :BG.        .~7??J?JBG:      .~JPPPY".to_string(), Style::default().fg(self.theme.COLOR_GRASS))).centered());
-            lines.push(Line::from(Span::styled("   ?#Y      PB~   !B5     !B5     PB~        :BG.       7GP7~^^^!BG:     ~5GY!:. ".to_string(), Style::default().fg(self.theme.COLOR_GREEN))).centered());
-            lines.push(Line::from(Span::styled("   ^GB~    7BB~   ^BG.   .YB5     5#7        :BB:       P#!     JBG:    ^GG7     ".to_string(), Style::default().fg(self.theme.COLOR_GREEN))).centered());
-            lines.push(Line::from(Span::styled("    ^5G5JJYJPB~    JBP???YYB5     ^5GYJJ?.    7GPJ???.  ~PGJ77?5J5B!    JG5      ".to_string(), Style::default().fg(self.theme.COLOR_GREEN))).centered());
-            lines.push(Line::from(Span::styled("      .^~^..GB:     :~!!~. ^^       :~~~~      .^~~~~    .^!!!~. .^:    JG5      ".to_string(), Style::default().fg(self.theme.COLOR_GREEN))).centered());
-            lines.push(Line::from(Span::styled("    .?!^^^!5G7                                                          YB5      ".to_string(), Style::default().fg(self.theme.COLOR_GREEN))).centered());
-            lines.push(Line::from(Span::styled("    .!?JJJ?!:                                                           75?      ".to_string(), Style::default().fg(self.theme.COLOR_GREEN))).centered());
+            for (idx, row) in splash_symbol::LOGO_WIDE.iter().enumerate() {
+                let color = if idx < 5 { self.theme.COLOR_GRASS } else { self.theme.COLOR_GREEN };
+                lines.push(Line::from(Span::styled(row.to_string(), Style::default().fg(color))).centered());
+            }
         }
 
         lines.push(Line::default());
         if self.spinner.is_running() {
             let icon_spinner = format!("{} ", self.spinner.get_char());
-            lines.push(Line::from(vec![Span::styled(format!("{} loading...", icon_spinner), Style::default().fg(self.theme.COLOR_TEXT))]).centered());
+            lines.push(Line::from(vec![Span::styled(format!("{} {}", icon_spinner, splash_text::LOADING), Style::default().fg(self.theme.COLOR_TEXT))]).centered());
         } else if self.recent.is_empty() {
-            lines.push(Line::from(vec![Span::styled("made with ♡".to_string(), Style::default().fg(self.theme.COLOR_TEXT))]).centered());
+            lines.push(Line::from(vec![Span::styled(splash_text::MADE_WITH.to_string(), Style::default().fg(self.theme.COLOR_TEXT))]).centered());
             lines.push(Line::default());
-            lines.push(Line::from(vec![Span::styled("https://github.com/asinglebit/guitar".to_string(), Style::default().fg(self.theme.COLOR_TEXT))]).centered());
+            lines.push(Line::from(vec![Span::styled(splash_text::REPOSITORY_URL.to_string(), Style::default().fg(self.theme.COLOR_TEXT))]).centered());
             if self.repo.is_none() {
                 lines.push(Line::default());
-                lines.push(Line::from(vec![Span::styled("! not a valid git repository !".to_string(), Style::default().fg(self.theme.COLOR_ORANGE))]).centered());
+                lines.push(Line::from(vec![Span::styled(splash_text::NOT_A_VALID_GIT_REPOSITORY.to_string(), Style::default().fg(self.theme.COLOR_ORANGE))]).centered());
             }
         } else {
-            lines.push(Line::from(vec![Span::styled("recent repositories:".to_string(), Style::default().fg(self.theme.COLOR_TEXT))]).centered());
+            lines.push(Line::from(vec![Span::styled(splash_text::RECENT_REPOSITORIES.to_string(), Style::default().fg(self.theme.COLOR_TEXT))]).centered());
             lines.push(Line::default());
             lines.push(Line::from(vec![Span::styled(self.recent_repository_actions_text(), Style::default().fg(self.theme.COLOR_TEXT))]).centered());
             lines.push(Line::default());
@@ -144,9 +133,9 @@ impl App {
                 // Brackets make the current splash selection visible without changing row width too much.
                 if i == self.splash_selected && self.focus == Focus::Viewport && !self.spinner.is_running() {
                     let mut spans = Vec::new();
-                    spans.push(Span::styled("⏵ ", Style::default().fg(self.theme.COLOR_GRASS)));
+                    spans.push(Span::styled(splash_symbol::SELECTED_LEFT, Style::default().fg(self.theme.COLOR_GRASS)));
                     spans.extend(line.spans.clone());
-                    spans.push(Span::styled(" ⏴", Style::default().fg(self.theme.COLOR_GRASS)));
+                    spans.push(Span::styled(splash_symbol::SELECTED_RIGHT, Style::default().fg(self.theme.COLOR_GRASS)));
                     line = Line::from(spans).centered();
                 }
 

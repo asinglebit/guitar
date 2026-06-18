@@ -1,13 +1,16 @@
 use crate::core::graph_service::{GraphHistory, GraphRow};
-use crate::helpers::keymap::{Command, KeyBinding, keycode_to_visual_string};
 use crate::helpers::text::truncate_with_ellipsis;
+use crate::helpers::{
+    keymap::{Command, KeyBinding, keycode_to_visual_string},
+    localisation::status as status_text,
+};
 use crate::{
     core::chunk::NONE,
     git::queries::helpers::UncommittedChanges,
     helpers::{
         colors::ColorPicker,
         palette::*,
-        symbols::*,
+        symbols::{branch as branch_symbol, entity, graph, status, worktree},
         text::{modifiers_to_string, pascal_to_spaced},
     },
     layers,
@@ -56,7 +59,7 @@ pub fn render_graph_projection(theme: &Theme, rows: &[GraphRow], history: &Graph
         };
 
         if row.alias == NONE {
-            lines.push(Line::from(Span::styled(" ◌", Style::default().fg(theme.COLOR_GREY_400))));
+            lines.push(Line::from(Span::styled(format!(" {}", graph::UNCOMMITTED), Style::default().fg(theme.COLOR_GREY_400))));
             continue;
         }
 
@@ -87,12 +90,12 @@ pub fn render_graph_projection(theme: &Theme, rows: &[GraphRow], history: &Graph
                 if closest_lane == lane_idx {
                     branching_lanes.remove(0);
                 } else if lane_idx < closest_lane {
-                    layers.merge(SYM_EMPTY, closest_lane);
-                    layers.merge(SYM_EMPTY, closest_lane);
-                    layers.commit(SYM_EMPTY, closest_lane);
-                    layers.commit(SYM_EMPTY, closest_lane);
-                    layers.pipe(SYM_HORIZONTAL, closest_lane);
-                    layers.pipe(SYM_HORIZONTAL, closest_lane);
+                    layers.merge(graph::EMPTY, closest_lane);
+                    layers.merge(graph::EMPTY, closest_lane);
+                    layers.commit(graph::EMPTY, closest_lane);
+                    layers.commit(graph::EMPTY, closest_lane);
+                    layers.pipe(graph::HORIZONTAL, closest_lane);
+                    layers.pipe(graph::HORIZONTAL, closest_lane);
                     lane_idx += 1;
                     continue;
                 }
@@ -103,22 +106,22 @@ pub fn render_graph_projection(theme: &Theme, rows: &[GraphRow], history: &Graph
                     match prev_snapshot.get(lane_idx) {
                         Some(prev) => {
                             if (prev.parent_a != NONE && prev.parent_b == NONE) || (prev.parent_a == NONE && prev.parent_b != NONE) {
-                                layers.commit(SYM_EMPTY, lane_idx);
-                                layers.commit(SYM_EMPTY, lane_idx);
-                                layers.pipe(SYM_BRANCH_UP, lane_idx);
-                                layers.pipe(SYM_EMPTY, lane_idx);
+                                layers.commit(graph::EMPTY, lane_idx);
+                                layers.commit(graph::EMPTY, lane_idx);
+                                layers.pipe(graph::BRANCH_UP, lane_idx);
+                                layers.pipe(graph::EMPTY, lane_idx);
                             } else {
-                                layers.commit(SYM_EMPTY, lane_idx);
-                                layers.commit(SYM_EMPTY, lane_idx);
-                                layers.pipe(SYM_EMPTY, lane_idx);
-                                layers.pipe(SYM_EMPTY, lane_idx);
+                                layers.commit(graph::EMPTY, lane_idx);
+                                layers.commit(graph::EMPTY, lane_idx);
+                                layers.pipe(graph::EMPTY, lane_idx);
+                                layers.pipe(graph::EMPTY, lane_idx);
                             }
                         },
                         None => {
-                            layers.commit(SYM_EMPTY, lane_idx);
-                            layers.commit(SYM_EMPTY, lane_idx);
-                            layers.pipe(SYM_BRANCH_UP, lane_idx);
-                            layers.pipe(SYM_EMPTY, lane_idx);
+                            layers.commit(graph::EMPTY, lane_idx);
+                            layers.commit(graph::EMPTY, lane_idx);
+                            layers.pipe(graph::BRANCH_UP, lane_idx);
+                            layers.pipe(graph::EMPTY, lane_idx);
                         },
                     }
                 }
@@ -126,19 +129,19 @@ pub fn render_graph_projection(theme: &Theme, rows: &[GraphRow], history: &Graph
                 is_commit_found = true;
                 let is_two_parents = chunk.parent_a != NONE && chunk.parent_b != NONE;
                 if is_two_parents && !row.has_any_branch {
-                    layers.commit(SYM_MERGE, lane_idx);
+                    layers.commit(graph::MERGE, lane_idx);
                 } else if row.has_any_branch {
-                    layers.commit(SYM_COMMIT_BRANCH, lane_idx);
+                    layers.commit(graph::COMMIT_BRANCH, lane_idx);
                 } else if row.worktrees.iter().any(|entry| entry.branch.is_none() || !row.has_any_branch) {
-                    layers.commit(SYM_WORKTREE, lane_idx);
+                    layers.commit(worktree::CURRENT, lane_idx);
                 } else if row.is_stash {
-                    layers.commit(SYM_COMMIT_STASH, lane_idx);
+                    layers.commit(graph::COMMIT_STASH, lane_idx);
                 } else {
-                    layers.commit(SYM_COMMIT, lane_idx);
+                    layers.commit(graph::COMMIT, lane_idx);
                 }
-                layers.commit(SYM_EMPTY, lane_idx);
-                layers.pipe(SYM_EMPTY, lane_idx);
-                layers.pipe(SYM_EMPTY, lane_idx);
+                layers.commit(graph::EMPTY, lane_idx);
+                layers.pipe(graph::EMPTY, lane_idx);
+                layers.pipe(graph::EMPTY, lane_idx);
 
                 let mut is_mergee_found = false;
                 let mut is_drawing = false;
@@ -173,52 +176,52 @@ pub fn render_graph_projection(theme: &Theme, rows: &[GraphRow], history: &Graph
                                 if !is_drawing {
                                     is_merged_before = true;
                                 }
-                                layers.merge(SYM_EMPTY, merger_idx);
-                                layers.merge(SYM_EMPTY, merger_idx);
+                                layers.merge(graph::EMPTY, merger_idx);
+                                layers.merge(graph::EMPTY, merger_idx);
                             } else if !is_merger_found {
-                                layers.merge(SYM_EMPTY, merger_idx);
-                                layers.merge(SYM_EMPTY, merger_idx);
+                                layers.merge(graph::EMPTY, merger_idx);
+                                layers.merge(graph::EMPTY, merger_idx);
                             } else if ((chunk_nested.parent_a != NONE && chunk_nested.parent_b == NONE) || (chunk_nested.parent_a == NONE && chunk_nested.parent_b != NONE))
                                 && (chunk.parent_a == chunk_nested.parent_a || chunk.parent_b == chunk_nested.parent_a)
                             {
                                 if chunk_nested_idx == merger_idx {
-                                    layers.merge(SYM_MERGE_RIGHT_FROM, merger_idx);
+                                    layers.merge(graph::MERGE_RIGHT_FROM, merger_idx);
                                 } else {
-                                    layers.merge(SYM_HORIZONTAL, merger_idx);
+                                    layers.merge(graph::HORIZONTAL, merger_idx);
                                 }
 
                                 if chunk_nested_idx + 1 == mergee_idx {
-                                    layers.merge(SYM_EMPTY, merger_idx);
+                                    layers.merge(graph::EMPTY, merger_idx);
                                 } else {
-                                    layers.merge(SYM_HORIZONTAL, merger_idx);
+                                    layers.merge(graph::HORIZONTAL, merger_idx);
                                 }
                                 is_drawing = true;
                             } else if is_drawing {
                                 if chunk_nested_idx + 1 == mergee_idx {
-                                    layers.merge(SYM_HORIZONTAL, merger_idx);
-                                    layers.merge(SYM_EMPTY, merger_idx);
+                                    layers.merge(graph::HORIZONTAL, merger_idx);
+                                    layers.merge(graph::EMPTY, merger_idx);
                                 } else {
-                                    layers.merge(SYM_HORIZONTAL, merger_idx);
-                                    layers.merge(SYM_HORIZONTAL, merger_idx);
+                                    layers.merge(graph::HORIZONTAL, merger_idx);
+                                    layers.merge(graph::HORIZONTAL, merger_idx);
                                 }
                             } else {
-                                layers.merge(SYM_EMPTY, merger_idx);
-                                layers.merge(SYM_EMPTY, merger_idx);
+                                layers.merge(graph::EMPTY, merger_idx);
+                                layers.merge(graph::EMPTY, merger_idx);
                             }
                         } else if is_merger_found && !is_merged_before {
                             if ((chunk_nested.parent_a != NONE && chunk_nested.parent_b == NONE) || (chunk_nested.parent_a == NONE && chunk_nested.parent_b != NONE))
                                 && (chunk.parent_a == chunk_nested.parent_a || chunk.parent_b == chunk_nested.parent_a)
                             {
-                                layers.merge(SYM_MERGE_LEFT_FROM, merger_idx);
-                                layers.merge(SYM_EMPTY, merger_idx);
+                                layers.merge(graph::MERGE_LEFT_FROM, merger_idx);
+                                layers.merge(graph::EMPTY, merger_idx);
                                 is_merged_before = true;
                                 is_drawing = false;
                             } else if is_drawing {
-                                layers.merge(SYM_HORIZONTAL, merger_idx);
-                                layers.merge(SYM_HORIZONTAL, merger_idx);
+                                layers.merge(graph::HORIZONTAL, merger_idx);
+                                layers.merge(graph::HORIZONTAL, merger_idx);
                             } else {
-                                layers.merge(SYM_EMPTY, merger_idx);
-                                layers.merge(SYM_EMPTY, merger_idx);
+                                layers.merge(graph::EMPTY, merger_idx);
+                                layers.merge(graph::EMPTY, merger_idx);
                             }
                         }
                     }
@@ -250,38 +253,38 @@ pub fn render_graph_projection(theme: &Theme, rows: &[GraphRow], history: &Graph
                         }
 
                         if trailing_dummies > 0 && prev.is_some() && prev.unwrap().len() > idx + 1 && prev.unwrap()[idx + 1].is_dummy() {
-                            layers.merge(SYM_BRANCH_DOWN, idx + 1);
-                            layers.merge(SYM_EMPTY, idx + 1);
+                            layers.merge(graph::BRANCH_DOWN, idx + 1);
+                            layers.merge(graph::EMPTY, idx + 1);
                         } else if trailing_dummies > 0 {
                             for _ in lane_idx..idx {
-                                layers.merge(SYM_HORIZONTAL, idx + 1);
-                                layers.merge(SYM_HORIZONTAL, idx + 1);
+                                layers.merge(graph::HORIZONTAL, idx + 1);
+                                layers.merge(graph::HORIZONTAL, idx + 1);
                             }
 
-                            layers.merge(SYM_MERGE_LEFT_FROM, idx + 1);
-                            layers.merge(SYM_EMPTY, idx + 1);
+                            layers.merge(graph::MERGE_LEFT_FROM, idx + 1);
+                            layers.merge(graph::EMPTY, idx + 1);
                         } else {
                             for _ in lane_idx..idx {
-                                layers.merge(SYM_HORIZONTAL, idx + 1);
-                                layers.merge(SYM_HORIZONTAL, idx + 1);
+                                layers.merge(graph::HORIZONTAL, idx + 1);
+                                layers.merge(graph::HORIZONTAL, idx + 1);
                             }
 
-                            layers.merge(SYM_BRANCH_DOWN, idx + 1);
-                            layers.merge(SYM_EMPTY, idx + 1);
+                            layers.merge(graph::BRANCH_DOWN, idx + 1);
+                            layers.merge(graph::EMPTY, idx + 1);
                         }
                     }
                 }
             } else {
-                layers.commit(SYM_EMPTY, lane_idx);
-                layers.commit(SYM_EMPTY, lane_idx);
+                layers.commit(graph::EMPTY, lane_idx);
+                layers.commit(graph::EMPTY, lane_idx);
                 if (chunk.parent_a == head_alias || chunk.parent_b == head_alias) && lane_idx == 0 {
-                    layers.pipe_custom(SYM_VERTICAL_DOTTED, lane_idx, theme.COLOR_GREY_500);
+                    layers.pipe_custom(graph::VERTICAL_DOTTED, lane_idx, theme.COLOR_GREY_500);
                 } else if chunk.parent_a == NONE && chunk.parent_b == NONE {
                     layers.pipe(" ", lane_idx);
                 } else {
-                    layers.pipe(SYM_VERTICAL, lane_idx);
+                    layers.pipe(graph::VERTICAL, lane_idx);
                 }
-                layers.pipe(SYM_EMPTY, lane_idx);
+                layers.pipe(graph::EMPTY, lane_idx);
             }
 
             lane_idx += 1;
@@ -289,15 +292,15 @@ pub fn render_graph_projection(theme: &Theme, rows: &[GraphRow], history: &Graph
 
         if !is_commit_found {
             if row.has_any_branch {
-                layers.commit(SYM_COMMIT_BRANCH, lane_idx);
+                layers.commit(graph::COMMIT_BRANCH, lane_idx);
             } else if row.worktrees.iter().any(|entry| entry.branch.is_none() || !row.has_any_branch) {
-                layers.commit(SYM_WORKTREE, lane_idx);
+                layers.commit(worktree::CURRENT, lane_idx);
             } else {
-                layers.commit(SYM_COMMIT, lane_idx);
+                layers.commit(graph::COMMIT, lane_idx);
             };
-            layers.commit(SYM_EMPTY, lane_idx);
-            layers.pipe(SYM_EMPTY, lane_idx);
-            layers.pipe(SYM_EMPTY, lane_idx);
+            layers.commit(graph::EMPTY, lane_idx);
+            layers.pipe(graph::EMPTY, lane_idx);
+            layers.pipe(graph::EMPTY, lane_idx);
         }
 
         layers.bake(&mut spans);
@@ -321,7 +324,7 @@ pub fn remove_empty_columns(lines: &mut Vec<Line<'_>>) {
             let a = &spans[idx];
             let b = &spans[idx + 1];
             let x = non_empty_counts.entry(idx).or_insert(0);
-            if a.content != " " && a.content != "─" || b.content != " " && b.content != "─" {
+            if a.content != graph::EMPTY && a.content != graph::HORIZONTAL || b.content != graph::EMPTY && b.content != graph::HORIZONTAL {
                 *x += 1;
             }
             idx += 2;
@@ -410,7 +413,7 @@ pub fn render_message_projection(
                     } else {
                         theme.COLOR_TEAL
                     };
-                    spans.push(Span::styled(format!("{SYM_WORKTREE}{} ", worktree.name), Style::default().fg(color)));
+                    spans.push(Span::styled(format!("{}{} ", worktree::CURRENT, worktree.name), Style::default().fg(color)));
                 }
             }
             let has_worktree_label = show_ref_labels && !row.worktrees.is_empty();
@@ -418,7 +421,7 @@ pub fn render_message_projection(
             if show_ref_labels {
                 for branch in &row.branches {
                     let color = branch.lane.map(|lane| color_picker.get_lane(lane)).unwrap_or(theme.COLOR_TEXT);
-                    spans.push(Span::styled(format!("{} {} ", if branch.is_local { SYM_COMMIT_BRANCH } else { "◆" }, branch.name), Style::default().fg(color)));
+                    spans.push(Span::styled(format!("{} {} ", if branch.is_local { branch_symbol::LOCAL_VISIBLE } else { branch_symbol::REMOTE_VISIBLE }, branch.name), Style::default().fg(color)));
                 }
             }
             let has_visible_branch_label = show_ref_labels && !row.branches.is_empty();
@@ -426,14 +429,14 @@ pub fn render_message_projection(
             if show_ref_labels {
                 for tag in &row.tags {
                     let color = tag.lane.map(|lane| color_picker.get_lane(lane)).unwrap_or(theme.COLOR_TEXT);
-                    spans.push(Span::styled(format!("{} {} ", SYM_TAG, tag.name), Style::default().fg(color)));
+                    spans.push(Span::styled(format!("{} {} ", entity::TAG, tag.name), Style::default().fg(color)));
                 }
             }
             let has_tag_label = show_ref_labels && !row.tags.is_empty();
 
             if show_ref_labels && row.is_stash {
                 let color = row.stash_lane.map(|lane| color_picker.get_lane(lane)).unwrap_or(theme.COLOR_TEXT);
-                spans.push(Span::styled(format!("{SYM_COMMIT_STASH} stash "), Style::default().fg(color)));
+                spans.push(Span::styled(format!("{} {} ", graph::COMMIT_STASH, status_text::STASH), Style::default().fg(color)));
             }
             let has_stash_label = show_ref_labels && row.is_stash;
 
@@ -445,7 +448,7 @@ pub fn render_message_projection(
                 && let Some(reflog) = &row.reflog
             {
                 let color = reflog.lane.map(|lane| color_picker.get_lane(lane)).unwrap_or(theme.COLOR_TEXT);
-                spans.push(Span::styled(format!("{SYM_REFLOG} {} ", reflog.selector), Style::default().fg(color)));
+                spans.push(Span::styled(format!("{} {} ", entity::REFLOG, reflog.selector), Style::default().fg(color)));
             }
 
             spans.push(Span::styled(row.summary.clone(), Style::default().fg(if row.index == selected { theme.COLOR_HIGHLIGHTED } else { theme.COLOR_TEXT })));
@@ -453,19 +456,19 @@ pub fn render_message_projection(
         } else {
             let color = if row.index == selected { theme.COLOR_HIGHLIGHTED } else { theme.COLOR_TEXT };
             if uncommitted.conflict_count > 0 {
-                spans.push(Span::styled("! ", Style::default().fg(theme.COLOR_ORANGE)));
+                spans.push(Span::styled(status::CONFLICT_SPACED, Style::default().fg(theme.COLOR_ORANGE)));
                 spans.push(Span::styled(format!("{} ", uncommitted.conflict_count), Style::default().fg(theme.COLOR_ORANGE)));
             }
             if uncommitted.modified_count > 0 {
-                spans.push(Span::styled("~ ", Style::default().fg(theme.COLOR_BLUE)));
+                spans.push(Span::styled(status::MODIFIED_SPACED, Style::default().fg(theme.COLOR_BLUE)));
                 spans.push(Span::styled(format!("{} ", uncommitted.modified_count), Style::default().fg(color)));
             }
             if uncommitted.added_count > 0 {
-                spans.push(Span::styled("+ ", Style::default().fg(theme.COLOR_GREEN)));
+                spans.push(Span::styled(status::ADDED_SPACED, Style::default().fg(theme.COLOR_GREEN)));
                 spans.push(Span::styled(format!("{} ", uncommitted.added_count), Style::default().fg(color)));
             }
             if uncommitted.deleted_count > 0 {
-                spans.push(Span::styled("- ", Style::default().fg(theme.COLOR_RED)));
+                spans.push(Span::styled(status::DELETED_SPACED, Style::default().fg(theme.COLOR_RED)));
                 spans.push(Span::styled(format!("{} ", uncommitted.deleted_count), Style::default().fg(color)));
             }
             lines.push(Line::from(spans));

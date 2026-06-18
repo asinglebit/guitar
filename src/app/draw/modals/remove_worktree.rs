@@ -2,6 +2,7 @@ use crate::app::{
     app::App,
     draw::modals::shared::{action_row, modal_block},
 };
+use crate::helpers::localisation::modal;
 use ratatui::Frame;
 use ratatui::{
     layout::{Alignment, Rect},
@@ -16,18 +17,18 @@ impl App {
         let mut lines = Vec::new();
 
         lines.push(Line::default());
-        lines.push(Line::from(Span::styled("remove selected worktree?", Style::default().fg(self.theme.COLOR_TEXT))));
+        lines.push(Line::from(Span::styled(modal::REMOVE_SELECTED_WORKTREE, Style::default().fg(self.theme.COLOR_TEXT))));
         lines.push(Line::default());
 
         if let Some(entry) = self.modal_worktree_target.and_then(|idx| self.worktrees.entries.get(idx)) {
             length = length.max(entry.name.len() + 12);
             length = length.max(entry.path.display().to_string().len() + 8);
-            lines.push(Line::from(Span::styled(format!("name: {}", entry.name), Style::default().fg(self.theme.COLOR_GRAPEFRUIT))));
-            lines.push(Line::from(Span::styled(format!("path: {}", entry.path.display()), Style::default().fg(self.theme.COLOR_TEXT))));
+            lines.push(Line::from(Span::styled(format!("{} {}", modal::NAME_LABEL, entry.name), Style::default().fg(self.theme.COLOR_GRAPEFRUIT))));
+            lines.push(Line::from(Span::styled(format!("{} {}", modal::PATH_LABEL, entry.path.display()), Style::default().fg(self.theme.COLOR_TEXT))));
         }
 
         lines.push(Line::default());
-        lines.push(action_row(&[("confirm", "enter")], Style::default().fg(self.theme.COLOR_HIGHLIGHTED)));
+        lines.push(action_row(&[(modal::ACTION_CONFIRM, modal::KEY_ENTER)], Style::default().fg(self.theme.COLOR_HIGHLIGHTED)));
 
         let bg_block = Block::default().style(Style::default().fg(self.theme.COLOR_BORDER));
         bg_block.render(frame.area(), frame.buffer_mut());

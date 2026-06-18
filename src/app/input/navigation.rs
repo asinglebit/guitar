@@ -12,6 +12,7 @@ use crate::{
         branch_visibility::{current_branch_names as git_current_branch_names, save_branch_visibility},
         keymap::{Command, InputMode},
         layout::LayoutConfig,
+        localisation::errors,
         palette::Theme,
     },
 };
@@ -219,7 +220,7 @@ impl App {
             GraphPaneRow::Branch { graph_index, .. } | GraphPaneRow::Tag { graph_index, .. } | GraphPaneRow::Stash { graph_index, .. } => graph_index,
             GraphPaneRow::Reflog { graph_index, .. } => {
                 if graph_index.is_none() {
-                    self.show_error("Reflog commit is hidden from the graph. Press 9 to show graph reflogs.");
+                    self.show_error(errors::REFLOG_COMMIT_HIDDEN);
                 }
                 graph_index
             },
@@ -308,7 +309,7 @@ impl App {
             && !self.open_graph_at_alias(alias)
             && pane == GraphPane::Reflogs
         {
-            self.show_error("Reflog commit is hidden from the graph. Press 9 to show graph reflogs.");
+            self.show_error(errors::REFLOG_COMMIT_HIDDEN);
         }
     }
 
@@ -630,7 +631,7 @@ impl App {
                                 self.focus = Focus::Viewport;
                                 self.reload(None);
                             },
-                            Err(error) => self.show_error(format!("Checkout failed: {error}")),
+                            Err(error) => self.show_error(errors::with_error(errors::CHECKOUT, error)),
                         }
                     }
                 }
@@ -695,7 +696,7 @@ impl App {
                                 self.focus = Focus::Viewport;
                                 self.reload(None);
                             },
-                            Err(error) => self.show_error(format!("Delete tag failed: {error}")),
+                            Err(error) => self.show_error(errors::with_error(errors::DELETE_TAG, error)),
                         }
                     }
                 }

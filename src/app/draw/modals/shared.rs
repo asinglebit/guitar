@@ -1,4 +1,5 @@
 use crate::app::input::TextInput;
+use crate::helpers::{localisation::keymap, symbols};
 use ratatui::Frame;
 use ratatui::{
     layout::{Alignment, Rect},
@@ -12,7 +13,7 @@ pub(crate) fn modal_padding() -> Padding {
 }
 
 pub(crate) fn esc_title(color: Color) -> Span<'static> {
-    Span::styled(" (esc) ", Style::default().fg(color))
+    Span::styled(format!(" ({}) ", keymap::ESC.to_lowercase()), Style::default().fg(color))
 }
 
 pub(crate) fn modal_block(border_color: Color, esc_color: Color) -> Block<'static> {
@@ -36,7 +37,7 @@ pub(crate) fn render_modal_text_input(frame: &mut Frame, area: Rect, input: &mut
     let start = *input.scroll();
     let end = (start + visible_width).min(input.value().len());
     let visible = if masked {
-        let value = "*".repeat(input.value().chars().count());
+        let value = symbols::modal::MASK.repeat(input.value().chars().count());
         let start = start.min(value.len());
         let end = end.min(value.len());
         value[start..end].to_string()

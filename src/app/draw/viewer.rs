@@ -7,7 +7,11 @@ use crate::{
         diffs::{get_conflict_file, get_file_at_oid, get_file_at_workdir, get_file_diff_at_oid, get_file_diff_at_workdir},
         helpers::{ConflictFile, FileChanges, Hunk},
     },
-    helpers::{layout::scrollbar_content_length, text::wrap_words},
+    helpers::{
+        layout::scrollbar_content_length,
+        symbols::{border, scrollbar, status as status_symbol},
+        text::wrap_words,
+    },
 };
 use git2::Oid;
 use ratatui::Frame;
@@ -132,10 +136,10 @@ impl App {
 
             let mut scrollbar_state = ScrollbarState::new(scrollbar_content_length(total_lines, visible_height)).position(self.viewer_scroll.get());
             let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-                .begin_symbol(Some("╮"))
-                .end_symbol(Some("╯"))
-                .track_symbol(Some("│"))
-                .thumb_symbol("▌")
+                .begin_symbol(Some(scrollbar::BEGIN))
+                .end_symbol(Some(scrollbar::END))
+                .track_symbol(Some(scrollbar::TRACK))
+                .thumb_symbol(scrollbar::THUMB)
                 .thumb_style(Style::default().fg(if self.focus == Focus::Viewport { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 
             frame.render_stateful_widget(scrollbar, self.layout.graph_scrollbar, &mut scrollbar_state);
@@ -152,10 +156,10 @@ impl App {
 
         let mut scrollbar_state = ScrollbarState::new(scrollbar_content_length(total_lines, visible_height)).position(self.viewer_scroll.get());
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(if self.layout_config.is_inspector || self.layout_config.is_status { Some("─") } else { Some("╮") })
-            .end_symbol(if self.layout_config.is_inspector || self.layout_config.is_status { Some("─") } else { Some("╯") })
-            .track_symbol(Some("│"))
-            .thumb_symbol("▌")
+            .begin_symbol(if self.layout_config.is_inspector || self.layout_config.is_status { Some(border::HORIZONTAL) } else { Some(scrollbar::BEGIN) })
+            .end_symbol(if self.layout_config.is_inspector || self.layout_config.is_status { Some(border::HORIZONTAL) } else { Some(scrollbar::END) })
+            .track_symbol(Some(scrollbar::TRACK))
+            .thumb_symbol(scrollbar::THUMB)
             .thumb_style(Style::default().fg(if self.focus == Focus::Viewport { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 
         frame.render_stateful_widget(scrollbar, self.layout.graph_scrollbar, &mut scrollbar_state);
@@ -211,10 +215,10 @@ impl App {
 
         let mut scrollbar_state = ScrollbarState::new(scrollbar_content_length(total_lines, visible_height)).position(self.viewer_scroll.get());
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(if !self.layout_config.is_zen && (self.layout_config.is_inspector || self.layout_config.is_status) { Some("─") } else { Some("╮") })
-            .end_symbol(if !self.layout_config.is_zen && (self.layout_config.is_inspector || self.layout_config.is_status) { Some("─") } else { Some("╯") })
-            .track_symbol(Some("│"))
-            .thumb_symbol("▌")
+            .begin_symbol(if !self.layout_config.is_zen && (self.layout_config.is_inspector || self.layout_config.is_status) { Some(border::HORIZONTAL) } else { Some(scrollbar::BEGIN) })
+            .end_symbol(if !self.layout_config.is_zen && (self.layout_config.is_inspector || self.layout_config.is_status) { Some(border::HORIZONTAL) } else { Some(scrollbar::END) })
+            .track_symbol(Some(scrollbar::TRACK))
+            .thumb_symbol(scrollbar::THUMB)
             .thumb_style(Style::default().fg(if self.focus == Focus::Viewport { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 
         frame.render_stateful_widget(scrollbar, self.layout.graph_scrollbar, &mut scrollbar_state);
@@ -229,11 +233,11 @@ impl App {
         let lines: Vec<Line> = (0..area.height)
             .map(|y| {
                 let symbol = if self.layout_config.is_zen && y == 0 {
-                    "┬"
+                    border::TOP_T
                 } else if self.layout_config.is_zen && y + 1 == area.height {
-                    "┴"
+                    border::BOTTOM_T
                 } else {
-                    "│"
+                    border::VERTICAL
                 };
                 Line::from(Span::styled(symbol, Style::default().fg(self.theme.COLOR_BORDER)))
             })
@@ -407,14 +411,14 @@ impl App {
                 let (style, prefix, side, fg, count) = match line.origin {
                     '-' => (
                         Style::default().bg(self.theme.background_or_default(self.theme.COLOR_DARK_RED)).fg(self.theme.COLOR_RED),
-                        "- ".to_string(),
+                        status_symbol::DELETED_SPACED.to_string(),
                         self.theme.COLOR_RED,
                         self.theme.COLOR_RED,
                         current_line_old + 1,
                     ),
                     '+' => (
                         Style::default().bg(self.theme.background_or_default(self.theme.COLOR_LIGHT_GREEN_900)).fg(self.theme.COLOR_GREEN),
-                        "+ ".to_string(),
+                        status_symbol::ADDED_SPACED.to_string(),
                         self.theme.COLOR_GREEN,
                         self.theme.COLOR_GREEN,
                         current_line + 1,
@@ -524,9 +528,16 @@ impl App {
 
     fn push_conflict_unified_line(&mut self, number: usize, origin: char, text: &str) {
         let (style, prefix, number_fg, text_fg) = match origin {
-            '!' => (Style::default().fg(self.theme.COLOR_ORANGE), "! ", self.theme.COLOR_ORANGE, self.theme.COLOR_ORANGE),
-            '-' => (Style::default().bg(self.theme.background_or_default(self.theme.COLOR_DARK_RED)).fg(self.theme.COLOR_RED), "- ", self.theme.COLOR_RED, self.theme.COLOR_RED),
-            '+' => (Style::default().bg(self.theme.background_or_default(self.theme.COLOR_LIGHT_GREEN_900)).fg(self.theme.COLOR_GREEN), "+ ", self.theme.COLOR_GREEN, self.theme.COLOR_GREEN),
+            '!' => (Style::default().fg(self.theme.COLOR_ORANGE), status_symbol::CONFLICT_SPACED, self.theme.COLOR_ORANGE, self.theme.COLOR_ORANGE),
+            '-' => {
+                (Style::default().bg(self.theme.background_or_default(self.theme.COLOR_DARK_RED)).fg(self.theme.COLOR_RED), status_symbol::DELETED_SPACED, self.theme.COLOR_RED, self.theme.COLOR_RED)
+            },
+            '+' => (
+                Style::default().bg(self.theme.background_or_default(self.theme.COLOR_LIGHT_GREEN_900)).fg(self.theme.COLOR_GREEN),
+                status_symbol::ADDED_SPACED,
+                self.theme.COLOR_GREEN,
+                self.theme.COLOR_GREEN,
+            ),
             _ => (Style::default(), "", self.theme.COLOR_BORDER, self.theme.COLOR_TEXT),
         };
 
@@ -776,9 +787,9 @@ impl App {
 
     fn split_prefix(origin: char) -> &'static str {
         match origin {
-            '-' => "- ",
-            '+' => "+ ",
-            '!' => "! ",
+            '-' => status_symbol::DELETED_SPACED,
+            '+' => status_symbol::ADDED_SPACED,
+            '!' => status_symbol::CONFLICT_SPACED,
             _ => "",
         }
     }

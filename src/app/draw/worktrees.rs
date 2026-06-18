@@ -5,7 +5,8 @@ use crate::{
     },
     helpers::{
         layout::scrollbar_content_length,
-        symbols::{SYM_COMMIT_BRANCH, SYM_WORKTREE, SYM_WORKTREE_DIRTY, SYM_WORKTREE_EMPTY, SYM_WORKTREE_INVALID, SYM_WORKTREE_LOCKED, SYM_WORKTREE_OTHER},
+        localisation::{common, empty, status as status_text},
+        symbols::{border, branch as branch_symbol, scrollbar, worktree},
         text::{center_line, empty_state_top_padding, truncate_with_ellipsis},
     },
 };
@@ -26,19 +27,23 @@ impl App {
 
         let mut lines: Vec<Line<'_>> = Vec::new();
         for entry in &self.worktrees.entries {
-            let target =
-                entry.branch.as_ref().map(|branch| format!("{SYM_COMMIT_BRANCH} {branch}")).or_else(|| entry.head.map(|oid| format!("detached #{:.6}", oid))).unwrap_or_else(|| "no head".to_string());
+            let target = entry
+                .branch
+                .as_ref()
+                .map(|branch| format!("{} {branch}", branch_symbol::LOCAL_VISIBLE))
+                .or_else(|| entry.head.map(|oid| format!("{} #{:.6}", status_text::DETACHED, oid)))
+                .unwrap_or_else(|| common::NO_HEAD.to_string());
 
             // Status icons stack on the right edge of the row; the worktree name and branch stay on the left.
             let mut status_parts: Vec<&str> = Vec::new();
             if entry.is_dirty {
-                status_parts.push(SYM_WORKTREE_DIRTY.trim_end());
+                status_parts.push(worktree::DIRTY.trim_end());
             }
             if entry.locked_reason.is_some() {
-                status_parts.push(SYM_WORKTREE_LOCKED.trim_end());
+                status_parts.push(worktree::LOCKED.trim_end());
             }
             if !entry.is_valid {
-                status_parts.push(SYM_WORKTREE_INVALID.trim_end());
+                status_parts.push(worktree::INVALID.trim_end());
             }
             let status = status_parts.join(" ");
 
@@ -50,7 +55,7 @@ impl App {
             let gap = budget.saturating_sub(left.chars().count() + status_len);
             let label = format!("{}{}{} ", left, " ".repeat(gap), status);
 
-            let icon = if entry.is_current { SYM_WORKTREE } else { SYM_WORKTREE_OTHER };
+            let icon = if entry.is_current { worktree::CURRENT } else { worktree::OTHER };
             let color = if !entry.is_valid {
                 self.theme.COLOR_GREY_800
             } else if entry.is_current {
@@ -81,7 +86,7 @@ impl App {
             for _ in 0..blank_lines_before {
                 lines.push(Line::default());
             }
-            let empty_text = format!("{SYM_WORKTREE_EMPTY}no worktrees");
+            let empty_text = format!("{}{}", worktree::EMPTY, empty::NO_WORKTREES);
             lines.push(Line::from(Span::styled(center_line(&truncate_with_ellipsis(&empty_text, max_text_width), max_text_width + 3), Style::default().fg(self.theme.COLOR_GREY_800))));
         }
 
@@ -108,10 +113,10 @@ impl App {
             let scroll_range = scrollbar_content_length(total_lines, visible_height);
             let mut scrollbar_state = ScrollbarState::new(scroll_range).position(self.worktrees_scroll.get());
             let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-                .begin_symbol(Some("╮"))
-                .end_symbol(Some("╯"))
-                .track_symbol(Some("│"))
-                .thumb_symbol(if total_lines > visible_height { "▌" } else { "│" })
+                .begin_symbol(Some(scrollbar::BEGIN))
+                .end_symbol(Some(scrollbar::END))
+                .track_symbol(Some(scrollbar::TRACK))
+                .thumb_symbol(if total_lines > visible_height { scrollbar::THUMB } else { scrollbar::INACTIVE_THUMB })
                 .track_style(Style::default().fg(self.theme.COLOR_BORDER))
                 .thumb_style(Style::default().fg(if total_lines > visible_height && self.focus == Focus::Worktrees { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 
@@ -121,7 +126,7 @@ impl App {
         }
 
         if self.layout_config.is_branches || self.layout_config.is_tags || self.layout_config.is_stashes || self.layout_config.is_reflogs {
-            let top_border = Paragraph::new("─".repeat(self.layout.worktrees.width.saturating_sub(1) as usize)).style(Style::default().fg(self.theme.COLOR_BORDER));
+            let top_border = Paragraph::new(border::HORIZONTAL.repeat(self.layout.worktrees.width.saturating_sub(1) as usize)).style(Style::default().fg(self.theme.COLOR_BORDER));
             frame.render_widget(top_border, Rect { x: self.layout.worktrees.x + 1, y: self.layout.worktrees.y.saturating_sub(1), width: self.layout.worktrees.width, height: 1 });
         }
 
@@ -131,10 +136,14 @@ impl App {
         let scroll_range = scrollbar_content_length(total_lines, visible_height);
         let mut scrollbar_state = ScrollbarState::new(scroll_range).position(self.worktrees_scroll.get());
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(Some(if self.layout_config.is_branches || self.layout_config.is_tags || self.layout_config.is_stashes || self.layout_config.is_reflogs { "│" } else { "─" }))
-            .end_symbol(Some(if self.layout_config.is_submodules || self.layout_config.is_search { "│" } else { "─" }))
-            .track_symbol(Some("│"))
-            .thumb_symbol(if total_lines > visible_height { "▌" } else { "│" })
+            .begin_symbol(Some(if self.layout_config.is_branches || self.layout_config.is_tags || self.layout_config.is_stashes || self.layout_config.is_reflogs {
+                border::VERTICAL
+            } else {
+                border::HORIZONTAL
+            }))
+            .end_symbol(Some(if self.layout_config.is_submodules || self.layout_config.is_search { border::VERTICAL } else { border::HORIZONTAL }))
+            .track_symbol(Some(scrollbar::TRACK))
+            .thumb_symbol(if total_lines > visible_height { scrollbar::THUMB } else { scrollbar::INACTIVE_THUMB })
             .track_style(Style::default().fg(self.theme.COLOR_BORDER))
             .thumb_style(Style::default().fg(if total_lines > visible_height && self.focus == Focus::Worktrees { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 

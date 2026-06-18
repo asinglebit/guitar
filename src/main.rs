@@ -57,10 +57,10 @@ pub mod git {
 pub mod helpers {
     pub mod branch_visibility;
     pub mod colors;
-    pub mod copy;
     pub mod heatmap;
     pub mod keymap;
     pub mod layout;
+    pub mod localisation;
     pub mod logger;
     pub mod palette;
     pub mod recent;

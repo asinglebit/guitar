@@ -1,3 +1,4 @@
+use crate::helpers::localisation::keymap;
 use ratatui::crossterm::event::KeyModifiers;
 
 // Truncate from the end using "..." while counting characters rather than bytes.
@@ -192,13 +193,13 @@ pub fn sanitize(string: String) -> String {
 pub fn modifiers_to_string(mods: KeyModifiers) -> String {
     let mut parts = Vec::new();
     if mods.contains(KeyModifiers::CONTROL) {
-        parts.push("Ctrl");
+        parts.push(keymap::CTRL);
     }
     if mods.contains(KeyModifiers::SHIFT) {
-        parts.push("Shift");
+        parts.push(keymap::SHIFT);
     }
     if mods.contains(KeyModifiers::ALT) {
-        parts.push("Alt");
+        parts.push(keymap::ALT);
     }
     parts.join(" + ")
 }

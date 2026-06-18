@@ -13,14 +13,12 @@ use crate::{
     },
     helpers::{
         branch_visibility::{current_branch_names, load_branch_visibility, prune_hidden_branches, save_branch_visibility},
-        copy::{
-            STR_CHERRYPICK_COMMIT, STR_CREATE_BRANCH, STR_CREATE_COMMIT, STR_CREATE_TAG, STR_CREATE_WORKTREE_NAME, STR_CREATE_WORKTREE_PATH, STR_FIND_FILE, STR_FIND_SHA, STR_LOCK_WORKTREE,
-            STR_RENAME_BRANCH, STR_REVERT_COMMIT,
-        },
         heatmap::{DAYS, WEEKS, empty_heatmap},
         keymap::{Command, KeyBinding, KeymapEditError, KeymapSelection},
         layout::LayoutConfig,
+        localisation::{errors, modal, operations, settings},
         recent::{load_recent, save_recent, save_recent_to_path},
+        symbols::splash,
     },
 };
 use crate::{
@@ -135,10 +133,10 @@ pub enum OperationKind {
 impl OperationKind {
     pub fn label(self) -> &'static str {
         match self {
-            OperationKind::Rebase => "rebase",
-            OperationKind::Cherrypick => "cherrypick",
-            OperationKind::Revert => "revert",
-            OperationKind::Merge => "merge",
+            OperationKind::Rebase => operations::REBASE,
+            OperationKind::Cherrypick => operations::CHERRYPICK,
+            OperationKind::Revert => operations::REVERT,
+            OperationKind::Merge => operations::MERGE,
         }
     }
 }
@@ -268,11 +266,11 @@ impl SettingsTab {
 
     pub fn label(self) -> &'static str {
         match self {
-            SettingsTab::Paths => "paths",
-            SettingsTab::Display => "display",
-            SettingsTab::Auth => "auth",
-            SettingsTab::Repo => "repo",
-            SettingsTab::Shortcuts => "shortcuts",
+            SettingsTab::Paths => settings::PATHS,
+            SettingsTab::Display => settings::DISPLAY,
+            SettingsTab::Auth => settings::AUTH,
+            SettingsTab::Repo => settings::REPO,
+            SettingsTab::Shortcuts => settings::SHORTCUTS,
         }
     }
 
@@ -815,40 +813,40 @@ impl App {
                     self.draw_modal_error(frame);
                 },
                 Focus::ModalCommit => {
-                    self.draw_modal_input(frame, STR_CREATE_COMMIT);
+                    self.draw_modal_input(frame, modal::PROMPT_CREATE_COMMIT);
                 },
                 Focus::ModalCherrypick => {
-                    self.draw_modal_input(frame, STR_CHERRYPICK_COMMIT);
+                    self.draw_modal_input(frame, modal::PROMPT_CHERRYPICK_COMMIT);
                 },
                 Focus::ModalRevert => {
-                    self.draw_modal_input(frame, STR_REVERT_COMMIT);
+                    self.draw_modal_input(frame, modal::PROMPT_REVERT_COMMIT);
                 },
                 Focus::ModalCreateBranch => {
-                    self.draw_modal_input(frame, STR_CREATE_BRANCH);
+                    self.draw_modal_input(frame, modal::PROMPT_CREATE_BRANCH);
                 },
                 Focus::ModalRenameBranch => {
-                    self.draw_modal_input(frame, STR_RENAME_BRANCH);
+                    self.draw_modal_input(frame, modal::PROMPT_RENAME_BRANCH);
                 },
                 Focus::ModalCreateWorktreeName => {
-                    self.draw_modal_input(frame, STR_CREATE_WORKTREE_NAME);
+                    self.draw_modal_input(frame, modal::PROMPT_CREATE_WORKTREE_NAME);
                 },
                 Focus::ModalCreateWorktreePath => {
-                    self.draw_modal_input(frame, STR_CREATE_WORKTREE_PATH);
+                    self.draw_modal_input(frame, modal::PROMPT_CREATE_WORKTREE_PATH);
                 },
                 Focus::ModalLockWorktree => {
-                    self.draw_modal_input(frame, STR_LOCK_WORKTREE);
+                    self.draw_modal_input(frame, modal::PROMPT_LOCK_WORKTREE);
                 },
                 Focus::ModalRemoteName | Focus::ModalRemoteUrl => {
                     self.draw_modal_input(frame, self.remote_input_title());
                 },
                 Focus::ModalGrep => {
-                    self.draw_modal_input(frame, STR_FIND_SHA);
+                    self.draw_modal_input(frame, modal::PROMPT_FIND_SHA);
                 },
                 Focus::ModalFileSearch => {
-                    self.draw_modal_file_search(frame, STR_FIND_FILE);
+                    self.draw_modal_file_search(frame, modal::PROMPT_FIND_FILE);
                 },
                 Focus::ModalTag => {
-                    self.draw_modal_input(frame, STR_CREATE_TAG);
+                    self.draw_modal_input(frame, modal::PROMPT_CREATE_TAG);
                 },
                 Focus::ModalKeyCapture => {
                     self.draw_modal_key_capture(frame);
@@ -1032,7 +1030,7 @@ impl App {
                         },
                         Err(error) => {
                             self.uncommitted = UncommittedChanges::default();
-                            self.show_error(format!("Couldn't get the file diff: {error}"));
+                            self.show_error(errors::with_error(errors::FILE_DIFF, error));
                         },
                     }
                     self.is_uncommitted_loaded = true;
@@ -1293,7 +1291,7 @@ impl App {
 
         let Some(tx) = self.graph_tx.clone() else {
             self.search_is_loading = false;
-            self.search_error = Some("File history failed: graph worker is unavailable".to_string());
+            self.search_error = Some(errors::FILE_HISTORY_WORKER_UNAVAILABLE.to_string());
             self.search_request_id = None;
             return;
         };
@@ -1302,7 +1300,7 @@ impl App {
         self.search_request_id = Some(request_id);
         if tx.send(GraphCommand::QueryFileHistory { generation: self.graph.generation, request_id, path }).is_err() {
             self.search_is_loading = false;
-            self.search_error = Some("File history failed: graph worker is unavailable".to_string());
+            self.search_error = Some(errors::FILE_HISTORY_WORKER_UNAVAILABLE.to_string());
             self.search_request_id = None;
         }
     }
@@ -1337,7 +1335,7 @@ impl App {
 
     fn refresh_theme_assets(&mut self) {
         self.color = Rc::new(RefCell::new(ColorPicker::from_theme(&self.theme)));
-        self.logo = vec![Span::styled("  guita", Style::default().fg(self.theme.COLOR_GRASS)), Span::styled("╭", Style::default().fg(self.theme.COLOR_GREEN))];
+        self.logo = vec![Span::styled(splash::LOGO_WORD_PREFIX, Style::default().fg(self.theme.COLOR_GRASS)), Span::styled(splash::LOGO_CORNER, Style::default().fg(self.theme.COLOR_GREEN))];
     }
 
     pub fn set_theme(&mut self, theme: Theme) {

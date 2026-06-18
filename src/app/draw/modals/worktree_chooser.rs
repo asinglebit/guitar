@@ -4,7 +4,8 @@ use crate::{
         draw::modals::shared::modal_block,
     },
     helpers::{
-        symbols::{SYM_COMMIT_BRANCH, SYM_WORKTREE, SYM_WORKTREE_DIRTY, SYM_WORKTREE_INVALID, SYM_WORKTREE_LOCKED, SYM_WORKTREE_OTHER},
+        localisation::{common, modal, status as status_text},
+        symbols::{branch as branch_symbol, worktree},
         text::truncate_with_ellipsis,
     },
 };
@@ -19,8 +20,8 @@ use ratatui::{
 impl App {
     pub fn draw_modal_worktree_chooser(&mut self, frame: &mut Frame) {
         let title = match self.modal_worktree_action {
-            WorktreeModalAction::Open => "select a worktree to open",
-            WorktreeModalAction::Remove => "select a worktree to remove",
+            WorktreeModalAction::Open => modal::SELECT_WORKTREE_OPEN,
+            WorktreeModalAction::Remove => modal::SELECT_WORKTREE_REMOVE,
         };
 
         let mut length = title.len().max(34);
@@ -33,12 +34,16 @@ impl App {
                 continue;
             };
 
-            let target =
-                entry.branch.as_ref().map(|branch| format!("{SYM_COMMIT_BRANCH} {branch}")).or_else(|| entry.head.map(|oid| format!("detached #{:.6}", oid))).unwrap_or_else(|| "no head".to_string());
-            let dirty = if entry.is_dirty { format!(" {SYM_WORKTREE_DIRTY}") } else { String::new() };
-            let locked = if entry.locked_reason.is_some() { format!(" {SYM_WORKTREE_LOCKED}") } else { String::new() };
-            let invalid = if !entry.is_valid { format!(" {SYM_WORKTREE_INVALID}") } else { String::new() };
-            let icon = if entry.is_current { SYM_WORKTREE } else { SYM_WORKTREE_OTHER };
+            let target = entry
+                .branch
+                .as_ref()
+                .map(|branch| format!("{} {branch}", branch_symbol::LOCAL_VISIBLE))
+                .or_else(|| entry.head.map(|oid| format!("{} #{:.6}", status_text::DETACHED, oid)))
+                .unwrap_or_else(|| common::NO_HEAD.to_string());
+            let dirty = if entry.is_dirty { format!(" {}", worktree::DIRTY) } else { String::new() };
+            let locked = if entry.locked_reason.is_some() { format!(" {}", worktree::LOCKED) } else { String::new() };
+            let invalid = if !entry.is_valid { format!(" {}", worktree::INVALID) } else { String::new() };
+            let icon = if entry.is_current { worktree::CURRENT } else { worktree::OTHER };
             let label = format!("{icon}{}  {}{}{}{}  {}", entry.name, target, dirty, locked, invalid, entry.path.display());
             let label = truncate_with_ellipsis(&label, max_line_width);
             length = length.max(label.len());

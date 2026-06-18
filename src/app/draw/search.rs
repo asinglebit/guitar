@@ -6,6 +6,8 @@ use crate::{
     git::queries::helpers::FileStatus,
     helpers::{
         layout::scrollbar_content_length,
+        localisation::{common, empty},
+        symbols::{border, scrollbar, status},
         text::{center_line, empty_state_top_padding, truncate_with_ellipsis},
     },
 };
@@ -19,11 +21,11 @@ use ratatui::{
 
 fn status_marker(status: FileStatus) -> &'static str {
     match status {
-        FileStatus::Added => "+",
-        FileStatus::Modified => "~",
-        FileStatus::Deleted => "-",
-        FileStatus::Renamed => ">",
-        FileStatus::Other => "*",
+        FileStatus::Added => status::ADDED,
+        FileStatus::Modified => status::MODIFIED,
+        FileStatus::Deleted => status::DELETED,
+        FileStatus::Renamed => status::RENAMED,
+        FileStatus::Other => status::OTHER,
     }
 }
 
@@ -52,7 +54,8 @@ impl App {
         let selection_enabled = !self.search_is_loading && self.search_error.is_none() && total_lines > 0;
 
         if self.search_is_loading {
-            let message = self.search_path.as_ref().map(|path| format!("loading {}", truncate_with_ellipsis(path, max_text_width.saturating_sub(8)))).unwrap_or_else(|| "loading".to_string());
+            let message =
+                self.search_path.as_ref().map(|path| format!("{} {}", common::LOADING, truncate_with_ellipsis(path, max_text_width.saturating_sub(8)))).unwrap_or_else(|| common::LOADING.to_string());
             let blank_lines_before = empty_state_top_padding(visible_height);
             for _ in 0..blank_lines_before {
                 lines.push(Line::default());
@@ -65,12 +68,12 @@ impl App {
             }
             lines.push(Line::from(Span::styled(center_line(&truncate_with_ellipsis(error, max_text_width), max_text_width + 3), Style::default().fg(self.theme.COLOR_ORANGE))));
         } else if total_lines == 0 {
-            let message = if self.search_path.is_some() { "⊘ no commits" } else { "search" };
+            let message = if self.search_path.is_some() { format!("{} {}", crate::helpers::symbols::empty_state::MARK, empty::NO_COMMITS) } else { empty::SEARCH.to_string() };
             let blank_lines_before = empty_state_top_padding(visible_height);
             for _ in 0..blank_lines_before {
                 lines.push(Line::default());
             }
-            lines.push(Line::from(Span::styled(center_line(&truncate_with_ellipsis(message, max_text_width), max_text_width + 3), Style::default().fg(self.theme.COLOR_GREY_800))));
+            lines.push(Line::from(Span::styled(center_line(&truncate_with_ellipsis(&message, max_text_width), max_text_width + 3), Style::default().fg(self.theme.COLOR_GREY_800))));
         } else {
             let summary_width = max_text_width.saturating_sub(12);
             for row in &self.search_rows[start..end] {
@@ -99,10 +102,10 @@ impl App {
             let scroll_range = scrollbar_content_length(total_lines, visible_height);
             let mut scrollbar_state = ScrollbarState::new(scroll_range).position(self.search_scroll.get());
             let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-                .begin_symbol(Some("╮"))
-                .end_symbol(Some("╯"))
-                .track_symbol(Some("│"))
-                .thumb_symbol(if total_lines > visible_height { "▌" } else { "│" })
+                .begin_symbol(Some(scrollbar::BEGIN))
+                .end_symbol(Some(scrollbar::END))
+                .track_symbol(Some(scrollbar::TRACK))
+                .thumb_symbol(if total_lines > visible_height { scrollbar::THUMB } else { scrollbar::INACTIVE_THUMB })
                 .track_style(Style::default().fg(self.theme.COLOR_BORDER))
                 .thumb_style(Style::default().fg(if total_lines > visible_height && self.focus == Focus::Search { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 
@@ -111,7 +114,7 @@ impl App {
         }
 
         if has_previous {
-            let top_border = Paragraph::new("─".repeat(self.layout.search.width.saturating_sub(1) as usize)).style(Style::default().fg(self.theme.COLOR_BORDER));
+            let top_border = Paragraph::new(border::HORIZONTAL.repeat(self.layout.search.width.saturating_sub(1) as usize)).style(Style::default().fg(self.theme.COLOR_BORDER));
             frame.render_widget(top_border, Rect { x: self.layout.search.x + 1, y: self.layout.search.y.saturating_sub(1), width: self.layout.search.width, height: 1 });
         }
 
@@ -121,10 +124,10 @@ impl App {
         let scroll_range = scrollbar_content_length(total_lines, visible_height);
         let mut scrollbar_state = ScrollbarState::new(scroll_range).position(self.search_scroll.get());
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(Some(if has_previous { "│" } else { "─" }))
-            .end_symbol(Some("─"))
-            .track_symbol(Some("│"))
-            .thumb_symbol(if total_lines > visible_height { "▌" } else { "│" })
+            .begin_symbol(Some(if has_previous { border::VERTICAL } else { border::HORIZONTAL }))
+            .end_symbol(Some(border::HORIZONTAL))
+            .track_symbol(Some(scrollbar::TRACK))
+            .thumb_symbol(if total_lines > visible_height { scrollbar::THUMB } else { scrollbar::INACTIVE_THUMB })
             .track_style(Style::default().fg(self.theme.COLOR_BORDER))
             .thumb_style(Style::default().fg(if total_lines > visible_height && self.focus == Focus::Search { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 

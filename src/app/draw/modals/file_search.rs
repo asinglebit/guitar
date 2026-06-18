@@ -4,6 +4,7 @@ use crate::{
         draw::modals::shared::{action_row, modal_block, render_modal_text_input},
     },
     git::queries::files::FileSearchResult,
+    helpers::localisation::modal,
 };
 use ratatui::Frame;
 use ratatui::{
@@ -89,7 +90,7 @@ impl App {
         let max_path_width = list_area.width.saturating_sub(2) as usize;
 
         let list_items: Vec<ListItem<'static>> = if total == 0 {
-            let message = if self.modal_input.value().trim().is_empty() { " type to search" } else { " no matches" };
+            let message = if self.modal_input.value().trim().is_empty() { modal::TYPE_TO_SEARCH } else { modal::NO_MATCHES };
             vec![ListItem::new(Line::from(Span::styled(message, Style::default().fg(self.theme.COLOR_GREY_800))))]
         } else {
             self.modal_file_search_results[start..end]
@@ -107,7 +108,11 @@ impl App {
         };
 
         frame.render_widget(List::new(list_items), list_area);
-        frame.render_widget(Paragraph::new(action_row(&[("choose", "enter"), ("move", "ctrl+j/k")], Style::default().fg(self.theme.COLOR_HIGHLIGHTED))).alignment(Alignment::Center), action_area);
+        frame.render_widget(
+            Paragraph::new(action_row(&[(modal::ACTION_CHOOSE, modal::KEY_ENTER), (modal::ACTION_MOVE, modal::KEY_CTRL_J_K)], Style::default().fg(self.theme.COLOR_HIGHLIGHTED)))
+                .alignment(Alignment::Center),
+            action_area,
+        );
     }
 }
 

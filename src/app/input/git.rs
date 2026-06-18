@@ -19,7 +19,10 @@ use crate::{
         auth::{AuthRequired, AuthSecret, NetworkResult},
         queries::{commits::get_current_branch, remotes::effective_default_remote},
     },
-    helpers::branch_visibility::save_branch_visibility,
+    helpers::{
+        branch_visibility::save_branch_visibility,
+        localisation::{errors, network, operations},
+    },
 };
 use git2::{BranchType, Repository, RepositoryState};
 use std::path::Path;
@@ -29,7 +32,7 @@ impl App {
 
     pub(crate) fn start_network_request(&mut self, request: NetworkRequest) {
         if self.network_handle.is_some() {
-            self.show_error("Git network operation failed: another network operation is already running");
+            self.show_error(errors::GIT_NETWORK_ALREADY_RUNNING);
             return;
         }
 
@@ -65,7 +68,7 @@ impl App {
 
         match handle.join() {
             Ok(result) => self.handle_network_result(result),
-            Err(_) => self.finish_network_failure("Git network operation failed: worker thread panicked".to_string()),
+            Err(_) => self.finish_network_failure(errors::GIT_NETWORK_PANICKED.to_string()),
         }
     }
 
@@ -94,7 +97,7 @@ impl App {
             NetworkResult::AuthRequired(AuthRequired { challenge, rejected }) => {
                 self.auth_session.evict(&rejected);
                 if self.network_auth_attempts >= Self::MAX_AUTH_ATTEMPTS {
-                    self.finish_network_failure(format!("{} failed: authentication failed after {} attempts", challenge.operation, Self::MAX_AUTH_ATTEMPTS));
+                    self.finish_network_failure(errors::authentication_failed(&challenge.operation, Self::MAX_AUTH_ATTEMPTS));
                     return;
                 }
 
@@ -124,7 +127,7 @@ impl App {
     }
 
     pub(crate) fn cancel_auth_prompt(&mut self) {
-        let operation = self.pending_auth_prompt.as_ref().map(|challenge| challenge.operation.clone()).unwrap_or_else(|| "Git network operation".to_string());
+        let operation = self.pending_auth_prompt.as_ref().map(|challenge| challenge.operation.clone()).unwrap_or_else(|| network::GIT_NETWORK_OPERATION.to_string());
         self.pending_network_request = None;
         self.network_auth_attempts = 0;
         self.pending_auth_prompt = None;
@@ -133,7 +136,7 @@ impl App {
         self.modal_network_title.clear();
         self.modal_network_message.clear();
         self.focus = Focus::Viewport;
-        self.show_error(format!("{operation} cancelled: authentication was not provided"));
+        self.show_error(errors::auth_cancelled(&operation));
     }
 
     pub(crate) fn submit_auth_prompt(&mut self) {
@@ -169,7 +172,7 @@ impl App {
         };
         let Some(path) = self.repo.as_ref().map(|repo| repo.path().to_path_buf()) else {
             self.focus = Focus::Viewport;
-            self.show_error("Git operation failed: no repository is open");
+            self.show_error(errors::GIT_OPERATION_NO_REPOSITORY);
             return;
         };
 
@@ -177,7 +180,7 @@ impl App {
             Ok(repo) => repo,
             Err(error) => {
                 self.focus = Focus::Viewport;
-                self.show_error(format!("Open repository failed: {error}"));
+                self.show_error(errors::with_error(errors::OPEN_REPOSITORY, error));
                 return;
             },
         };
@@ -187,11 +190,11 @@ impl App {
             PendingOperationAction::Start { kind: OperationKind::Merge, oid } => self.handle_merge_result(start_merge(&repo, oid)),
             PendingOperationAction::Start { kind: OperationKind::Cherrypick, .. } => {
                 self.focus = Focus::Viewport;
-                self.show_error("Cherry-pick failed: no commit message was provided");
+                self.show_error(errors::CHERRYPICK_NO_MESSAGE);
             },
             PendingOperationAction::Start { kind: OperationKind::Revert, .. } => {
                 self.focus = Focus::Viewport;
-                self.show_error("Revert failed: no commit message was provided");
+                self.show_error(errors::REVERT_NO_MESSAGE);
             },
             PendingOperationAction::Continue => self.continue_active_operation(&repo),
             PendingOperationAction::Abort => self.abort_active_operation(&repo),
@@ -202,22 +205,22 @@ impl App {
         self.modal_operation_kind = OperationKind::Rebase;
         match result {
             Ok(RebaseOutcome::Completed { applied }) => {
-                self.modal_operation_message = if applied == 1 { "Rebase completed after applying 1 commit.".to_string() } else { format!("Rebase completed after applying {applied} commits.") };
+                self.modal_operation_message = operations::rebase_completed(applied);
                 self.focus = Focus::ModalOperationSuccess;
                 self.reload(None);
             },
             Ok(RebaseOutcome::Conflict) => {
-                self.show_operation_conflict(OperationKind::Rebase, "Rebase stopped because conflicts need to be resolved.");
+                self.show_operation_conflict(OperationKind::Rebase, operations::REBASE_CONFLICT);
             },
             Ok(RebaseOutcome::Aborted) => {
-                self.modal_operation_message = "Rebase aborted.".to_string();
+                self.modal_operation_message = operations::REBASE_ABORTED.to_string();
                 self.focus = Focus::ModalOperationSuccess;
                 self.reload(None);
             },
             Err(error) => {
                 self.modal_operation_message.clear();
                 self.focus = Focus::Viewport;
-                self.show_error(format!("Rebase failed: {error}"));
+                self.show_error(errors::with_error(errors::REBASE, error));
                 self.reload(None);
             },
         }
@@ -227,22 +230,22 @@ impl App {
         self.modal_operation_kind = OperationKind::Cherrypick;
         match result {
             Ok(CherrypickOutcome::Committed { .. }) => {
-                self.modal_operation_message = "Cherry-pick completed.".to_string();
+                self.modal_operation_message = operations::CHERRYPICK_COMPLETED.to_string();
                 self.focus = Focus::ModalOperationSuccess;
                 self.reload(None);
             },
             Ok(CherrypickOutcome::Conflict) => {
-                self.show_operation_conflict(OperationKind::Cherrypick, "Cherry-pick stopped because conflicts need to be resolved.");
+                self.show_operation_conflict(OperationKind::Cherrypick, operations::CHERRYPICK_CONFLICT);
             },
             Ok(CherrypickOutcome::Aborted) => {
-                self.modal_operation_message = "Cherry-pick aborted.".to_string();
+                self.modal_operation_message = operations::CHERRYPICK_ABORTED.to_string();
                 self.focus = Focus::ModalOperationSuccess;
                 self.reload(None);
             },
             Err(error) => {
                 self.modal_operation_message.clear();
                 self.focus = Focus::Viewport;
-                self.show_error(format!("Cherry-pick failed: {error}"));
+                self.show_error(errors::with_error(errors::CHERRYPICK, error));
                 self.reload(None);
             },
         }
@@ -252,22 +255,22 @@ impl App {
         self.modal_operation_kind = OperationKind::Revert;
         match result {
             Ok(RevertOutcome::Committed { .. }) => {
-                self.modal_operation_message = "Revert completed.".to_string();
+                self.modal_operation_message = operations::REVERT_COMPLETED.to_string();
                 self.focus = Focus::ModalOperationSuccess;
                 self.reload(None);
             },
             Ok(RevertOutcome::Conflict) => {
-                self.show_operation_conflict(OperationKind::Revert, "Revert stopped because conflicts need to be resolved.");
+                self.show_operation_conflict(OperationKind::Revert, operations::REVERT_CONFLICT);
             },
             Ok(RevertOutcome::Aborted) => {
-                self.modal_operation_message = "Revert aborted.".to_string();
+                self.modal_operation_message = operations::REVERT_ABORTED.to_string();
                 self.focus = Focus::ModalOperationSuccess;
                 self.reload(None);
             },
             Err(error) => {
                 self.modal_operation_message.clear();
                 self.focus = Focus::Viewport;
-                self.show_error(format!("Revert failed: {error}"));
+                self.show_error(errors::with_error(errors::REVERT, error));
                 self.reload(None);
             },
         }
@@ -277,32 +280,32 @@ impl App {
         self.modal_operation_kind = OperationKind::Merge;
         match result {
             Ok(MergeOutcome::Completed { .. }) => {
-                self.modal_operation_message = "Merge completed.".to_string();
+                self.modal_operation_message = operations::MERGE_COMPLETED.to_string();
                 self.focus = Focus::ModalOperationSuccess;
                 self.reload(None);
             },
             Ok(MergeOutcome::FastForward { .. }) => {
-                self.modal_operation_message = "Merge fast-forwarded.".to_string();
+                self.modal_operation_message = operations::MERGE_FAST_FORWARDED.to_string();
                 self.focus = Focus::ModalOperationSuccess;
                 self.reload(None);
             },
             Ok(MergeOutcome::UpToDate) => {
-                self.modal_operation_message = "Merge already up to date.".to_string();
+                self.modal_operation_message = operations::MERGE_ALREADY_UP_TO_DATE.to_string();
                 self.focus = Focus::ModalOperationSuccess;
                 self.reload(None);
             },
             Ok(MergeOutcome::Conflict) => {
-                self.show_operation_conflict(OperationKind::Merge, "Merge stopped because conflicts need to be resolved.");
+                self.show_operation_conflict(OperationKind::Merge, operations::MERGE_CONFLICT);
             },
             Ok(MergeOutcome::Aborted) => {
-                self.modal_operation_message = "Merge aborted.".to_string();
+                self.modal_operation_message = operations::MERGE_ABORTED.to_string();
                 self.focus = Focus::ModalOperationSuccess;
                 self.reload(None);
             },
             Err(error) => {
                 self.modal_operation_message.clear();
                 self.focus = Focus::Viewport;
-                self.show_error(format!("Merge failed: {error}"));
+                self.show_error(errors::with_error(errors::MERGE, error));
                 self.reload(None);
             },
         }
@@ -333,7 +336,7 @@ impl App {
             Some(OperationKind::Merge) => self.handle_merge_result(continue_merge(repo)),
             None => {
                 self.focus = Focus::Viewport;
-                self.show_error("Continue failed: no rebase, cherry-pick, revert, or merge in progress");
+                self.show_error(errors::CONTINUE_NO_OPERATION);
             },
         }
     }
@@ -346,7 +349,7 @@ impl App {
             Some(OperationKind::Merge) => self.handle_merge_result(abort_merge(repo)),
             None => {
                 self.focus = Focus::Viewport;
-                self.show_error("Abort failed: no rebase, cherry-pick, revert, or merge in progress");
+                self.show_error(errors::ABORT_NO_OPERATION);
             },
         }
     }
@@ -381,13 +384,13 @@ impl App {
         let mut repo = match Repository::open(path) {
             Ok(repo) => repo,
             Err(error) => {
-                self.show_error(format!("Open repository failed: {error}"));
+                self.show_error(errors::with_error(errors::OPEN_REPOSITORY, error));
                 return;
             },
         };
         match pop(&mut repo, &oid, false) {
             Ok(_) => self.reload(None),
-            Err(error) => self.show_error(format!("Drop stash failed: {error}")),
+            Err(error) => self.show_error(errors::with_error(errors::DROP_STASH, error)),
         }
     }
 
@@ -421,13 +424,13 @@ impl App {
         let mut repo = match Repository::open(path) {
             Ok(repo) => repo,
             Err(error) => {
-                self.show_error(format!("Open repository failed: {error}"));
+                self.show_error(errors::with_error(errors::OPEN_REPOSITORY, error));
                 return;
             },
         };
         match pop(&mut repo, &oid, true) {
             Ok(_) => self.reload(None),
-            Err(error) => self.show_error(format!("Pop stash failed: {error}")),
+            Err(error) => self.show_error(errors::with_error(errors::POP_STASH, error)),
         }
     }
 
@@ -439,14 +442,14 @@ impl App {
             let mut repo = match Repository::open(path) {
                 Ok(repo) => repo,
                 Err(error) => {
-                    self.show_error(format!("Open repository failed: {error}"));
+                    self.show_error(errors::with_error(errors::OPEN_REPOSITORY, error));
                     return;
                 },
             };
 
             match stash(&mut repo) {
                 Ok(_) => self.reload(None),
-                Err(error) => self.show_error(format!("Stash failed: {error}")),
+                Err(error) => self.show_error(errors::with_error(errors::STASH, error)),
             }
         }
     }
@@ -489,7 +492,7 @@ impl App {
 
     pub fn on_fetch_all(&mut self) {
         if self.viewport != Viewport::Settings {
-            let Some(remote_name) = self.default_remote_for_network("Fetch") else {
+            let Some(remote_name) = self.default_remote_for_network(network::FETCH) else {
                 return;
             };
             let repo_path = self.path.as_deref().unwrap_or(".");
@@ -528,7 +531,7 @@ impl App {
                         self.focus = Focus::Viewport;
                         self.reload(None);
                     },
-                    Err(error) => self.show_error(format!("Checkout failed: {error}")),
+                    Err(error) => self.show_error(errors::with_error(errors::CHECKOUT, error)),
                 }
             },
 
@@ -556,7 +559,7 @@ impl App {
                                 self.focus = Focus::Viewport;
                                 self.reload(None);
                             },
-                            Err(error) => self.show_error(format!("Checkout failed: {error}")),
+                            Err(error) => self.show_error(errors::with_error(errors::CHECKOUT, error)),
                         }
                     },
                     1 => {
@@ -569,7 +572,7 @@ impl App {
                                 self.focus = Focus::Viewport;
                                 self.reload(None);
                             },
-                            Err(error) => self.show_error(format!("Checkout failed: {error}")),
+                            Err(error) => self.show_error(errors::with_error(errors::CHECKOUT, error)),
                         }
                     },
                     _ => {
@@ -597,7 +600,7 @@ impl App {
                             self.reload(None);
                             self.focus = Focus::Viewport;
                         },
-                        Err(error) => self.show_error(format!("Hard reset failed: {error}")),
+                        Err(error) => self.show_error(errors::with_error(errors::HARD_RESET, error)),
                     }
                 },
                 Focus::StatusTop | Focus::StatusBottom => {
@@ -605,7 +608,7 @@ impl App {
                         let path = Path::new(&file_name);
                         match reset_file(repo, path) {
                             Ok(_) => self.reload(None),
-                            Err(error) => self.show_error(format!("Reset file failed: {error}")),
+                            Err(error) => self.show_error(errors::with_error(errors::RESET_FILE, error)),
                         }
                     }
                 },
@@ -629,7 +632,7 @@ impl App {
                     self.reload(None);
                     self.focus = Focus::Viewport;
                 },
-                Err(error) => self.show_error(format!("Mixed reset failed: {error}")),
+                Err(error) => self.show_error(errors::with_error(errors::MIXED_RESET, error)),
             }
         }
     }
@@ -643,13 +646,13 @@ impl App {
                         if self.uncommitted.is_staged {
                             match unstage_all(repo) {
                                 Ok(_) => self.reload(None),
-                                Err(error) => self.show_error(format!("Unstage all failed: {error}")),
+                                Err(error) => self.show_error(errors::with_error(errors::UNSTAGE_ALL, error)),
                             }
                         }
                     },
                     Focus::StatusTop => {
                         if self.selected_staged_status_file_is_conflict() {
-                            self.show_error("Unstage file failed: resolve conflicts in your editor, then continue the active operation");
+                            self.show_error(errors::UNSTAGE_FILE_CONFLICT);
                             return;
                         }
                         let Some(file) = self.selected_staged_status_file_name() else {
@@ -657,7 +660,7 @@ impl App {
                         };
                         match unstage_file(repo, Path::new(&file)) {
                             Ok(_) => self.reload(None),
-                            Err(error) => self.show_error(format!("Unstage file failed: {error}")),
+                            Err(error) => self.show_error(errors::with_error(errors::UNSTAGE_FILE, error)),
                         }
                     },
                     Focus::Submodules => {
@@ -669,7 +672,7 @@ impl App {
                                 self.focus = Focus::Submodules;
                                 self.reload(None);
                             },
-                            Err(error) => self.show_error(format!("Unstage submodule failed: {error}")),
+                            Err(error) => self.show_error(errors::with_error(errors::UNSTAGE_SUBMODULE, error)),
                         }
                     },
                     _ => {},
@@ -687,13 +690,13 @@ impl App {
                         if self.uncommitted.is_unstaged {
                             match stage_all(repo) {
                                 Ok(_) => self.reload(None),
-                                Err(error) => self.show_error(format!("Stage all failed: {error}")),
+                                Err(error) => self.show_error(errors::with_error(errors::STAGE_ALL, error)),
                             }
                         }
                     },
                     Focus::StatusBottom => {
                         if self.selected_unstaged_status_file_is_conflict() {
-                            self.show_error("Stage file failed: resolve conflicts in your editor, then continue the active operation");
+                            self.show_error(errors::STAGE_FILE_CONFLICT);
                             return;
                         }
                         let Some(file) = self.selected_unstaged_status_file_name() else {
@@ -701,7 +704,7 @@ impl App {
                         };
                         match stage_file(repo, Path::new(&file)) {
                             Ok(_) => self.reload(None),
-                            Err(error) => self.show_error(format!("Stage file failed: {error}")),
+                            Err(error) => self.show_error(errors::with_error(errors::STAGE_FILE, error)),
                         }
                     },
                     Focus::Submodules => {
@@ -713,7 +716,7 @@ impl App {
                                 self.focus = Focus::Submodules;
                                 self.reload(None);
                             },
-                            Err(error) => self.show_error(format!("Stage submodule failed: {error}")),
+                            Err(error) => self.show_error(errors::with_error(errors::STAGE_SUBMODULE, error)),
                         }
                     },
                     _ => {},
@@ -740,10 +743,10 @@ impl App {
                 _ => {
                     let repo_path = self.path.as_deref().unwrap_or(".").to_string();
                     let Some(branch) = get_current_branch(&repo) else {
-                        self.show_error("Push failed: detached HEAD has no current branch");
+                        self.show_error(errors::PUSH_DETACHED_HEAD);
                         return;
                     };
-                    let Some(remote_name) = self.default_remote_for_network("Push") else {
+                    let Some(remote_name) = self.default_remote_for_network(network::PUSH) else {
                         return;
                     };
                     self.start_network_request(NetworkRequest::PushBranch { repo_path, remote_name, branch, force: true });
@@ -757,7 +760,7 @@ impl App {
             match self.viewport {
                 Viewport::Settings | Viewport::Viewer => {},
                 _ => {
-                    let Some(remote_name) = self.default_remote_for_network("Push tags") else {
+                    let Some(remote_name) = self.default_remote_for_network(network::PUSH_TAGS) else {
                         return;
                     };
                     let repo_path = self.path.as_deref().unwrap_or(".");
@@ -775,7 +778,7 @@ impl App {
         match effective_default_remote(&repo) {
             Some(remote_name) => Some(remote_name),
             None => {
-                self.show_error(format!("{operation} failed: no remotes configured"));
+                self.show_error(errors::no_remotes_configured(operation));
                 None
             },
         }
@@ -836,7 +839,7 @@ impl App {
                 if repo.find_branch(&branch, BranchType::Local).is_ok() {
                     self.open_branch_rename_modal(branch);
                 } else {
-                    self.show_error("Rename branch failed: only local branches can be renamed");
+                    self.show_error(errors::RENAME_BRANCH_LOCAL_ONLY);
                 }
             },
             Focus::Viewport => {
@@ -854,7 +857,7 @@ impl App {
 
                 let local_branch_names = self.graph_local_branch_choices(alias);
                 match local_branch_names.as_slice() {
-                    [] => self.show_error("Rename branch failed: only local branches can be renamed"),
+                    [] => self.show_error(errors::RENAME_BRANCH_LOCAL_ONLY),
                     [branch] => self.open_branch_rename_modal(branch.clone()),
                     _ => {
                         self.modal_branch_action = BranchModalAction::Rename;
@@ -885,14 +888,14 @@ impl App {
                     self.focus = Focus::Viewport;
                     self.reload(None);
                 },
-                Err(error) => self.show_error(format!("Delete branch failed: {error}")),
+                Err(error) => self.show_error(errors::with_error(errors::DELETE_BRANCH, error)),
             }
             return;
         }
 
         let (remote_name, remote_branch) = branch.split_once('/').unwrap_or(("origin", branch));
         if remote_name.is_empty() || remote_branch.is_empty() {
-            self.show_error("Delete branch failed: remote branch name is invalid");
+            self.show_error(errors::DELETE_BRANCH_INVALID_REMOTE);
             return;
         }
 
@@ -934,7 +937,7 @@ impl App {
                 if proceed {
                     self.delete_branch_from_ui(&branch);
                 } else {
-                    self.show_error("Delete branch failed: cannot delete the current branch");
+                    self.show_error(errors::DELETE_BRANCH_CURRENT);
                 }
             },
 
@@ -996,7 +999,7 @@ impl App {
                         };
                         match untag(repo, &tag) {
                             Ok(_) => self.reload(None),
-                            Err(error) => self.show_error(format!("Delete tag failed: {error}")),
+                            Err(error) => self.show_error(errors::with_error(errors::DELETE_TAG, error)),
                         }
                     },
                     Focus::Viewport => {
@@ -1010,7 +1013,7 @@ impl App {
                                 0 => {},
                                 1 => match untag(repo, tag_names[0].as_str()) {
                                     Ok(_) => self.reload(None),
-                                    Err(error) => self.show_error(format!("Delete tag failed: {error}")),
+                                    Err(error) => self.show_error(errors::with_error(errors::DELETE_TAG, error)),
                                 },
                                 _ => {
                                     self.focus = Focus::ModalDeleteTag;
@@ -1036,17 +1039,17 @@ impl App {
             };
 
             let original_message = match repo.find_commit(oid) {
-                Ok(commit) => Ok(commit.summary().unwrap_or("Cherry-pick commit").to_string()),
+                Ok(commit) => Ok(commit.summary().unwrap_or(operations::CHERRYPICK_COMMIT_FALLBACK).to_string()),
                 Err(error) => Err(error),
             };
 
             match original_message {
                 Ok(original_message) => {
                     self.pending_cherrypick_oid = Some(oid);
-                    self.modal_input.set_value(format!("cherrypicked: {original_message}"));
+                    self.modal_input.set_value(operations::cherrypicked(&original_message));
                     self.focus = Focus::ModalCherrypick;
                 },
-                Err(error) => self.show_error(format!("Cherry-pick failed: {error}")),
+                Err(error) => self.show_error(errors::with_error(errors::CHERRYPICK, error)),
             }
         }
     }
@@ -1072,18 +1075,18 @@ impl App {
 
         let original_message = match repo.find_commit(oid) {
             Ok(commit) if commit.parent_count() > 1 => None,
-            Ok(commit) => Some(Ok(commit.summary().unwrap_or("Revert commit").to_string())),
+            Ok(commit) => Some(Ok(commit.summary().unwrap_or(operations::REVERT_COMMIT_FALLBACK).to_string())),
             Err(error) => Some(Err(error)),
         };
 
         match original_message {
-            None => self.show_error("Revert failed: reverting merge commits is not supported"),
+            None => self.show_error(errors::REVERT_MERGE_UNSUPPORTED),
             Some(Ok(original_message)) => {
                 self.pending_revert_oid = Some(oid);
-                self.modal_input.set_value(format!("reverted: {original_message}"));
+                self.modal_input.set_value(operations::reverted(&original_message));
                 self.focus = Focus::ModalRevert;
             },
-            Some(Err(error)) => self.show_error(format!("Revert failed: {error}")),
+            Some(Err(error)) => self.show_error(errors::with_error(errors::REVERT, error)),
         }
     }
 
@@ -1107,7 +1110,7 @@ impl App {
         };
         self.pending_operation_action = Some(PendingOperationAction::Start { kind: OperationKind::Rebase, oid });
         self.modal_operation_kind = OperationKind::Rebase;
-        self.modal_operation_message = "Rebasing the current branch onto the selected commit...".to_string();
+        self.modal_operation_message = operations::rebasing_selected_commit();
         self.focus = Focus::ModalOperationProgress;
     }
 
@@ -1131,7 +1134,7 @@ impl App {
         };
         self.pending_operation_action = Some(PendingOperationAction::Start { kind: OperationKind::Merge, oid });
         self.modal_operation_kind = OperationKind::Merge;
-        self.modal_operation_message = "Merging the selected commit into the current branch...".to_string();
+        self.modal_operation_message = operations::merging_selected_commit();
         self.focus = Focus::ModalOperationProgress;
     }
 
@@ -1144,7 +1147,7 @@ impl App {
         let kind = Self::active_operation_kind(repo).unwrap();
         self.pending_operation_action = Some(PendingOperationAction::Continue);
         self.modal_operation_kind = kind;
-        self.modal_operation_message = format!("Continuing {}...", kind.label());
+        self.modal_operation_message = operations::continuing(kind.label());
         self.focus = Focus::ModalOperationProgress;
     }
 
@@ -1157,7 +1160,7 @@ impl App {
         let kind = Self::active_operation_kind(repo).unwrap();
         self.pending_operation_action = Some(PendingOperationAction::Abort);
         self.modal_operation_kind = kind;
-        self.modal_operation_message = format!("Aborting {}...", kind.label());
+        self.modal_operation_message = operations::aborting(kind.label());
         self.focus = Focus::ModalOperationProgress;
     }
 }

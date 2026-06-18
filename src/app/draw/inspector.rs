@@ -3,6 +3,8 @@ use crate::{
     helpers::{
         colors::ColorPicker,
         layout::scrollbar_content_length,
+        localisation::{common, empty, inspector},
+        symbols::{border, branch as branch_symbol, empty_state, scrollbar},
         text::{center_line, empty_state_top_padding, sanitize, truncate_with_ellipsis, wrap_words},
         time::timestamp_to_utc,
     },
@@ -31,14 +33,14 @@ impl App {
 
         if is_showing_uncommitted && self.uncommitted.has_conflicts {
             lines = vec![
-                Line::from(Span::styled("repository state:", Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
-                Line::from(Span::styled("operation conflicts", Style::default().fg(self.theme.COLOR_ORANGE))),
+                Line::from(Span::styled(inspector::REPOSITORY_STATE, Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
+                Line::from(Span::styled(inspector::OPERATION_CONFLICTS, Style::default().fg(self.theme.COLOR_ORANGE))),
                 Line::default(),
-                Line::from(Span::styled("conflicted files:", Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
+                Line::from(Span::styled(inspector::CONFLICTED_FILES, Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
                 Line::from(Span::styled(self.uncommitted.conflict_count.to_string(), Style::default().fg(self.theme.COLOR_ORANGE))),
                 Line::default(),
-                Line::from(Span::styled("next action:", Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
-                Line::from(Span::styled("resolve files externally, then action+Shift+C", Style::default().fg(self.theme.COLOR_TEXT))),
+                Line::from(Span::styled(inspector::NEXT_ACTION, Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
+                Line::from(Span::styled(inspector::RESOLVE_CONFLICTS_ACTION, Style::default().fg(self.theme.COLOR_TEXT))),
             ];
         } else if !is_showing_uncommitted {
             // Commit metadata is read lazily for the selected graph row.
@@ -48,15 +50,15 @@ impl App {
                 let commit = repo.find_commit(oid).unwrap();
                 let author = commit.author();
                 let committer = commit.committer();
-                let summary = commit.summary().unwrap_or("⊘ no summary").to_string();
-                let body = commit.body().unwrap_or("⊘ no body").to_string();
+                let summary = commit.summary().map(str::to_string).unwrap_or_else(|| format!("{} {}", empty_state::MARK, empty::NO_SUMMARY));
+                let body = commit.body().map(str::to_string).unwrap_or_else(|| format!("{} {}", empty_state::MARK, empty::NO_BODY));
 
                 // Sections are plain list rows so they scroll with the same pane machinery.
                 lines = vec![
-                    Line::from(Span::styled("commit sha:", Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
+                    Line::from(Span::styled(inspector::COMMIT_SHA, Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
                     Line::from(Span::styled(truncate_with_ellipsis(&format!("#{}", oid), max_text_width), Style::default().fg(self.theme.COLOR_TEXT))),
                     Line::default(),
-                    Line::from(Span::styled("parent shas:", Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
+                    Line::from(Span::styled(inspector::PARENT_SHAS, Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
                 ];
                 for parent_id in commit.parent_ids() {
                     let text = truncate_with_ellipsis(&format!("#{}", parent_id), max_text_width);
@@ -67,9 +69,9 @@ impl App {
                 {
                     let color_picker = ColorPicker::from_theme(&self.theme);
                     lines.push(Line::default());
-                    lines.push(Line::from(Span::styled("featured branches:", Style::default().fg(self.theme.COLOR_HIGHLIGHTED))));
+                    lines.push(Line::from(Span::styled(inspector::FEATURED_BRANCHES, Style::default().fg(self.theme.COLOR_HIGHLIGHTED))));
                     for branch in &row.branches {
-                        let text = truncate_with_ellipsis(&format!("● {}", branch.name), max_text_width);
+                        let text = truncate_with_ellipsis(&format!("{} {}", branch_symbol::LOCAL_VISIBLE, branch.name), max_text_width);
                         let color = branch.lane.map(|lane| color_picker.get_lane(lane)).unwrap_or(self.theme.COLOR_TEXT);
                         lines.push(Line::from(Span::styled(text, Style::default().fg(color))));
                     }
@@ -77,9 +79,9 @@ impl App {
                     && let Some(color) = self.branches.colors.get(&alias)
                 {
                     lines.push(Line::default());
-                    lines.push(Line::from(Span::styled("featured branches:", Style::default().fg(self.theme.COLOR_HIGHLIGHTED))));
+                    lines.push(Line::from(Span::styled(inspector::FEATURED_BRANCHES, Style::default().fg(self.theme.COLOR_HIGHLIGHTED))));
                     for branch in branches.iter().filter(|branch| !self.branches.hidden_branch_names.contains(*branch)) {
-                        let text = truncate_with_ellipsis(&format!("● {}", branch), max_text_width);
+                        let text = truncate_with_ellipsis(&format!("{} {}", branch_symbol::LOCAL_VISIBLE, branch), max_text_width);
                         lines.push(Line::from(Span::styled(text, Style::default().fg(*color))));
                     }
                 }
@@ -87,7 +89,7 @@ impl App {
                     && let Some(entry) = &row.reflog
                 {
                     lines.push(Line::default());
-                    lines.push(Line::from(Span::styled("head reflog:", Style::default().fg(self.theme.COLOR_HIGHLIGHTED))));
+                    lines.push(Line::from(Span::styled(inspector::HEAD_REFLOG, Style::default().fg(self.theme.COLOR_HIGHLIGHTED))));
                     lines.push(Line::from(Span::styled(truncate_with_ellipsis(&entry.selector, max_text_width), Style::default().fg(self.theme.COLOR_TEXT))));
                     let wrapped = wrap_words(sanitize(entry.message.clone()), max_text_width);
                     for line in wrapped {
@@ -95,7 +97,7 @@ impl App {
                     }
                 } else if let Some(entry) = self.reflogs.latest_for_alias(alias) {
                     lines.push(Line::default());
-                    lines.push(Line::from(Span::styled("head reflog:", Style::default().fg(self.theme.COLOR_HIGHLIGHTED))));
+                    lines.push(Line::from(Span::styled(inspector::HEAD_REFLOG, Style::default().fg(self.theme.COLOR_HIGHLIGHTED))));
                     lines.push(Line::from(Span::styled(truncate_with_ellipsis(&entry.selector, max_text_width), Style::default().fg(self.reflogs.get_color(alias).unwrap_or(self.theme.COLOR_TEXT)))));
                     lines.push(Line::from(Span::styled(timestamp_to_utc(entry.time), Style::default().fg(self.theme.COLOR_TEXT))));
                     let wrapped = wrap_words(sanitize(entry.message.clone()), max_text_width);
@@ -105,21 +107,21 @@ impl App {
                 }
                 lines.push(Line::default());
                 lines.extend(vec![
-                    Line::from(Span::styled(format!("authored by: {}", author.name().unwrap_or("-")), Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
+                    Line::from(Span::styled(format!("{} {}", inspector::AUTHORED_BY, author.name().unwrap_or(common::UNKNOWN)), Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
                     Line::from(Span::styled(author.email().unwrap_or("").to_string(), Style::default().fg(self.theme.COLOR_TEXT))),
                     Line::from(Span::styled(timestamp_to_utc(author.when()), Style::default().fg(self.theme.COLOR_TEXT))),
                     Line::default(),
-                    Line::from(Span::styled(format!("committed by: {}", committer.name().unwrap_or("-")), Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
+                    Line::from(Span::styled(format!("{} {}", inspector::COMMITTED_BY, committer.name().unwrap_or(common::UNKNOWN)), Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
                     Line::from(Span::styled(committer.email().unwrap_or("").to_string(), Style::default().fg(self.theme.COLOR_TEXT))),
                     Line::from(Span::styled(timestamp_to_utc(committer.when()).to_string(), Style::default().fg(self.theme.COLOR_TEXT))),
                     Line::default(),
-                    Line::from(Span::styled("message summary:", Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
+                    Line::from(Span::styled(inspector::MESSAGE_SUMMARY, Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
                 ]);
                 let wrapped = wrap_words(sanitize(summary), max_text_width);
                 for line in wrapped {
                     lines.push(Line::from(Span::styled(line, Style::default().fg(self.theme.COLOR_TEXT))));
                 }
-                lines.extend(vec![Line::default(), Line::from(Span::styled("message body:", Style::default().fg(self.theme.COLOR_HIGHLIGHTED)))]);
+                lines.extend(vec![Line::default(), Line::from(Span::styled(inspector::MESSAGE_BODY, Style::default().fg(self.theme.COLOR_HIGHLIGHTED)))]);
                 let wrapped = wrap_words(sanitize(body), max_text_width);
                 for line in wrapped {
                     lines.push(Line::from(Span::styled(line, Style::default().fg(self.theme.COLOR_TEXT))));
@@ -169,10 +171,10 @@ impl App {
 
             let mut scrollbar_state = ScrollbarState::new(scrollbar_content_length(total_lines, visible_height)).position(self.inspector_scroll.get());
             let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-                .begin_symbol(Some("╮"))
-                .end_symbol(Some("╯"))
-                .track_symbol(Some("│"))
-                .thumb_symbol(if total_lines > visible_height { "▌" } else { "│" })
+                .begin_symbol(Some(scrollbar::BEGIN))
+                .end_symbol(Some(scrollbar::END))
+                .track_symbol(Some(scrollbar::TRACK))
+                .thumb_symbol(if total_lines > visible_height { scrollbar::THUMB } else { scrollbar::INACTIVE_THUMB })
                 .thumb_style(Style::default().fg(if total_lines > visible_height && self.focus == Focus::Inspector { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 
             frame.render_stateful_widget(scrollbar, self.layout.inspector_scrollbar, &mut scrollbar_state);
@@ -187,10 +189,10 @@ impl App {
 
         let mut scrollbar_state = ScrollbarState::new(scrollbar_content_length(total_lines, visible_height)).position(self.inspector_scroll.get());
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(Some("╮"))
-            .end_symbol(if self.layout_config.is_status { Some("│") } else { Some("╯") })
-            .track_symbol(Some("│"))
-            .thumb_symbol(if total_lines > visible_height { "▌" } else { "│" })
+            .begin_symbol(Some(scrollbar::BEGIN))
+            .end_symbol(if self.layout_config.is_status { Some(border::VERTICAL) } else { Some(scrollbar::END) })
+            .track_symbol(Some(scrollbar::TRACK))
+            .thumb_symbol(if total_lines > visible_height { scrollbar::THUMB } else { scrollbar::INACTIVE_THUMB })
             .thumb_style(Style::default().fg(if total_lines > visible_height && self.focus == Focus::Inspector { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 
         frame.render_stateful_widget(scrollbar, self.layout.inspector_scrollbar, &mut scrollbar_state);
@@ -202,7 +204,7 @@ fn centered_loading_lines(visible_height: usize, max_width: usize, style: Style)
     for _ in 0..empty_state_top_padding(visible_height) {
         lines.push(Line::from(""));
     }
-    lines.push(Line::from(Span::styled(center_line(&truncate_with_ellipsis("loading", max_width), max_width), style)));
+    lines.push(Line::from(Span::styled(center_line(&truncate_with_ellipsis(common::LOADING, max_width), max_width), style)));
     lines
 }
 

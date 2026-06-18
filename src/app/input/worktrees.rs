@@ -1,6 +1,7 @@
 use crate::{
     app::app::{App, Focus, Viewport, WorktreeModalAction},
     git::actions::worktrees::{remove_worktree, unlock_worktree},
+    helpers::localisation::errors,
 };
 use std::path::{Path, PathBuf};
 
@@ -75,7 +76,7 @@ impl App {
         };
 
         if !entry.is_valid {
-            self.show_error("Open worktree failed: worktree path is invalid");
+            self.show_error(errors::OPEN_WORKTREE_INVALID_PATH);
             return;
         }
 
@@ -145,7 +146,7 @@ impl App {
         };
 
         if !entry.can_remove() {
-            self.show_error("Remove worktree failed: cannot remove current, main, or locked worktrees");
+            self.show_error(errors::REMOVE_WORKTREE_FORBIDDEN);
             return;
         }
 
@@ -156,7 +157,7 @@ impl App {
                 self.focus = return_focus;
                 self.reload(None);
             },
-            Err(error) => self.show_error(format!("Remove worktree failed: {error}")),
+            Err(error) => self.show_error(errors::with_error(errors::REMOVE_WORKTREE, error)),
         }
     }
 
@@ -185,7 +186,7 @@ impl App {
                 };
 
                 if !entry.can_remove() {
-                    self.show_error("Remove worktree failed: cannot remove current, main, or locked worktrees");
+                    self.show_error(errors::REMOVE_WORKTREE_FORBIDDEN);
                     return;
                 }
 
@@ -196,7 +197,7 @@ impl App {
                 let removable = self.graph_remove_worktree_indices();
 
                 match removable.len() {
-                    0 if !all.is_empty() => self.show_error("Remove worktree failed: cannot remove current, main, or locked worktrees"),
+                    0 if !all.is_empty() => self.show_error(errors::REMOVE_WORKTREE_FORBIDDEN),
                     0 => {},
                     1 => self.open_remove_worktree_confirmation(removable[0], Focus::Viewport),
                     _ => self.open_worktree_chooser(WorktreeModalAction::Remove, removable, Focus::Viewport),
@@ -219,7 +220,7 @@ impl App {
         };
 
         if !entry.can_lock() {
-            self.show_error("Lock worktree failed: only valid linked worktrees can be locked");
+            self.show_error(errors::LOCK_WORKTREE_INVALID);
             return;
         }
 
@@ -229,7 +230,7 @@ impl App {
                     self.focus = Focus::Worktrees;
                     self.reload(None);
                 },
-                Err(error) => self.show_error(format!("Unlock worktree failed: {error}")),
+                Err(error) => self.show_error(errors::with_error(errors::UNLOCK_WORKTREE, error)),
             }
             return;
         }

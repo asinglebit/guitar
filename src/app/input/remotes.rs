@@ -7,10 +7,36 @@ use crate::{
         },
         queries::remotes::list_remotes,
     },
-    helpers::branch_visibility::save_branch_visibility,
+    helpers::{
+        branch_visibility::save_branch_visibility,
+        localisation::{errors, modal},
+    },
 };
 
-pub(crate) const REMOTE_ACTIONS: [&str; 6] = ["fetch", "set as default", "rename", "edit fetch URL", "edit push URL", "delete"];
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum RemoteAction {
+    Fetch,
+    SetDefault,
+    Rename,
+    EditFetchUrl,
+    EditPushUrl,
+    Delete,
+}
+
+impl RemoteAction {
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            RemoteAction::Fetch => crate::helpers::localisation::menu::FETCH,
+            RemoteAction::SetDefault => crate::helpers::localisation::menu::SET_AS_DEFAULT,
+            RemoteAction::Rename => crate::helpers::localisation::menu::RENAME_REMOTE,
+            RemoteAction::EditFetchUrl => crate::helpers::localisation::menu::EDIT_FETCH_URL,
+            RemoteAction::EditPushUrl => crate::helpers::localisation::menu::EDIT_PUSH_URL,
+            RemoteAction::Delete => crate::helpers::localisation::menu::DELETE_REMOTE,
+        }
+    }
+}
+
+pub(crate) const REMOTE_ACTIONS: [RemoteAction; 6] = [RemoteAction::Fetch, RemoteAction::SetDefault, RemoteAction::Rename, RemoteAction::EditFetchUrl, RemoteAction::EditPushUrl, RemoteAction::Delete];
 
 impl App {
     pub(crate) fn begin_add_remote(&mut self) {
@@ -39,11 +65,11 @@ impl App {
 
     pub(crate) fn remote_input_title(&self) -> &'static str {
         match self.modal_remote_input_action {
-            RemoteInputAction::AddName => "Enter new remote name",
-            RemoteInputAction::AddUrl => "Enter new remote URL",
-            RemoteInputAction::Rename => "Enter renamed remote name",
-            RemoteInputAction::EditUrl => "Enter remote fetch URL",
-            RemoteInputAction::EditPushUrl => "Enter remote push URL",
+            RemoteInputAction::AddName => modal::PROMPT_REMOTE_ADD_NAME,
+            RemoteInputAction::AddUrl => modal::PROMPT_REMOTE_ADD_URL,
+            RemoteInputAction::Rename => modal::PROMPT_REMOTE_RENAME,
+            RemoteInputAction::EditUrl => modal::PROMPT_REMOTE_EDIT_URL,
+            RemoteInputAction::EditPushUrl => modal::PROMPT_REMOTE_EDIT_PUSH_URL,
         }
     }
 
@@ -67,14 +93,15 @@ impl App {
             return;
         };
 
-        match self.modal_remote_selected.rem_euclid(REMOTE_ACTIONS.len() as i32) {
-            0 => {
+        let selected = self.modal_remote_selected.rem_euclid(REMOTE_ACTIONS.len() as i32) as usize;
+        match REMOTE_ACTIONS[selected] {
+            RemoteAction::Fetch => {
                 let repo_path = self.path.as_deref().unwrap_or(".");
                 self.modal_remote_selected = 0;
                 self.modal_remote_target = None;
                 self.start_network_request(NetworkRequest::Fetch { repo_path: repo_path.to_string(), remote_name });
             },
-            1 => {
+            RemoteAction::SetDefault => {
                 let Some(repo) = self.repo.clone() else {
                     self.close_remote_modal();
                     return;
@@ -85,28 +112,27 @@ impl App {
                         self.viewport = crate::app::app::Viewport::Settings;
                         self.reload(None);
                     },
-                    Err(error) => self.show_error(format!("Set default remote failed: {error}")),
+                    Err(error) => self.show_error(errors::with_error(errors::SET_DEFAULT_REMOTE, error)),
                 }
             },
-            2 => {
+            RemoteAction::Rename => {
                 self.modal_remote_input_action = RemoteInputAction::Rename;
                 self.modal_input.set_value(remote_name);
                 self.focus = Focus::ModalRemoteName;
             },
-            3 => {
+            RemoteAction::EditFetchUrl => {
                 self.modal_remote_input_action = RemoteInputAction::EditUrl;
                 self.prefill_remote_url(false);
                 self.focus = Focus::ModalRemoteUrl;
             },
-            4 => {
+            RemoteAction::EditPushUrl => {
                 self.modal_remote_input_action = RemoteInputAction::EditPushUrl;
                 self.prefill_remote_url(true);
                 self.focus = Focus::ModalRemoteUrl;
             },
-            5 => {
+            RemoteAction::Delete => {
                 self.focus = Focus::ModalRemoteDelete;
             },
-            _ => {},
         }
     }
 
@@ -136,7 +162,7 @@ impl App {
                     return;
                 }
                 if !git2::Remote::is_valid_name(&name) {
-                    self.show_error("Add remote failed: remote name is invalid");
+                    self.show_error(errors::ADD_REMOTE_INVALID_NAME);
                     return;
                 }
                 self.modal_remote_name = name;
@@ -150,7 +176,7 @@ impl App {
                     return;
                 };
                 let Some(old_name) = self.modal_remote_target.clone() else {
-                    self.show_error("Rename remote failed: no remote is pending");
+                    self.show_error(errors::RENAME_REMOTE_NO_PENDING);
                     return;
                 };
                 let new_name = self.modal_input.value().trim().to_string();
@@ -161,7 +187,7 @@ impl App {
                         self.viewport = crate::app::app::Viewport::Settings;
                         self.reload(None);
                     },
-                    Err(error) => self.show_error(format!("Rename remote failed: {error}")),
+                    Err(error) => self.show_error(errors::with_error(errors::RENAME_REMOTE, error)),
                 }
             },
             _ => {},
@@ -184,12 +210,12 @@ impl App {
                         self.viewport = crate::app::app::Viewport::Settings;
                         self.reload(None);
                     },
-                    Err(error) => self.show_error(format!("Add remote failed: {error}")),
+                    Err(error) => self.show_error(errors::with_error(errors::ADD_REMOTE, error)),
                 }
             },
             RemoteInputAction::EditUrl => {
                 let Some(remote_name) = self.modal_remote_target.clone() else {
-                    self.show_error("Edit remote failed: no remote is pending");
+                    self.show_error(errors::EDIT_REMOTE_NO_PENDING);
                     return;
                 };
                 let url = self.modal_input.value().trim().to_string();
@@ -199,12 +225,12 @@ impl App {
                         self.viewport = crate::app::app::Viewport::Settings;
                         self.reload(None);
                     },
-                    Err(error) => self.show_error(format!("Edit remote failed: {error}")),
+                    Err(error) => self.show_error(errors::with_error(errors::EDIT_REMOTE, error)),
                 }
             },
             RemoteInputAction::EditPushUrl => {
                 let Some(remote_name) = self.modal_remote_target.clone() else {
-                    self.show_error("Edit remote failed: no remote is pending");
+                    self.show_error(errors::EDIT_REMOTE_NO_PENDING);
                     return;
                 };
                 let push_url = self.modal_input.value().trim().to_string();
@@ -214,7 +240,7 @@ impl App {
                         self.viewport = crate::app::app::Viewport::Settings;
                         self.reload(None);
                     },
-                    Err(error) => self.show_error(format!("Edit remote failed: {error}")),
+                    Err(error) => self.show_error(errors::with_error(errors::EDIT_REMOTE, error)),
                 }
             },
             _ => {},
@@ -227,7 +253,7 @@ impl App {
             return;
         };
         let Some(remote_name) = self.modal_remote_target.clone() else {
-            self.show_error("Delete remote failed: no remote is pending");
+            self.show_error(errors::DELETE_REMOTE_NO_PENDING);
             return;
         };
 
@@ -238,7 +264,7 @@ impl App {
                 self.viewport = crate::app::app::Viewport::Settings;
                 self.reload(None);
             },
-            Err(error) => self.show_error(format!("Delete remote failed: {error}")),
+            Err(error) => self.show_error(errors::with_error(errors::DELETE_REMOTE, error)),
         }
     }
 
@@ -257,3 +283,7 @@ impl App {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "../../tests/app/input/remotes.rs"]
+mod tests;

@@ -5,7 +5,10 @@ use crate::{
         state::defaults::ViewerMode,
     },
     git::queries::commits::get_current_branch,
-    helpers::keymap::{Command, command_to_visual_string},
+    helpers::{
+        keymap::{Command, command_to_visual_string},
+        localisation::menu,
+    },
 };
 use ratatui::{
     crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
@@ -108,12 +111,12 @@ impl App {
             Some(MouseSelectionTarget::Search(_)) => self.search_context_menu_items(),
             Some(MouseSelectionTarget::Splash(index)) => self.splash_context_menu_items(index),
             Some(MouseSelectionTarget::Settings(index)) => self.settings_context_menu_items(index),
-            Some(MouseSelectionTarget::SettingsTab(tab)) => vec![Self::item(format!("Open {}", tab.label()), ContextMenuAction::SwitchSettingsTab(tab), true)],
+            Some(MouseSelectionTarget::SettingsTab(tab)) => vec![Self::item(menu::open_settings_tab(tab.label()), ContextMenuAction::SwitchSettingsTab(tab), true)],
             None => Vec::new(),
         };
 
         if self.repo.is_some() {
-            items.insert(0, Self::command_item("Reload", Command::Reload));
+            items.insert(0, Self::command_item(menu::RELOAD, Command::Reload));
         }
 
         let global_items = self.global_context_menu_items();
@@ -150,18 +153,18 @@ impl App {
     fn global_context_menu_items(&self) -> Vec<ContextMenuItem> {
         let mut items = Vec::new();
         if self.viewport == Viewport::Settings {
-            items.push(Self::command_item("Back", Command::Back));
+            items.push(Self::command_item(menu::BACK, Command::Back));
         } else {
-            items.push(Self::item("Settings", ContextMenuAction::Settings, self.repo.is_some()));
+            items.push(Self::item(menu::SETTINGS, ContextMenuAction::Settings, self.repo.is_some()));
         }
         if self.viewport == Viewport::Splash {
             if self.repo.is_some() {
-                items.push(Self::command_item("Back", Command::Back));
+                items.push(Self::command_item(menu::BACK, Command::Back));
             }
         } else {
-            items.push(Self::item("Splash screen", ContextMenuAction::Splash, true));
+            items.push(Self::item(menu::SPLASH_SCREEN, ContextMenuAction::Splash, true));
         }
-        items.push(Self::item("Exit", ContextMenuAction::Exit, true));
+        items.push(Self::item(menu::EXIT, ContextMenuAction::Exit, true));
         items
     }
 
@@ -172,49 +175,49 @@ impl App {
 
         let mut items = Vec::new();
         if include_details {
-            items.push(Self::graph_command_item("Show details", Command::NarrowScope, force_graph_focus));
+            items.push(Self::graph_command_item(menu::SHOW_DETAILS, Command::NarrowScope, force_graph_focus));
         }
         if !self.graph_open_worktree_indices().is_empty() {
-            items.push(Self::graph_command_item("Open worktree", Command::Select, force_graph_focus));
+            items.push(Self::graph_command_item(menu::OPEN_WORKTREE, Command::Select, force_graph_focus));
         }
 
         items.extend([
-            Self::graph_command_item("Create branch", Command::CreateBranch, force_graph_focus),
-            Self::graph_command_item("Create worktree", Command::CreateWorktree, force_graph_focus),
-            Self::graph_command_item("Create tag", Command::Tag, force_graph_focus),
-            Self::graph_command_item("Checkout", Command::Checkout, force_graph_focus),
-            Self::graph_command_item("Hard reset", Command::HardReset, force_graph_focus),
-            Self::graph_command_item("Mixed reset", Command::MixedReset, force_graph_focus),
-            Self::graph_command_item("Cherry-pick", Command::Cherrypick, force_graph_focus),
-            Self::graph_command_item("Revert", Command::Revert, force_graph_focus),
-            Self::graph_command_item("Rebase", Command::Rebase, force_graph_focus),
-            Self::graph_command_item("Merge", Command::Merge, force_graph_focus),
+            Self::graph_command_item(menu::CREATE_BRANCH, Command::CreateBranch, force_graph_focus),
+            Self::graph_command_item(menu::CREATE_WORKTREE, Command::CreateWorktree, force_graph_focus),
+            Self::graph_command_item(menu::CREATE_TAG, Command::Tag, force_graph_focus),
+            Self::graph_command_item(menu::CHECKOUT, Command::Checkout, force_graph_focus),
+            Self::graph_command_item(menu::HARD_RESET, Command::HardReset, force_graph_focus),
+            Self::graph_command_item(menu::MIXED_RESET, Command::MixedReset, force_graph_focus),
+            Self::graph_command_item(menu::CHERRYPICK, Command::Cherrypick, force_graph_focus),
+            Self::graph_command_item(menu::REVERT, Command::Revert, force_graph_focus),
+            Self::graph_command_item(menu::REBASE, Command::Rebase, force_graph_focus),
+            Self::graph_command_item(menu::MERGE, Command::Merge, force_graph_focus),
         ]);
 
         if let Some(alias) = self.graph_alias_at(index) {
             let branches = self.graph_branch_choices(alias);
             if !branches.is_empty() {
-                items.push(Self::graph_command_item("Solo branch", Command::SoloBranch, force_graph_focus));
-                items.push(Self::graph_command_item("Toggle branch", Command::ToggleBranch, force_graph_focus));
+                items.push(Self::graph_command_item(menu::SOLO_BRANCH, Command::SoloBranch, force_graph_focus));
+                items.push(Self::graph_command_item(menu::TOGGLE_BRANCH, Command::ToggleBranch, force_graph_focus));
             }
             if !self.graph_local_branch_choices(alias).is_empty() {
-                items.push(Self::graph_command_item("Rename branch", Command::RenameBranch, force_graph_focus));
+                items.push(Self::graph_command_item(menu::RENAME_BRANCH, Command::RenameBranch, force_graph_focus));
             }
             if let Some(repo) = self.repo.as_ref() {
                 let current = get_current_branch(repo);
                 if !self.graph_deletable_branch_choices(alias, current.as_deref()).is_empty() {
-                    items.push(Self::graph_command_item("Delete branch", Command::DeleteBranch, force_graph_focus));
+                    items.push(Self::graph_command_item(menu::DELETE_BRANCH, Command::DeleteBranch, force_graph_focus));
                 }
             }
         }
 
         if !self.graph_tag_names_at(index).is_empty() {
-            items.push(Self::graph_command_item("Delete tag", Command::Untag, force_graph_focus));
+            items.push(Self::graph_command_item(menu::DELETE_TAG, Command::Untag, force_graph_focus));
         }
 
         if self.graph_row_at(index).is_some_and(|row| row.is_stash) {
-            items.push(Self::graph_command_item("Pop stash", Command::Pop, force_graph_focus));
-            items.push(Self::graph_command_item("Drop stash", Command::Drop, force_graph_focus));
+            items.push(Self::graph_command_item(menu::POP_STASH, Command::Pop, force_graph_focus));
+            items.push(Self::graph_command_item(menu::DROP_STASH, Command::Drop, force_graph_focus));
         }
 
         items
@@ -223,22 +226,22 @@ impl App {
     fn uncommitted_graph_context_menu_items(&self) -> Vec<ContextMenuItem> {
         let mut items = Vec::new();
         if self.uncommitted.is_unstaged {
-            items.push(Self::command_item("Stage all", Command::Stage));
+            items.push(Self::command_item(menu::STAGE_ALL, Command::Stage));
         }
         if self.uncommitted.is_staged {
-            items.push(Self::command_item("Unstage all", Command::Unstage));
-            items.push(Self::command_item("Commit", Command::Commit));
+            items.push(Self::command_item(menu::UNSTAGE_ALL, Command::Unstage));
+            items.push(Self::command_item(menu::COMMIT, Command::Commit));
         }
         if !self.uncommitted.is_clean {
-            items.push(Self::command_item("Stash changes", Command::Stash));
+            items.push(Self::command_item(menu::STASH_CHANGES, Command::Stash));
         }
         if self.repo.as_ref().is_some_and(|repo| Self::active_operation_kind(repo).is_some()) {
-            items.push(Self::command_item("Continue operation", Command::ContinueOperation));
-            items.push(Self::command_item("Abort operation", Command::AbortOperation));
+            items.push(Self::command_item(menu::CONTINUE_OPERATION, Command::ContinueOperation));
+            items.push(Self::command_item(menu::ABORT_OPERATION, Command::AbortOperation));
         }
-        items.push(Self::command_item("Find", Command::Find));
+        items.push(Self::command_item(menu::FIND, Command::Find));
         if self.repo.is_some() {
-            items.push(Self::command_item("Find file", Command::FindFile));
+            items.push(Self::command_item(menu::FIND_FILE, Command::FindFile));
         }
         items
     }
@@ -252,43 +255,43 @@ impl App {
 
     fn viewer_context_menu_items(&self) -> Vec<ContextMenuItem> {
         let hunk_label = match self.viewer_mode {
-            ViewerMode::Hunks => "Show full diff",
-            ViewerMode::Full | ViewerMode::Split => "Show hunk rows",
+            ViewerMode::Hunks => menu::SHOW_FULL_DIFF,
+            ViewerMode::Full | ViewerMode::Split => menu::SHOW_HUNK_ROWS,
         };
-        let split_label = if self.viewer_mode == ViewerMode::Split { "Show unified diff" } else { "Show split diff" };
+        let split_label = if self.viewer_mode == ViewerMode::Split { menu::SHOW_UNIFIED_DIFF } else { menu::SHOW_SPLIT_DIFF };
         let mut items =
-            vec![Self::command_item(hunk_label, Command::ToggleHunkMode), Self::command_item(split_label, Command::ToggleSplitDiffMode), Self::command_item("Back to graph", Command::Back)];
+            vec![Self::command_item(hunk_label, Command::ToggleHunkMode), Self::command_item(split_label, Command::ToggleSplitDiffMode), Self::command_item(menu::BACK_TO_GRAPH, Command::Back)];
         if self.repo.is_some() {
-            items.push(Self::command_item("Find file", Command::FindFile));
+            items.push(Self::command_item(menu::FIND_FILE, Command::FindFile));
         }
         items
     }
 
     fn branch_context_menu_items(&self) -> Vec<ContextMenuItem> {
         let mut items = vec![
-            Self::command_item("Open commit", Command::Select),
-            Self::command_item("Checkout branch", Command::Checkout),
-            Self::command_item("Solo branch", Command::SoloBranch),
-            Self::command_item("Toggle branch", Command::ToggleBranch),
+            Self::command_item(menu::OPEN_COMMIT, Command::Select),
+            Self::command_item(menu::CHECKOUT_BRANCH, Command::Checkout),
+            Self::command_item(menu::SOLO_BRANCH, Command::SoloBranch),
+            Self::command_item(menu::TOGGLE_BRANCH, Command::ToggleBranch),
         ];
 
         if self.branch_name_at_pane_selection().is_some_and(|branch| self.is_local_branch_name(&branch)) {
-            items.push(Self::command_item("Rename branch", Command::RenameBranch));
+            items.push(Self::command_item(menu::RENAME_BRANCH, Command::RenameBranch));
         }
-        items.push(Self::command_item("Delete branch", Command::DeleteBranch));
+        items.push(Self::command_item(menu::DELETE_BRANCH, Command::DeleteBranch));
         items
     }
 
     fn tag_context_menu_items(&self) -> Vec<ContextMenuItem> {
-        vec![Self::command_item("Open commit", Command::Select), Self::command_item("Delete tag", Command::Untag)]
+        vec![Self::command_item(menu::OPEN_COMMIT, Command::Select), Self::command_item(menu::DELETE_TAG, Command::Untag)]
     }
 
     fn stash_context_menu_items(&self) -> Vec<ContextMenuItem> {
-        vec![Self::command_item("Open stash commit", Command::Select), Self::command_item("Pop stash", Command::Pop), Self::command_item("Drop stash", Command::Drop)]
+        vec![Self::command_item(menu::OPEN_STASH_COMMIT, Command::Select), Self::command_item(menu::POP_STASH, Command::Pop), Self::command_item(menu::DROP_STASH, Command::Drop)]
     }
 
     fn reflog_context_menu_items(&self) -> Vec<ContextMenuItem> {
-        vec![Self::command_item("Open commit", Command::Select), Self::command_item("Create branch here", Command::CreateBranch)]
+        vec![Self::command_item(menu::OPEN_COMMIT, Command::Select), Self::command_item(menu::CREATE_BRANCH_HERE, Command::CreateBranch)]
     }
 
     fn worktree_context_menu_items(&self, index: usize) -> Vec<ContextMenuItem> {
@@ -297,13 +300,13 @@ impl App {
             return items;
         };
         if entry.is_valid {
-            items.push(Self::command_item("Open worktree", Command::Select));
+            items.push(Self::command_item(menu::OPEN_WORKTREE, Command::Select));
         }
         if entry.can_remove() {
-            items.push(Self::command_item("Remove worktree", Command::RemoveWorktree));
+            items.push(Self::command_item(menu::REMOVE_WORKTREE, Command::RemoveWorktree));
         }
         if entry.can_lock() {
-            let label = if entry.locked_reason.is_some() { "Unlock worktree" } else { "Lock worktree" };
+            let label = if entry.locked_reason.is_some() { menu::UNLOCK_WORKTREE } else { menu::LOCK_WORKTREE };
             items.push(Self::command_item(label, Command::ToggleWorktreeLock));
         }
         items
@@ -315,24 +318,24 @@ impl App {
             return items;
         };
         if entry.can_open() {
-            items.push(Self::command_item("Open submodule", Command::Select));
+            items.push(Self::command_item(menu::OPEN_SUBMODULE, Command::Select));
         }
-        items.push(Self::command_item("Update/init submodule", Command::UpdateSubmodule));
-        items.push(Self::command_item("Sync URL", Command::SyncSubmodule));
+        items.push(Self::command_item(menu::UPDATE_INIT_SUBMODULE, Command::UpdateSubmodule));
+        items.push(Self::command_item(menu::SYNC_URL, Command::SyncSubmodule));
         if entry.is_dirty() {
-            items.push(Self::command_item("Stage submodule", Command::Stage));
+            items.push(Self::command_item(menu::STAGE_SUBMODULE, Command::Stage));
         }
         if entry.is_index_modified {
-            items.push(Self::command_item("Unstage submodule", Command::Unstage));
+            items.push(Self::command_item(menu::UNSTAGE_SUBMODULE, Command::Unstage));
         }
         if !self.submodule_stack.is_empty() {
-            items.push(Self::command_item("Return to parent repository", Command::ReturnToParentRepository));
+            items.push(Self::command_item(menu::RETURN_TO_PARENT_REPOSITORY, Command::ReturnToParentRepository));
         }
         items
     }
 
     fn inspector_context_menu_items(&self) -> Vec<ContextMenuItem> {
-        let mut items = vec![Self::command_item("Show files/status", Command::NarrowScope), Self::command_item("Back to graph", Command::WidenScope)];
+        let mut items = vec![Self::command_item(menu::SHOW_FILES_STATUS, Command::NarrowScope), Self::command_item(menu::BACK_TO_GRAPH, Command::WidenScope)];
         if self.graph_selected != 0 {
             items.extend(self.graph_context_menu_items(self.graph_selected, true, false));
         }
@@ -346,16 +349,16 @@ impl App {
             return items;
         }
 
-        items.push(Self::command_item("Open file", Command::Select));
+        items.push(Self::command_item(menu::OPEN_FILE, Command::Select));
         if self.graph_selected == 0 {
             if is_top {
                 if !self.selected_staged_status_file_is_conflict() {
-                    items.push(Self::command_item("Unstage file", Command::Unstage));
-                    items.push(Self::command_item("Discard file changes", Command::HardReset));
+                    items.push(Self::command_item(menu::UNSTAGE_FILE, Command::Unstage));
+                    items.push(Self::command_item(menu::DISCARD_FILE_CHANGES, Command::HardReset));
                 }
             } else if !self.selected_unstaged_status_file_is_conflict() {
-                items.push(Self::command_item("Stage file", Command::Stage));
-                items.push(Self::command_item("Discard file changes", Command::HardReset));
+                items.push(Self::command_item(menu::STAGE_FILE, Command::Stage));
+                items.push(Self::command_item(menu::DISCARD_FILE_CHANGES, Command::HardReset));
             }
         }
         items
@@ -382,9 +385,9 @@ impl App {
     }
 
     fn search_context_menu_items(&self) -> Vec<ContextMenuItem> {
-        let mut items = vec![Self::command_item("Open commit", Command::Select)];
+        let mut items = vec![Self::command_item(menu::OPEN_COMMIT, Command::Select)];
         if self.repo.is_some() {
-            items.push(Self::command_item("Find file", Command::FindFile));
+            items.push(Self::command_item(menu::FIND_FILE, Command::FindFile));
         }
         items
     }
@@ -392,13 +395,13 @@ impl App {
     fn splash_context_menu_items(&self, index: usize) -> Vec<ContextMenuItem> {
         let mut items = Vec::new();
         if index < self.recent.len() {
-            items.push(Self::command_item("Open repository", Command::Select));
-            items.push(Self::command_item("Remove", Command::RemoveRecentRepository));
+            items.push(Self::command_item(menu::OPEN_REPOSITORY, Command::Select));
+            items.push(Self::command_item(menu::REMOVE, Command::RemoveRecentRepository));
             if index > 0 {
-                items.push(Self::command_item("Move up", Command::MoveRecentRepositoryUp));
+                items.push(Self::command_item(menu::MOVE_UP, Command::MoveRecentRepositoryUp));
             }
             if index + 1 < self.recent.len() {
-                items.push(Self::command_item("Move down", Command::MoveRecentRepositoryDown));
+                items.push(Self::command_item(menu::MOVE_DOWN, Command::MoveRecentRepositoryDown));
             }
         }
         items
@@ -412,14 +415,14 @@ impl App {
         match kind {
             SettingsSelectionKind::Info => Vec::new(),
             SettingsSelectionKind::RecentRepository(index) => self.settings_recent_context_menu_items(index),
-            SettingsSelectionKind::RemoteAdd => vec![Self::command_item("Add remote", Command::Select)],
+            SettingsSelectionKind::RemoteAdd => vec![Self::command_item(menu::ADD_REMOTE, Command::Select)],
             SettingsSelectionKind::Remote(name) => {
-                REMOTE_ACTIONS.iter().enumerate().map(|(index, action)| Self::item(remote_action_label(action), ContextMenuAction::RemoteAction { name: name.clone(), index }, true)).collect()
+                REMOTE_ACTIONS.iter().enumerate().map(|(index, action)| Self::item(action.label(), ContextMenuAction::RemoteAction { name: name.clone(), index }, true)).collect()
             },
-            SettingsSelectionKind::Theme(_) => vec![Self::command_item("Apply theme", Command::Select)],
-            SettingsSelectionKind::KeyBinding(_) => vec![Self::command_item("Rebind shortcut", Command::Select)],
+            SettingsSelectionKind::Theme(_) => vec![Self::command_item(menu::APPLY_THEME, Command::Select)],
+            SettingsSelectionKind::KeyBinding(_) => vec![Self::command_item(menu::REBIND_SHORTCUT, Command::Select)],
             SettingsSelectionKind::LayoutCommand(command) => {
-                let label = format!("Run {}", command_to_visual_string(&command));
+                let label = menu::run_command(&command_to_visual_string(&command));
                 vec![Self::command_item(label, Command::Select)]
             },
         }
@@ -428,13 +431,13 @@ impl App {
     fn settings_recent_context_menu_items(&self, index: usize) -> Vec<ContextMenuItem> {
         let mut items = Vec::new();
         if index < self.recent.len() {
-            items.push(Self::item("Open repository", ContextMenuAction::OpenRecentRepository(index), true));
-            items.push(Self::command_item("Remove", Command::RemoveRecentRepository));
+            items.push(Self::item(menu::OPEN_REPOSITORY, ContextMenuAction::OpenRecentRepository(index), true));
+            items.push(Self::command_item(menu::REMOVE, Command::RemoveRecentRepository));
             if index > 0 {
-                items.push(Self::command_item("Move up", Command::MoveRecentRepositoryUp));
+                items.push(Self::command_item(menu::MOVE_UP, Command::MoveRecentRepositoryUp));
             }
             if index + 1 < self.recent.len() {
-                items.push(Self::command_item("Move down", Command::MoveRecentRepositoryDown));
+                items.push(Self::command_item(menu::MOVE_DOWN, Command::MoveRecentRepositoryDown));
             }
         }
         items
@@ -568,18 +571,6 @@ impl App {
 
         let selected = self.path.as_ref().and_then(|path| self.recent.iter().position(|recent| recent == path)).unwrap_or(0);
         self.splash_selected = selected.min(self.recent.len().saturating_sub(1));
-    }
-}
-
-fn remote_action_label(action: &str) -> String {
-    match action {
-        "fetch" => "Fetch".to_string(),
-        "set as default" => "Set as default".to_string(),
-        "rename" => "Rename remote".to_string(),
-        "edit fetch URL" => "Edit fetch URL".to_string(),
-        "edit push URL" => "Edit push URL".to_string(),
-        "delete" => "Delete remote".to_string(),
-        other => other.to_string(),
     }
 }
 
