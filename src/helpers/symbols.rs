@@ -123,9 +123,9 @@ pub mod submodule {
 }
 
 pub mod worktree {
-    pub const CURRENT: &str = "\u{F0770} ";
-    pub const OTHER: &str = "\u{F0256} ";
-    pub const DIRTY: &str = "\u{F0DCE} ";
+    pub const CURRENT: &str = "\u{F0770}";
+    pub const OTHER: &str = "\u{F0256}";
+    pub const DIRTY: &str = "\u{F0DCE}";
     pub const LOCKED: &str = "\u{F1AA8}";
     pub const INVALID: &str = "\u{F19F9}";
     pub const EMPTY: &str = "\u{F179E}";

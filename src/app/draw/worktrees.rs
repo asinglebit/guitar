@@ -66,7 +66,7 @@ impl App {
                 self.theme.COLOR_TEAL
             };
 
-            lines.push(Line::from(Span::styled(format!("{icon}{label}"), Style::default().fg(color))));
+            lines.push(Line::from(Span::styled(format!("{icon} {label}"), Style::default().fg(color))));
         }
 
         let visible_height = if self.layout_config.is_zen {

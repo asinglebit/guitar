@@ -44,7 +44,7 @@ impl App {
             let locked = if entry.locked_reason.is_some() { format!(" {}", worktree::LOCKED) } else { String::new() };
             let invalid = if !entry.is_valid { format!(" {}", worktree::INVALID) } else { String::new() };
             let icon = if entry.is_current { worktree::CURRENT } else { worktree::OTHER };
-            let label = format!("{icon}{}  {}{}{}{}  {}", entry.name, target, dirty, locked, invalid, entry.path.display());
+            let label = format!("{icon} {}  {}{}{}{}  {}", entry.name, target, dirty, locked, invalid, entry.path.display());
             let label = truncate_with_ellipsis(&label, max_line_width);
             length = length.max(label.len());
             height += 1;
