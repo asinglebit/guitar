@@ -147,6 +147,23 @@ fn workdir_diff_marks_conflicted_paths() {
 }
 
 #[test]
+fn workdir_file_diff_emits_untracked_file_contents_as_added_lines() {
+    let (path, repo) = temp_repo("untracked-added-lines");
+    write(&path, "tracked.txt", "base\n");
+    commit(&repo, "tracked.txt", "initial");
+    write(&path, "new.txt", "alpha\nbeta\n");
+
+    let hunks = get_file_diff_at_workdir(&repo, "new.txt").unwrap();
+    let content_lines = hunks.iter().flat_map(|hunk| hunk.lines.iter()).filter(|line| line.origin != 'H').collect::<Vec<_>>();
+
+    assert!(!content_lines.is_empty());
+    assert_eq!(content_lines.iter().map(|line| line.origin).collect::<Vec<_>>(), vec!['+', '+']);
+    assert_eq!(content_lines.iter().map(|line| line.content.as_str()).collect::<Vec<_>>(), vec!["alpha\n", "beta\n"]);
+
+    let _ = fs::remove_dir_all(path);
+}
+
+#[test]
 fn workdir_diff_ignores_clean_initialized_submodule() {
     let dir = TestDir::new("submodule-clean");
     let parent = parent_with_submodule(&dir);

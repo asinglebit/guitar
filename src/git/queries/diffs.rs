@@ -229,7 +229,7 @@ pub fn get_file_diff_at_workdir(repo: &Repository, filename: &str) -> Result<Vec
 
     // Limit the diff early; libgit2 still reports hunks through the callback below.
     let mut diff_options = DiffOptions::new();
-    diff_options.pathspec(filename);
+    diff_options.pathspec(filename).show_untracked_content(true);
 
     diff_to_hunks(repo.diff_tree_to_workdir_with_index(head_tree.as_ref(), Some(&mut diff_options))?)
 }
