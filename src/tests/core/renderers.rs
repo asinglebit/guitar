@@ -48,8 +48,21 @@ fn merge_right_from_history(prev_lane_parent: u32) -> GraphHistory {
 fn branch_up_history(current_lane: usize) -> GraphHistory {
     let mut last = Vector::from(vec![Chunk::dummy(), Chunk::dummy()]);
     last[current_lane] = Chunk::commit(4, NONE, NONE);
+    let mut prev = Vector::from(vec![Chunk::commit(10, 1, NONE), Chunk::commit(11, 2, NONE)]);
+    for lane_idx in 0..prev.len() {
+        if lane_idx != current_lane {
+            prev[lane_idx].parent_a = 4;
+        }
+    }
 
-    GraphHistory::from(Vector::from(vec![Vector::from(vec![Chunk::commit(10, 1, NONE), Chunk::commit(11, 2, NONE)]), last]))
+    GraphHistory::from(Vector::from(vec![prev, last]))
+}
+
+fn branch_up_bridge_history() -> GraphHistory {
+    GraphHistory::from(Vector::from(vec![
+        Vector::from(vec![Chunk::commit(30, 4, NONE), Chunk::commit(31, 101, NONE), Chunk::commit(32, 102, NONE), Chunk::commit(33, 103, NONE)]),
+        Vector::from(vec![Chunk::dummy(), Chunk::commit(31, 101, NONE), Chunk::commit(32, 102, NONE), Chunk::commit(4, NONE, NONE)]),
+    ]))
 }
 
 fn transient_merge_closeout_history() -> GraphHistory {
@@ -147,6 +160,22 @@ fn graph_projection_uses_branch_up_right_when_dummy_lane_points_to_commit_on_rig
     assert!(text.contains(graph::BRANCH_UP_RIGHT), "{text:?}");
     assert!(!text.contains(graph::BRANCH_UP), "{text:?}");
     assert!(text.find(graph::BRANCH_UP_RIGHT) < text.find(graph::COMMIT), "{text:?}");
+}
+
+#[test]
+fn graph_projection_bridges_left_dummy_lane_to_current_row() {
+    let theme = Theme::classic();
+    let symbols = SymbolTheme::main();
+    let rows = vec![graph_row_with_alias(0, 30), graph_row_with_alias(1, 4)];
+    let lines = render_graph_projection(&theme, &symbols, &rows, &branch_up_bridge_history(), NONE, 0, 2, true);
+    let text = line_text(&lines[1]);
+    let (_, after_branch_up) = text.split_once(graph::BRANCH_UP_RIGHT).unwrap();
+    let (connector, _) = after_branch_up.split_once(graph::COMMIT).unwrap();
+
+    assert!(text.contains("╰──── ○"), "{text:?}");
+    assert_eq!(connector, format!("{}{}{}{}{}", graph::HORIZONTAL, graph::HORIZONTAL, graph::HORIZONTAL, graph::HORIZONTAL, graph::EMPTY), "{text:?}");
+    assert!(!connector.contains(graph::VERTICAL), "{text:?}");
+    assert!(!text.contains(graph::BRANCH_UP), "{text:?}");
 }
 
 #[test]

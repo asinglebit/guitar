@@ -51,6 +51,17 @@ impl LayersContext {
         self.merges.push(LayerToken { symbol: sym.to_string(), color });
     }
 
+    pub fn merge_at(&mut self, token_index: usize, sym: &str, lane: usize) {
+        while self.merges.len() <= token_index {
+            self.merges.push(LayerToken { symbol: " ".to_string(), color: Color::Black });
+        }
+
+        if is_empty(&self.merges[token_index].symbol) {
+            let color = self.color.get_lane(lane);
+            self.merges[token_index] = LayerToken { symbol: sym.to_string(), color };
+        }
+    }
+
     pub fn pipe_custom(&mut self, sym: &str, _lane: usize, color: Color) {
         self.pipes.push(LayerToken { symbol: sym.to_string(), color });
     }

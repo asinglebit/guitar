@@ -69,6 +69,8 @@ pub fn render_graph_projection(
             continue;
         }
 
+        let current_row_lane_idx = last.iter().position(|chunk| !chunk.is_dummy() && chunk.alias == row.alias);
+        let mut branch_up_bridges: Vec<(usize, usize)> = Vec::new();
         let mut branching_lanes: Vec<usize> = Vec::new();
         for (lane_idx, chunk) in last.iter().enumerate() {
             if chunk.is_dummy()
@@ -115,8 +117,13 @@ pub fn render_graph_projection(
                             if dummy_lane_closes_to_row(prev, row.alias) {
                                 layers.commit(&graph.empty, lane_idx);
                                 layers.commit(&graph.empty, lane_idx);
-                                layers.pipe(branch_up_symbol(graph, last, lane_idx, row.alias), lane_idx);
+                                layers.pipe(branch_up_symbol(graph, lane_idx, current_row_lane_idx), lane_idx);
                                 layers.pipe(&graph.empty, lane_idx);
+                                if let Some(row_lane_idx) = current_row_lane_idx
+                                    && lane_idx < row_lane_idx
+                                {
+                                    branch_up_bridges.push((lane_idx, row_lane_idx));
+                                }
                             } else {
                                 layers.commit(&graph.empty, lane_idx);
                                 layers.commit(&graph.empty, lane_idx);
@@ -127,8 +134,13 @@ pub fn render_graph_projection(
                         None => {
                             layers.commit(&graph.empty, lane_idx);
                             layers.commit(&graph.empty, lane_idx);
-                            layers.pipe(branch_up_symbol(graph, last, lane_idx, row.alias), lane_idx);
+                            layers.pipe(branch_up_symbol(graph, lane_idx, current_row_lane_idx), lane_idx);
                             layers.pipe(&graph.empty, lane_idx);
+                            if let Some(row_lane_idx) = current_row_lane_idx
+                                && lane_idx < row_lane_idx
+                            {
+                                branch_up_bridges.push((lane_idx, row_lane_idx));
+                            }
                         },
                     }
                 }
@@ -314,6 +326,10 @@ pub fn render_graph_projection(
             layers.pipe(&graph.empty, lane_idx);
         }
 
+        for (from_lane_idx, to_lane_idx) in branch_up_bridges {
+            draw_branch_up_bridge(&mut layers, graph, from_lane_idx, to_lane_idx);
+        }
+
         layers.bake(&mut spans);
         lines.push(Line::from(spans));
     }
@@ -323,16 +339,24 @@ pub fn render_graph_projection(
     lines
 }
 
-fn branch_up_symbol<'a>(graph: &'a GraphSymbols, snapshot: &Vector<Chunk>, lane_idx: usize, row_alias: u32) -> &'a str {
-    if next_non_dummy_lane_is_alias(snapshot, lane_idx, row_alias) { &graph.branch_up_right } else { &graph.branch_up }
+fn branch_up_symbol(graph: &GraphSymbols, lane_idx: usize, current_row_lane_idx: Option<usize>) -> &str {
+    if current_row_lane_idx.is_some_and(|row_lane_idx| lane_idx < row_lane_idx) { &graph.branch_up_right } else { &graph.branch_up }
 }
 
-fn next_non_dummy_lane_is_alias(snapshot: &Vector<Chunk>, lane_idx: usize, row_alias: u32) -> bool {
-    snapshot.iter().skip(lane_idx + 1).find(|chunk| !chunk.is_dummy()).is_some_and(|chunk| chunk.alias == row_alias)
+fn draw_branch_up_bridge(layers: &mut LayersContext, graph: &GraphSymbols, from_lane_idx: usize, to_lane_idx: usize) {
+    if from_lane_idx >= to_lane_idx {
+        return;
+    }
+
+    let start_token_idx = from_lane_idx.saturating_mul(2).saturating_add(1);
+    let end_token_idx = to_lane_idx.saturating_mul(2).saturating_sub(1);
+    for token_idx in start_token_idx..end_token_idx {
+        layers.merge_at(token_idx, &graph.horizontal, from_lane_idx);
+    }
 }
 
 fn dummy_lane_closes_to_row(prev: &Chunk, row_alias: u32) -> bool {
-    single_active_parent(prev).is_some() || (prev.parent_a != NONE && prev.parent_b != NONE && prev.parent_a == row_alias)
+    single_active_parent(prev).is_some_and(|parent| parent == row_alias) || (prev.parent_a != NONE && prev.parent_b != NONE && prev.parent_a == row_alias)
 }
 
 fn previous_scanline_carries_parent(prev: Option<&Vector<Chunk>>, lane_idx: usize, chunk: &Chunk) -> bool {
