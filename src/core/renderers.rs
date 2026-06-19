@@ -190,7 +190,7 @@ pub fn render_graph_projection(theme: &Theme, rows: &[GraphRow], history: &Graph
                                 if chunk_nested_idx == merger_idx {
                                     layers.merge(graph::MERGE_RIGHT_FROM, merger_idx);
                                 } else {
-                                    let symbol = if previous_scanline_carries_parent(prev, chunk_nested_idx, chunk_nested) { graph::MERGE_RIGHT_FROM_AND_UP } else { graph::HORIZONTAL };
+                                    let symbol = if previous_scanline_carries_parent(prev, chunk_nested_idx, chunk_nested) { graph::MERGE_RIGHT_FROM } else { graph::HORIZONTAL };
                                     layers.merge(symbol, merger_idx);
                                 }
 
@@ -661,8 +661,8 @@ mod tests {
         let with_up = render_graph_projection(&theme, &[row.clone()], &merge_right_from_history(1), NONE, 1, 2, true);
         let without_up = render_graph_projection(&theme, &[row], &merge_right_from_history(99), NONE, 1, 2, true);
 
-        assert!(line_text(&with_up[0]).contains(graph::MERGE_RIGHT_FROM_AND_UP), "{:?}", line_text(&with_up[0]));
-        assert!(!line_text(&without_up[0]).contains(graph::MERGE_RIGHT_FROM_AND_UP), "{:?}", line_text(&without_up[0]));
+        assert!(line_text(&with_up[0]).contains(graph::MERGE_RIGHT_FROM), "{:?}", line_text(&with_up[0]));
+        assert!(line_text(&without_up[0]).contains(graph::MERGE_RIGHT_FROM), "{:?}", line_text(&without_up[0]));
     }
 
     #[test]

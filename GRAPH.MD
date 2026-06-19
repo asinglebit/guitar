@@ -62,7 +62,6 @@ The real UI uses Unicode glyphs from `src/helpers/symbols.rs`:
 | horizontal connector | `graph::HORIZONTAL` | `─` |
 | merge from left | `graph::MERGE_LEFT_FROM` | `┤` |
 | merge from right | `graph::MERGE_RIGHT_FROM` | `╭` |
-| merge from right and continuing upward | `graph::MERGE_RIGHT_FROM_AND_UP` | `├` |
 | branch up | `graph::BRANCH_UP` | `╯` |
 | branch down | `graph::BRANCH_DOWN` | `╮` |
 
@@ -876,12 +875,11 @@ o---*  M
 o   o  L/R later
 ```
 
-Actual connector pieces are layered with `MERGE_RIGHT_FROM`,
-`MERGE_RIGHT_FROM_AND_UP`, `HORIZONTAL`, and `MERGE_LEFT_FROM` depending on
+Actual connector pieces are layered with `MERGE_RIGHT_FROM`, `HORIZONTAL`, and `MERGE_LEFT_FROM` depending on
 direction and position.
 
 When a merge connector starts from a lane that was already carrying the same
-parent on the previous scanline, the renderer uses `MERGE_RIGHT_FROM_AND_UP`
+parent on the previous scanline, the renderer uses `MERGE_RIGHT_FROM`
 instead of a plain horizontal. ASCII idea:
 
 ```text
@@ -1223,7 +1221,7 @@ The real renderer uses the merge layer to draw connector glyphs and the commit
 layer to keep the merge dot visible.
 
 If lane 0 was already carrying `R` on the previous scanline, the first
-connector piece can be `MERGE_RIGHT_FROM_AND_UP` (`├`) instead of a plain
+connector piece can be `MERGE_RIGHT_FROM` instead of a plain
 horizontal. That says "start the merge to the right, while this same parent
 also continues upward from the prior row."
 

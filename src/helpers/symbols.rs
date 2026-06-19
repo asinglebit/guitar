@@ -44,7 +44,6 @@ pub mod graph {
     pub const VERTICAL_DOTTED: &str = "┊";
     pub const MERGE_LEFT_FROM: &str = super::border::T_RIGHT;
     pub const MERGE_RIGHT_FROM: &str = super::border::ROUNDED_TOP_LEFT;
-    pub const MERGE_RIGHT_FROM_AND_UP: &str = super::border::T_LEFT;
     pub const BRANCH_UP: &str = super::border::ROUNDED_BOTTOM_RIGHT;
     pub const BRANCH_DOWN: &str = super::border::ROUNDED_TOP_RIGHT;
     pub const MERGE: &str = "•";
