@@ -107,12 +107,19 @@ fn graph_projection_uses_merge_right_from_and_up_when_previous_lane_carries_same
     let theme = Theme::classic();
     let symbols = SymbolTheme::main();
     let row = graph_row_with_alias(1, 4);
+    let with_up_rows = vec![graph_row_with_alias(0, 20), row.clone()];
 
-    let with_up = render_graph_projection(&theme, &symbols, &[row.clone()], &merge_right_from_history(1), NONE, 1, 2, true);
+    let with_up = render_graph_projection(&theme, &symbols, &with_up_rows, &merge_right_from_history(1), NONE, 0, 2, true);
     let without_up = render_graph_projection(&theme, &symbols, &[row], &merge_right_from_history(99), NONE, 1, 2, true);
+    let with_up_text = line_text(&with_up[1]);
+    let without_up_text = line_text(&without_up[0]);
+    let (_, after_merge_right_from) = with_up_text.split_once(graph::MERGE_RIGHT_FROM).unwrap();
+    let (connector_after_merge_right_from, _) = after_merge_right_from.split_once(graph::MERGE).unwrap();
 
-    assert!(line_text(&with_up[0]).contains(graph::MERGE_RIGHT_FROM), "{:?}", line_text(&with_up[0]));
-    assert!(line_text(&without_up[0]).contains(graph::MERGE_RIGHT_FROM), "{:?}", line_text(&without_up[0]));
+    assert_eq!(with_up_text.matches(graph::MERGE_RIGHT_FROM).count(), 1, "{with_up_text:?}");
+    assert!(connector_after_merge_right_from.contains(graph::HORIZONTAL), "{with_up_text:?}");
+    assert!(connector_after_merge_right_from.replace(graph::HORIZONTAL, "").trim().is_empty(), "{with_up_text:?}");
+    assert_eq!(without_up_text.matches(graph::MERGE_RIGHT_FROM).count(), 1, "{without_up_text:?}");
 }
 
 #[test]

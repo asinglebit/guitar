@@ -173,6 +173,7 @@ pub fn render_graph_projection(
                         mergee_idx += 1;
                     }
 
+                    let mut is_merge_right_from_drawn = false;
                     for (chunk_nested_idx, chunk_nested) in last.iter().enumerate() {
                         if !is_mergee_found {
                             if row.alias == chunk_nested.alias {
@@ -191,12 +192,14 @@ pub fn render_graph_projection(
                             } else if ((chunk_nested.parent_a != NONE && chunk_nested.parent_b == NONE) || (chunk_nested.parent_a == NONE && chunk_nested.parent_b != NONE))
                                 && (chunk.parent_a == chunk_nested.parent_a || chunk.parent_b == chunk_nested.parent_a)
                             {
-                                if chunk_nested_idx == merger_idx {
-                                    layers.merge(&graph.merge_right_from, merger_idx);
+                                let is_merge_start = chunk_nested_idx == merger_idx || previous_scanline_carries_parent(prev, chunk_nested_idx, chunk_nested);
+                                let symbol = if is_merge_start && !is_merge_right_from_drawn {
+                                    is_merge_right_from_drawn = true;
+                                    &graph.merge_right_from
                                 } else {
-                                    let symbol = if previous_scanline_carries_parent(prev, chunk_nested_idx, chunk_nested) { &graph.merge_right_from } else { &graph.horizontal };
-                                    layers.merge(symbol, merger_idx);
-                                }
+                                    &graph.horizontal
+                                };
+                                layers.merge(symbol, merger_idx);
 
                                 if chunk_nested_idx + 1 == mergee_idx {
                                     layers.merge(&graph.empty, merger_idx);
