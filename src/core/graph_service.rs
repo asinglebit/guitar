@@ -9,7 +9,7 @@ use crate::{
     helpers::{
         heatmap::{DAYS, WEEKS, build_heatmap},
         localisation::{common, empty, errors, status as status_text},
-        symbols::empty_state,
+        symbols::SymbolTheme,
         time::timestamp_to_utc_date_time,
     },
 };
@@ -151,6 +151,7 @@ pub struct GraphServiceConfig {
     pub hidden_branch_names: HashSet<String>,
     pub include_head_reflog_roots: bool,
     pub worktrees: Vec<WorktreeEntry>,
+    pub symbols: SymbolTheme,
 }
 
 pub fn spawn_graph_service(config: GraphServiceConfig, rx: Receiver<GraphCommand>, tx: Sender<GraphEvent>, cancel: Arc<AtomicBool>) -> thread::JoinHandle<()> {
@@ -179,23 +180,23 @@ fn run_graph_service(config: GraphServiceConfig, rx: Receiver<GraphCommand>, tx:
             break;
         }
 
-        if !drain_commands(generation, version, &rx, &tx, &walk_ctx, &mut worktrees, &mut pending_graph, &mut pending_file_history, &config.hidden_branch_names) {
+        if !drain_commands(generation, version, &rx, &tx, &walk_ctx, &mut worktrees, &mut pending_graph, &mut pending_file_history, &config.hidden_branch_names, &config.symbols) {
             break;
         }
 
         if let Some((request_id, start, end)) = pending_graph.take() {
-            send_graph_window(generation, request_id, version, start, end, &tx, &walk_ctx, &worktrees, &config.hidden_branch_names);
+            send_graph_window(generation, request_id, version, start, end, &tx, &walk_ctx, &worktrees, &config.hidden_branch_names, &config.symbols);
         }
 
         if is_complete && let Some((request_id, path)) = pending_file_history.take() {
-            send_file_history(generation, request_id, path, &tx, &walk_ctx);
+            send_file_history(generation, request_id, path, &tx, &walk_ctx, &config.symbols);
         }
 
         if is_complete {
             match rx.recv_timeout(Duration::from_millis(50)) {
                 Ok(GraphCommand::Shutdown) => break,
                 Ok(command) => {
-                    if !handle_command(generation, version, command, &tx, &walk_ctx, &mut worktrees, &mut pending_graph, &mut pending_file_history, &config.hidden_branch_names) {
+                    if !handle_command(generation, version, command, &tx, &walk_ctx, &mut worktrees, &mut pending_graph, &mut pending_file_history, &config.hidden_branch_names, &config.symbols) {
                         break;
                     }
                 },
@@ -219,7 +220,7 @@ fn run_graph_service(config: GraphServiceConfig, rx: Receiver<GraphCommand>, tx:
             let _ = tx.send(GraphEvent::Heatmap { generation, heatmap });
 
             if let Some((request_id, path)) = pending_file_history.take() {
-                send_file_history(generation, request_id, path, &tx, &walk_ctx);
+                send_file_history(generation, request_id, path, &tx, &walk_ctx, &config.symbols);
             }
         }
     }
@@ -227,10 +228,10 @@ fn run_graph_service(config: GraphServiceConfig, rx: Receiver<GraphCommand>, tx:
 
 fn drain_commands(
     generation: Generation, version: GraphVersion, rx: &Receiver<GraphCommand>, tx: &Sender<GraphEvent>, walk_ctx: &Walker, worktrees: &mut Worktrees,
-    pending_graph: &mut Option<(RequestId, usize, usize)>, pending_file_history: &mut Option<(RequestId, String)>, hidden_branch_names: &HashSet<String>,
+    pending_graph: &mut Option<(RequestId, usize, usize)>, pending_file_history: &mut Option<(RequestId, String)>, hidden_branch_names: &HashSet<String>, symbols: &SymbolTheme,
 ) -> bool {
     while let Ok(command) = rx.try_recv() {
-        if !handle_command(generation, version, command, tx, walk_ctx, worktrees, pending_graph, pending_file_history, hidden_branch_names) {
+        if !handle_command(generation, version, command, tx, walk_ctx, worktrees, pending_graph, pending_file_history, hidden_branch_names, symbols) {
             return false;
         }
     }
@@ -239,7 +240,7 @@ fn drain_commands(
 
 fn handle_command(
     generation: Generation, version: GraphVersion, command: GraphCommand, tx: &Sender<GraphEvent>, walk_ctx: &Walker, worktrees: &mut Worktrees, pending_graph: &mut Option<(RequestId, usize, usize)>,
-    pending_file_history: &mut Option<(RequestId, String)>, hidden_branch_names: &HashSet<String>,
+    pending_file_history: &mut Option<(RequestId, String)>, hidden_branch_names: &HashSet<String>, symbols: &SymbolTheme,
 ) -> bool {
     match command {
         GraphCommand::Shutdown => false,
@@ -263,7 +264,7 @@ fn handle_command(
         },
         GraphCommand::Lookup { generation: cmd_generation, request_id, kind } => {
             if cmd_generation == generation {
-                let result = lookup(kind, walk_ctx, worktrees, hidden_branch_names);
+                let result = lookup(kind, walk_ctx, worktrees, hidden_branch_names, symbols);
                 let _ = tx.send(GraphEvent::LookupResult { generation, request_id, result });
             }
             true
@@ -273,13 +274,13 @@ fn handle_command(
 
 fn send_graph_window(
     generation: Generation, request_id: RequestId, version: GraphVersion, start: usize, end: usize, tx: &Sender<GraphEvent>, walk_ctx: &Walker, worktrees: &Worktrees,
-    hidden_branch_names: &HashSet<String>,
+    hidden_branch_names: &HashSet<String>, symbols: &SymbolTheme,
 ) {
     let total = walk_ctx.oids.get_commit_count();
     let start = start.min(total);
     let end = end.min(total);
     let history = walk_ctx.buffer.borrow().window(start, end.saturating_add(1));
-    let rows = graph_rows(walk_ctx, worktrees, hidden_branch_names, start, end);
+    let rows = graph_rows(walk_ctx, worktrees, hidden_branch_names, symbols, start, end);
     let head_alias = head_alias(walk_ctx);
 
     let _ = tx.send(GraphEvent::GraphWindow { generation, request_id, version, start, end, total, head_alias, rows, history });
@@ -295,8 +296,8 @@ fn send_pane_window(generation: Generation, version: GraphVersion, pane: GraphPa
     let _ = tx.send(GraphEvent::PaneWindow { generation, version, pane, start, end, total, rows });
 }
 
-fn send_file_history(generation: Generation, request_id: RequestId, path: String, tx: &Sender<GraphEvent>, walk_ctx: &Walker) {
-    let result = file_history_rows(walk_ctx, &path);
+fn send_file_history(generation: Generation, request_id: RequestId, path: String, tx: &Sender<GraphEvent>, walk_ctx: &Walker, symbols: &SymbolTheme) {
+    let result = file_history_rows(walk_ctx, &path, symbols);
     match result {
         Ok(rows) => {
             let _ = tx.send(GraphEvent::FileHistory { generation, request_id, path, rows, error: None });
@@ -307,7 +308,7 @@ fn send_file_history(generation: Generation, request_id: RequestId, path: String
     }
 }
 
-fn file_history_rows(walk_ctx: &Walker, path: &str) -> Result<Vec<GraphFileHistoryRow>, git2::Error> {
+fn file_history_rows(walk_ctx: &Walker, path: &str, symbols: &SymbolTheme) -> Result<Vec<GraphFileHistoryRow>, git2::Error> {
     let repo = walk_ctx.repo.borrow();
     let mut rows = Vec::new();
 
@@ -321,7 +322,7 @@ fn file_history_rows(walk_ctx: &Walker, path: &str) -> Result<Vec<GraphFileHisto
             continue;
         };
 
-        let summary = repo.find_commit(oid).ok().and_then(|commit| commit.summary().map(str::to_string)).unwrap_or_else(no_message);
+        let summary = repo.find_commit(oid).ok().and_then(|commit| commit.summary().map(str::to_string)).unwrap_or_else(|| no_message(symbols));
         let short_oid = oid.to_string().chars().take(8).collect();
         rows.push(GraphFileHistoryRow { graph_index, oid, short_oid, summary, status });
     }
@@ -329,11 +330,11 @@ fn file_history_rows(walk_ctx: &Walker, path: &str) -> Result<Vec<GraphFileHisto
     Ok(rows)
 }
 
-fn no_message() -> String {
-    format!("{} {}", empty_state::MARK, empty::NO_MESSAGE)
+fn no_message(symbols: &SymbolTheme) -> String {
+    format!("{} {}", symbols.empty_state.mark, empty::NO_MESSAGE)
 }
 
-fn graph_rows(walk_ctx: &Walker, worktrees: &Worktrees, hidden_branch_names: &HashSet<String>, start: usize, end: usize) -> Vec<GraphRow> {
+fn graph_rows(walk_ctx: &Walker, worktrees: &Worktrees, hidden_branch_names: &HashSet<String>, symbols: &SymbolTheme, start: usize, end: usize) -> Vec<GraphRow> {
     let repo = walk_ctx.repo.borrow();
     let latest_reflogs = latest_reflogs_by_alias(walk_ctx);
     let mut rows = Vec::with_capacity(end.saturating_sub(start));
@@ -345,13 +346,13 @@ fn graph_rows(walk_ctx: &Walker, worktrees: &Worktrees, hidden_branch_names: &Ha
         let (summary, committer_date, committer_name) = if is_uncommitted {
             (String::new(), String::new(), String::new())
         } else if let Ok(commit) = repo.find_commit(oid) {
-            let summary = commit.summary().map(str::to_string).unwrap_or_else(no_message);
+            let summary = commit.summary().map(str::to_string).unwrap_or_else(|| no_message(symbols));
             let committer = commit.committer();
             let committer_date = timestamp_to_utc_date_time(committer.when());
             let committer_name = committer.name().unwrap_or(common::UNKNOWN).to_string();
             (summary, committer_date, committer_name)
         } else {
-            (no_message(), String::new(), String::new())
+            (no_message(symbols), String::new(), String::new())
         };
 
         let local = walk_ctx.branches_local.get(&alias).cloned().unwrap_or_default();
@@ -380,12 +381,12 @@ fn graph_rows(walk_ctx: &Walker, worktrees: &Worktrees, hidden_branch_names: &Ha
     rows
 }
 
-fn graph_row_at(walk_ctx: &Walker, worktrees: &Worktrees, hidden_branch_names: &HashSet<String>, index: usize) -> Option<GraphRow> {
+fn graph_row_at(walk_ctx: &Walker, worktrees: &Worktrees, hidden_branch_names: &HashSet<String>, symbols: &SymbolTheme, index: usize) -> Option<GraphRow> {
     if index >= walk_ctx.oids.get_commit_count() {
         return None;
     }
 
-    graph_rows(walk_ctx, worktrees, hidden_branch_names, index, index.saturating_add(1)).into_iter().next()
+    graph_rows(walk_ctx, worktrees, hidden_branch_names, symbols, index, index.saturating_add(1)).into_iter().next()
 }
 
 fn pane_rows(pane: GraphPane, walk_ctx: &Walker) -> Vec<GraphPaneRow> {
@@ -437,9 +438,9 @@ fn pane_rows(pane: GraphPane, walk_ctx: &Walker) -> Vec<GraphPaneRow> {
     }
 }
 
-fn lookup(kind: GraphLookupKind, walk_ctx: &Walker, worktrees: &Worktrees, hidden_branch_names: &HashSet<String>) -> GraphLookupResult {
+fn lookup(kind: GraphLookupKind, walk_ctx: &Walker, worktrees: &Worktrees, hidden_branch_names: &HashSet<String>, symbols: &SymbolTheme) -> GraphLookupResult {
     match kind {
-        GraphLookupKind::GraphRowAt { index } => GraphLookupResult::GraphRow(graph_row_at(walk_ctx, worktrees, hidden_branch_names, index)),
+        GraphLookupKind::GraphRowAt { index } => GraphLookupResult::GraphRow(graph_row_at(walk_ctx, worktrees, hidden_branch_names, symbols, index)),
         GraphLookupKind::PaneRowAt { pane, index } => GraphLookupResult::PaneRow(pane_rows(pane, walk_ctx).get(index).cloned()),
         GraphLookupKind::BranchIndex { from, direction } => GraphLookupResult::Index(branch_index(walk_ctx, hidden_branch_names, from, direction)),
         GraphLookupKind::ShaPrefix { prefix } => {

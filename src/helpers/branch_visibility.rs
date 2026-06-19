@@ -88,7 +88,7 @@ pub fn save_branch_visibility_to_path(path: &Path, repo_path: &str, hidden: &Has
         let _ = fs::create_dir_all(parent);
     }
 
-    if let Ok(config_string) = facet_json::to_string(&config) {
+    if let Ok(config_string) = facet_json::to_string_pretty(&config) {
         let _ = fs::write(path, config_string);
     }
 }

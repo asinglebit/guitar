@@ -1,6 +1,9 @@
 use facet::Facet;
 use ratatui::layout::Rect;
-use std::{fs, path::PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 pub const LAYOUT_WIDTH_LEFT_PANE: u16 = 45;
 pub const LAYOUT_WIDTH_RIGHT_PANE: u16 = 46;
@@ -178,14 +181,18 @@ pub fn load_layout_config() -> LayoutConfig {
 
 pub fn save_layout_config(config: &LayoutConfig) {
     let path = layout_path();
+    save_layout_config_to_path(&path, config);
+}
+
+fn save_layout_config_to_path(path: &Path, config: &LayoutConfig) {
     if let Some(parent) = path.parent()
         && !parent.exists()
     {
         let _ = fs::create_dir_all(parent);
     }
 
-    if let Ok(config_string) = facet_json::to_string(config) {
-        let _ = fs::write(&path, &config_string);
+    if let Ok(config_string) = facet_json::to_string_pretty(config) {
+        let _ = fs::write(path, &config_string);
     }
 }
 

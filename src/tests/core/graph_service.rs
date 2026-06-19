@@ -1,4 +1,5 @@
 use super::*;
+use crate::helpers::symbols::SymbolTheme;
 use git2::{Oid, Repository, Signature, build::CheckoutBuilder};
 use im::HashSet;
 use std::{
@@ -47,7 +48,15 @@ fn graph_service_reports_progress_and_answers_visible_window() {
     let (event_tx, event_rx) = channel();
     let cancel = Arc::new(AtomicBool::new(false));
     let handle = spawn_graph_service(
-        GraphServiceConfig { generation, path: path.display().to_string(), amount: 1, hidden_branch_names: HashSet::new(), include_head_reflog_roots: false, worktrees: Vec::new() },
+        GraphServiceConfig {
+            generation,
+            path: path.display().to_string(),
+            amount: 1,
+            hidden_branch_names: HashSet::new(),
+            include_head_reflog_roots: false,
+            worktrees: Vec::new(),
+            symbols: SymbolTheme::main(),
+        },
         cmd_rx,
         event_tx,
         cancel.clone(),
@@ -130,7 +139,15 @@ fn graph_service_file_history_returns_visible_graph_indices() {
     let (event_tx, event_rx) = channel();
     let cancel = Arc::new(AtomicBool::new(false));
     let handle = spawn_graph_service(
-        GraphServiceConfig { generation, path: path.display().to_string(), amount: 10000, hidden_branch_names: HashSet::new(), include_head_reflog_roots: false, worktrees: Vec::new() },
+        GraphServiceConfig {
+            generation,
+            path: path.display().to_string(),
+            amount: 10000,
+            hidden_branch_names: HashSet::new(),
+            include_head_reflog_roots: false,
+            worktrees: Vec::new(),
+            symbols: SymbolTheme::main(),
+        },
         cmd_rx,
         event_tx,
         cancel.clone(),
@@ -190,7 +207,15 @@ fn graph_service_uses_hidden_branch_names_as_deny_list() {
     let (event_tx, event_rx) = channel();
     let cancel = Arc::new(AtomicBool::new(false));
     let handle = spawn_graph_service(
-        GraphServiceConfig { generation, path: path.display().to_string(), amount: 10000, hidden_branch_names: hidden_set(&["hidden"]), include_head_reflog_roots: false, worktrees: Vec::new() },
+        GraphServiceConfig {
+            generation,
+            path: path.display().to_string(),
+            amount: 10000,
+            hidden_branch_names: hidden_set(&["hidden"]),
+            include_head_reflog_roots: false,
+            worktrees: Vec::new(),
+            symbols: SymbolTheme::main(),
+        },
         cmd_rx,
         event_tx,
         cancel.clone(),
@@ -264,6 +289,7 @@ fn graph_service_omits_hidden_labels_on_visible_commits() {
             hidden_branch_names: hidden_set(&["hidden", "origin/archive"]),
             include_head_reflog_roots: false,
             worktrees: Vec::new(),
+            symbols: SymbolTheme::main(),
         },
         cmd_rx,
         event_tx,

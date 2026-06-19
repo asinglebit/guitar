@@ -1,7 +1,7 @@
 use crate::{
     app::{app::App, draw::modals::shared::modal_block},
     git::queries::commits::get_current_branch,
-    helpers::{localisation::modal, symbols::branch as branch_symbol},
+    helpers::localisation::modal,
 };
 use ratatui::Frame;
 use ratatui::{
@@ -33,7 +33,7 @@ impl App {
             let is_selected = idx == self.modal_delete_branch_selected as usize;
             let is_local = self.branches.local.values().any(|branches| branches.iter().any(|b| b.as_str() == branch));
 
-            let marker = if is_local { branch_symbol::LOCAL_VISIBLE } else { branch_symbol::REMOTE_VISIBLE };
+            let marker = if is_local { &self.symbols.branch.local_visible } else { &self.symbols.branch.remote_visible };
             let line_text = format!("{marker} {branch} ");
             length = length.max(line_text.len());
 
@@ -56,7 +56,7 @@ impl App {
         self.modal_area = Some(modal_area);
         self.theme.clear_area(modal_area, frame.buffer_mut());
 
-        let modal_block = modal_block(self.theme.COLOR_GREY_600, self.theme.COLOR_HIGHLIGHTED);
+        let modal_block = modal_block(self.theme.COLOR_GREY_600, self.theme.COLOR_HIGHLIGHTED, &self.symbols);
 
         let paragraph = Paragraph::new(Text::from(lines)).block(modal_block).alignment(Alignment::Center);
 

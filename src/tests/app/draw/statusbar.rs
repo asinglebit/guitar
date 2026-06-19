@@ -1,7 +1,7 @@
 use super::*;
 use crate::{app::state::layout::Layout, core::submodules::SubmoduleStackEntry, helpers::symbols::submodule::DEFAULT as SYM_SUBMODULE};
 use git2::{Repository, Signature};
-use ratatui::{backend::TestBackend, layout::Rect, Terminal};
+use ratatui::{Terminal, backend::TestBackend, layout::Rect};
 use std::{
     fs,
     path::{Path, PathBuf},

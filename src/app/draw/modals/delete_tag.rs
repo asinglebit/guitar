@@ -1,5 +1,5 @@
 use crate::app::{app::App, draw::modals::shared::modal_block};
-use crate::helpers::{localisation::modal, symbols::entity};
+use crate::helpers::localisation::modal;
 use ratatui::Frame;
 use ratatui::{
     layout::{Alignment, Rect},
@@ -27,7 +27,7 @@ impl App {
         tags.iter().enumerate().for_each(|(idx, tag)| {
             height += 1;
             let is_selected = idx == self.modal_delete_tag_selected as usize;
-            let line_text = format!("{} {} ", entity::TAG, tag);
+            let line_text = format!("{} {} ", self.symbols.entity.tag, tag);
             length = length.max(line_text.len());
 
             let style = Style::default().fg(if is_selected { self.theme.COLOR_GRASS } else { self.theme.COLOR_TEXT });
@@ -49,7 +49,7 @@ impl App {
         self.modal_area = Some(modal_area);
         self.theme.clear_area(modal_area, frame.buffer_mut());
 
-        let modal_block = modal_block(self.theme.COLOR_GREY_600, self.theme.COLOR_HIGHLIGHTED);
+        let modal_block = modal_block(self.theme.COLOR_GREY_600, self.theme.COLOR_HIGHLIGHTED, &self.symbols);
 
         let paragraph = Paragraph::new(Text::from(lines)).block(modal_block).alignment(Alignment::Center);
 

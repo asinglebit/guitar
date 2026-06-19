@@ -1,7 +1,10 @@
 use super::*;
 use crate::{
     core::{graph_service::GraphRow, renderers::render_graph_projection},
-    helpers::{palette::Theme, symbols::graph},
+    helpers::{
+        palette::Theme,
+        symbols::{SymbolTheme, graph},
+    },
 };
 use git2::{Oid, ResetType, Signature, Time};
 use ratatui::text::Line;
@@ -146,7 +149,8 @@ fn walker_expires_new_right_merge_lane_before_next_rendered_row() {
     assert!(history[merge_history_idx + 1].get(merge_lane).is_none());
 
     let rows: Vec<_> = aliases.iter().enumerate().map(|(index, &alias)| graph_row(index, alias, *walker.oids.get_oid_by_alias(alias))).collect();
-    let lines = render_graph_projection(&Theme::classic(), &rows, &history, head_alias, 0, aliases.len(), true);
+    let symbols = SymbolTheme::main();
+    let lines = render_graph_projection(&Theme::classic(), &symbols, &rows, &history, head_alias, 0, aliases.len(), true);
     let merge_text = line_text(&lines[merge_idx]);
     let next_text = line_text(&lines[merge_idx + 1]);
     let merge_col = merge_text.chars().position(|ch| ch == graph::MERGE.chars().next().unwrap()).unwrap();

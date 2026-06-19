@@ -4,7 +4,6 @@ use crate::{
         colors::ColorPicker,
         layout::scrollbar_content_length,
         localisation::{common, empty, inspector},
-        symbols::{border, branch as branch_symbol, empty_state, scrollbar},
         text::{center_line, empty_state_top_padding, sanitize, truncate_with_ellipsis, wrap_words},
         time::timestamp_to_utc,
     },
@@ -50,8 +49,8 @@ impl App {
                 let commit = repo.find_commit(oid).unwrap();
                 let author = commit.author();
                 let committer = commit.committer();
-                let summary = commit.summary().map(str::to_string).unwrap_or_else(|| format!("{} {}", empty_state::MARK, empty::NO_SUMMARY));
-                let body = commit.body().map(str::to_string).unwrap_or_else(|| format!("{} {}", empty_state::MARK, empty::NO_BODY));
+                let summary = commit.summary().map(str::to_string).unwrap_or_else(|| format!("{} {}", self.symbols.empty_state.mark, empty::NO_SUMMARY));
+                let body = commit.body().map(str::to_string).unwrap_or_else(|| format!("{} {}", self.symbols.empty_state.mark, empty::NO_BODY));
 
                 // Sections are plain list rows so they scroll with the same pane machinery.
                 lines = vec![
@@ -71,7 +70,7 @@ impl App {
                     lines.push(Line::default());
                     lines.push(Line::from(Span::styled(inspector::FEATURED_BRANCHES, Style::default().fg(self.theme.COLOR_HIGHLIGHTED))));
                     for branch in &row.branches {
-                        let text = truncate_with_ellipsis(&format!("{} {}", branch_symbol::LOCAL_VISIBLE, branch.name), max_text_width);
+                        let text = truncate_with_ellipsis(&format!("{} {}", self.symbols.branch.local_visible, branch.name), max_text_width);
                         let color = branch.lane.map(|lane| color_picker.get_lane(lane)).unwrap_or(self.theme.COLOR_TEXT);
                         lines.push(Line::from(Span::styled(text, Style::default().fg(color))));
                     }
@@ -81,7 +80,7 @@ impl App {
                     lines.push(Line::default());
                     lines.push(Line::from(Span::styled(inspector::FEATURED_BRANCHES, Style::default().fg(self.theme.COLOR_HIGHLIGHTED))));
                     for branch in branches.iter().filter(|branch| !self.branches.hidden_branch_names.contains(*branch)) {
-                        let text = truncate_with_ellipsis(&format!("{} {}", branch_symbol::LOCAL_VISIBLE, branch), max_text_width);
+                        let text = truncate_with_ellipsis(&format!("{} {}", self.symbols.branch.local_visible, branch), max_text_width);
                         lines.push(Line::from(Span::styled(text, Style::default().fg(*color))));
                     }
                 }
@@ -165,16 +164,16 @@ impl App {
 
         if self.layout_config.is_zen {
             // Zen mode frames the pane as a full standalone list.
-            let list = List::new(list_items).block(Block::default().borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded).padding(padding));
+            let list = List::new(list_items).block(Block::default().borders(Borders::ALL).border_set(self.symbols.border.block_set()).padding(padding));
 
             frame.render_widget(list, self.layout.inspector);
 
             let mut scrollbar_state = ScrollbarState::new(scrollbar_content_length(total_lines, visible_height)).position(self.inspector_scroll.get());
             let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-                .begin_symbol(Some(scrollbar::BEGIN))
-                .end_symbol(Some(scrollbar::END))
-                .track_symbol(Some(scrollbar::TRACK))
-                .thumb_symbol(if total_lines > visible_height { scrollbar::THUMB } else { scrollbar::INACTIVE_THUMB })
+                .begin_symbol(Some(self.symbols.scrollbar.begin.as_str()))
+                .end_symbol(Some(self.symbols.scrollbar.end.as_str()))
+                .track_symbol(Some(self.symbols.scrollbar.track.as_str()))
+                .thumb_symbol(if total_lines > visible_height { self.symbols.scrollbar.thumb.as_str() } else { self.symbols.scrollbar.inactive_thumb.as_str() })
                 .thumb_style(Style::default().fg(if total_lines > visible_height && self.focus == Focus::Inspector { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 
             frame.render_stateful_widget(scrollbar, self.layout.inspector_scrollbar, &mut scrollbar_state);
@@ -189,10 +188,10 @@ impl App {
 
         let mut scrollbar_state = ScrollbarState::new(scrollbar_content_length(total_lines, visible_height)).position(self.inspector_scroll.get());
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(Some(scrollbar::BEGIN))
-            .end_symbol(if self.layout_config.is_status { Some(border::VERTICAL) } else { Some(scrollbar::END) })
-            .track_symbol(Some(scrollbar::TRACK))
-            .thumb_symbol(if total_lines > visible_height { scrollbar::THUMB } else { scrollbar::INACTIVE_THUMB })
+            .begin_symbol(Some(self.symbols.scrollbar.begin.as_str()))
+            .end_symbol(if self.layout_config.is_status { Some(self.symbols.border.vertical.as_str()) } else { Some(self.symbols.scrollbar.end.as_str()) })
+            .track_symbol(Some(self.symbols.scrollbar.track.as_str()))
+            .thumb_symbol(if total_lines > visible_height { self.symbols.scrollbar.thumb.as_str() } else { self.symbols.scrollbar.inactive_thumb.as_str() })
             .thumb_style(Style::default().fg(if total_lines > visible_height && self.focus == Focus::Inspector { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 
         frame.render_stateful_widget(scrollbar, self.layout.inspector_scrollbar, &mut scrollbar_state);

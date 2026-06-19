@@ -42,7 +42,7 @@ impl App {
         bg_block.render(frame.area(), frame.buffer_mut());
         self.theme.clear_area(modal_area, frame.buffer_mut());
 
-        let modal_block = modal_block(self.theme.COLOR_RED, self.theme.COLOR_RED);
+        let modal_block = modal_block(self.theme.COLOR_RED, self.theme.COLOR_RED, &self.symbols);
 
         Paragraph::new(Text::from(lines)).block(modal_block).alignment(Alignment::Center).render(modal_area, frame.buffer_mut());
     }

@@ -8,7 +8,6 @@ use crate::{
         colors::ColorPicker,
         layout::scrollbar_content_length,
         localisation::empty,
-        symbols::{border, entity, scrollbar},
         text::{center_line, empty_state_top_padding, truncate_with_ellipsis},
     },
 };
@@ -54,7 +53,7 @@ impl App {
                 if let Some(GraphPaneRow::Reflog { selector, message, lane, .. }) = row {
                     let label = truncate_with_ellipsis(&format!("{selector} {message}"), max_text_width.saturating_sub(1));
                     let color = lane.map(|lane| color_picker.get_lane(lane)).unwrap_or(self.theme.COLOR_TEXT);
-                    lines.push(Line::from(Span::styled(format!("{} {label}", entity::REFLOG), Style::default().fg(color))));
+                    lines.push(Line::from(Span::styled(format!("{} {label}", self.symbols.entity.reflog), Style::default().fg(color))));
                 } else {
                     lines.push(Line::default());
                 }
@@ -63,7 +62,7 @@ impl App {
             for entry in &self.reflogs.entries {
                 let label = truncate_with_ellipsis(&format!("{} {}", entry.selector, entry.message), max_text_width.saturating_sub(1));
                 let color = self.reflogs.get_color(entry.new_alias).unwrap_or(self.theme.COLOR_TEXT);
-                lines.push(Line::from(Span::styled(format!("{} {label}", entity::REFLOG), Style::default().fg(color))));
+                lines.push(Line::from(Span::styled(format!("{} {label}", self.symbols.entity.reflog), Style::default().fg(color))));
             }
         } else if !known_empty {
             lines = blank_lines(if total_lines == 0 { visible_height } else { end.saturating_sub(start) });
@@ -76,7 +75,7 @@ impl App {
             for _ in 0..blank_lines_before {
                 lines.push(Line::default());
             }
-            let empty_text = format!("{} {}", entity::REFLOG, empty::NO_HEAD_REFLOG);
+            let empty_text = format!("{} {}", self.symbols.entity.reflog, empty::NO_HEAD_REFLOG);
             lines.push(Line::from(Span::styled(center_line(&truncate_with_ellipsis(&empty_text, max_text_width), max_text_width + 3), Style::default().fg(self.theme.COLOR_GREY_800))));
         }
 
@@ -85,16 +84,16 @@ impl App {
         let list_items = zebra_list_items(&lines[display_start..display_end], visible_height, start, self.reflogs_selected, self.focus == Focus::Reflogs, !reflogs_empty, &self.theme);
 
         if self.layout_config.is_zen {
-            let list = List::new(list_items).block(Block::default().borders(Borders::ALL).padding(padding).border_type(ratatui::widgets::BorderType::Rounded));
+            let list = List::new(list_items).block(Block::default().borders(Borders::ALL).padding(padding).border_set(self.symbols.border.block_set()));
             frame.render_widget(list, self.layout.reflogs);
 
             let scroll_range = scrollbar_content_length(total_lines, visible_height);
             let mut scrollbar_state = ScrollbarState::new(scroll_range).position(self.reflogs_scroll.get());
             let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-                .begin_symbol(Some(scrollbar::BEGIN))
-                .end_symbol(Some(scrollbar::END))
-                .track_symbol(Some(scrollbar::TRACK))
-                .thumb_symbol(if total_lines > visible_height { scrollbar::THUMB } else { scrollbar::INACTIVE_THUMB })
+                .begin_symbol(Some(self.symbols.scrollbar.begin.as_str()))
+                .end_symbol(Some(self.symbols.scrollbar.end.as_str()))
+                .track_symbol(Some(self.symbols.scrollbar.track.as_str()))
+                .thumb_symbol(if total_lines > visible_height { self.symbols.scrollbar.thumb.as_str() } else { self.symbols.scrollbar.inactive_thumb.as_str() })
                 .track_style(Style::default().fg(self.theme.COLOR_BORDER))
                 .thumb_style(Style::default().fg(if total_lines > visible_height && self.focus == Focus::Reflogs { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 
@@ -103,7 +102,7 @@ impl App {
         }
 
         if has_previous {
-            let top_border = Paragraph::new(border::HORIZONTAL.repeat(self.layout.reflogs.width.saturating_sub(1) as usize)).style(Style::default().fg(self.theme.COLOR_BORDER));
+            let top_border = Paragraph::new(self.symbols.border.horizontal.repeat(self.layout.reflogs.width.saturating_sub(1) as usize)).style(Style::default().fg(self.theme.COLOR_BORDER));
             frame.render_widget(top_border, Rect { x: self.layout.reflogs.x + 1, y: self.layout.reflogs.y.saturating_sub(1), width: self.layout.reflogs.width, height: 1 });
         }
 
@@ -113,10 +112,10 @@ impl App {
         let scroll_range = scrollbar_content_length(total_lines, visible_height);
         let mut scrollbar_state = ScrollbarState::new(scroll_range).position(self.reflogs_scroll.get());
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(Some(if has_previous { border::VERTICAL } else { border::HORIZONTAL }))
-            .end_symbol(Some(if has_next { border::VERTICAL } else { border::HORIZONTAL }))
-            .track_symbol(Some(scrollbar::TRACK))
-            .thumb_symbol(if total_lines > visible_height { scrollbar::THUMB } else { scrollbar::INACTIVE_THUMB })
+            .begin_symbol(Some(if has_previous { self.symbols.border.vertical.as_str() } else { self.symbols.border.horizontal.as_str() }))
+            .end_symbol(Some(if has_next { self.symbols.border.vertical.as_str() } else { self.symbols.border.horizontal.as_str() }))
+            .track_symbol(Some(self.symbols.scrollbar.track.as_str()))
+            .thumb_symbol(if total_lines > visible_height { self.symbols.scrollbar.thumb.as_str() } else { self.symbols.scrollbar.inactive_thumb.as_str() })
             .track_style(Style::default().fg(self.theme.COLOR_BORDER))
             .thumb_style(Style::default().fg(if total_lines > visible_height && self.focus == Focus::Reflogs { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 

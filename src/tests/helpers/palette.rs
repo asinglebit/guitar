@@ -230,6 +230,9 @@ fn save_theme_writes_full_theme_json() {
     save_theme_to_path(&path, &Theme::ansi());
 
     let contents = fs::read_to_string(&path).unwrap();
+    assert!(contents.contains('\n'), "{contents}");
+    assert!(contents.contains("\n  \"label\""), "{contents}");
+    assert!(contents.contains("\n    \"red\""), "{contents}");
     let config = facet_json::from_str::<ThemeConfig>(&contents).unwrap();
     assert_eq!(config.label, "ansi");
     assert_eq!(config.colors.red.unwrap(), "red");

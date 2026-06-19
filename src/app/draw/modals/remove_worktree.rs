@@ -41,7 +41,7 @@ impl App {
         self.modal_area = Some(modal_area);
         self.theme.clear_area(modal_area, frame.buffer_mut());
 
-        let modal_block = modal_block(self.theme.COLOR_GREY_600, self.theme.COLOR_HIGHLIGHTED);
+        let modal_block = modal_block(self.theme.COLOR_GREY_600, self.theme.COLOR_HIGHLIGHTED, &self.symbols);
 
         let paragraph = Paragraph::new(Text::from(lines)).block(modal_block).alignment(Alignment::Center);
         paragraph.render(modal_area, frame.buffer_mut());

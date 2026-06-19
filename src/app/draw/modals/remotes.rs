@@ -4,7 +4,7 @@ use crate::{
         draw::modals::shared::{action_row, modal_block},
         input::remotes::REMOTE_ACTIONS,
     },
-    helpers::{localisation::modal, symbols, text::truncate_with_ellipsis},
+    helpers::{localisation::modal, text::truncate_with_ellipsis},
 };
 use ratatui::Frame;
 use ratatui::{
@@ -26,7 +26,7 @@ impl App {
 
         for (idx, action) in REMOTE_ACTIONS.iter().enumerate() {
             let is_selected = idx == self.modal_remote_selected.rem_euclid(REMOTE_ACTIONS.len() as i32) as usize;
-            let marker = if is_selected { symbols::modal::SELECTED } else { symbols::modal::UNSELECTED };
+            let marker = if is_selected { &self.symbols.modal.selected } else { &self.symbols.modal.unselected };
             let text = format!("{} {}", marker, action.label());
             length = length.max(text.len());
             lines.push(Line::from(Span::styled(text, Style::default().fg(if is_selected { self.theme.COLOR_GRASS } else { self.theme.COLOR_TEXT }))));
@@ -67,7 +67,7 @@ impl App {
         self.modal_area = Some(modal_area);
         self.theme.clear_area(modal_area, frame.buffer_mut());
 
-        let modal_block = modal_block(self.theme.COLOR_GREY_600, self.theme.COLOR_HIGHLIGHTED);
+        let modal_block = modal_block(self.theme.COLOR_GREY_600, self.theme.COLOR_HIGHLIGHTED, &self.symbols);
         Paragraph::new(Text::from(lines)).block(modal_block).alignment(Alignment::Center).render(modal_area, frame.buffer_mut());
     }
 }

@@ -43,14 +43,14 @@ impl App {
 
         self.theme.clear_area(modal_area, frame.buffer_mut());
 
-        let modal_block = modal_block(self.theme.COLOR_GREY_600, self.theme.COLOR_HIGHLIGHTED);
+        let modal_block = modal_block(self.theme.COLOR_GREY_600, self.theme.COLOR_HIGHLIGHTED, &self.symbols);
 
         Paragraph::new(Text::from(lines)).block(modal_block).alignment(Alignment::Center).render(modal_area, frame.buffer_mut());
 
         // The input area is fixed-width inside the modal to keep cursor math stable.
         let input_area = Rect { x: modal_area.x + (modal_area.width / 2).saturating_sub(29), y: modal_area.y + 4, width: 58, height: 5 };
 
-        render_modal_text_input(frame, input_area, &mut self.modal_input, false, Style::default().fg(self.theme.COLOR_TEXT), Style::default().fg(self.theme.COLOR_GREY_800), None, true);
+        render_modal_text_input(frame, input_area, &mut self.modal_input, false, Style::default().fg(self.theme.COLOR_TEXT), Style::default().fg(self.theme.COLOR_GREY_800), None, true, &self.symbols);
     }
 }
 

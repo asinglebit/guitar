@@ -4,6 +4,7 @@ use crate::core::{
     graph_service::{GraphBranchLabel, GraphReflogLabel, GraphTagLabel},
     worktrees::{WorktreeEntry, WorktreeKind},
 };
+use crate::helpers::symbols::{SymbolTheme, graph};
 use git2::Oid;
 use im::Vector;
 use ratatui::style::Color;
@@ -59,10 +60,11 @@ fn sha_projection_uses_text_and_highlighted_text_colors() {
 #[test]
 fn message_projection_uses_text_and_highlighted_text_colors() {
     let theme = Theme::classic();
+    let symbols = SymbolTheme::main();
     let rows =
         vec![graph_row(0, Oid::from_str("1111111111111111111111111111111111111111").unwrap(), "first"), graph_row(1, Oid::from_str("2222222222222222222222222222222222222222").unwrap(), "second")];
 
-    let lines = render_message_projection(&theme, &rows, false, true, 1, &UncommittedChanges::default(), true);
+    let lines = render_message_projection(&theme, &symbols, &rows, false, true, 1, &UncommittedChanges::default(), true);
 
     assert_eq!(lines[0].spans[0].style.fg, Some(theme.COLOR_TEXT));
     assert_eq!(lines[1].spans[0].style.fg, Some(theme.COLOR_HIGHLIGHTED));
@@ -103,10 +105,11 @@ fn committer_projection_renders_fixed_width_names_and_blanks_uncommitted_rows() 
 #[test]
 fn graph_projection_uses_merge_right_from_and_up_when_previous_lane_carries_same_parent() {
     let theme = Theme::classic();
+    let symbols = SymbolTheme::main();
     let row = graph_row_with_alias(1, 4);
 
-    let with_up = render_graph_projection(&theme, &[row.clone()], &merge_right_from_history(1), NONE, 1, 2, true);
-    let without_up = render_graph_projection(&theme, &[row], &merge_right_from_history(99), NONE, 1, 2, true);
+    let with_up = render_graph_projection(&theme, &symbols, &[row.clone()], &merge_right_from_history(1), NONE, 1, 2, true);
+    let without_up = render_graph_projection(&theme, &symbols, &[row], &merge_right_from_history(99), NONE, 1, 2, true);
 
     assert!(line_text(&with_up[0]).contains(graph::MERGE_RIGHT_FROM), "{:?}", line_text(&with_up[0]));
     assert!(line_text(&without_up[0]).contains(graph::MERGE_RIGHT_FROM), "{:?}", line_text(&without_up[0]));
@@ -115,12 +118,13 @@ fn graph_projection_uses_merge_right_from_and_up_when_previous_lane_carries_same
 #[test]
 fn empty_column_pruning_preserves_visible_spans_and_styles() {
     let visible_style = Style::default().fg(Color::Red);
+    let symbols = SymbolTheme::main();
     let mut lines = vec![
         Line::from(vec![Span::raw(graph::EMPTY), Span::raw(graph::HORIZONTAL), Span::styled(graph::VERTICAL, visible_style), Span::raw(graph::EMPTY)]),
         Line::from(vec![Span::raw(graph::HORIZONTAL), Span::raw(graph::EMPTY), Span::raw(graph::EMPTY), Span::raw(graph::EMPTY)]),
     ];
 
-    remove_empty_columns(&mut lines);
+    remove_empty_columns(&mut lines, &symbols);
 
     assert_eq!(line_text(&lines[0]), format!("{}{}", graph::VERTICAL, graph::EMPTY));
     assert_eq!(lines[0].spans[0].style.fg, Some(Color::Red));
@@ -130,6 +134,7 @@ fn empty_column_pruning_preserves_visible_spans_and_styles() {
 #[test]
 fn message_projection_toggles_refs_without_hiding_reflog_labels() {
     let theme = Theme::classic();
+    let symbols = SymbolTheme::main();
     let mut row = graph_row(0, Oid::from_str("1111111111111111111111111111111111111111").unwrap(), "summary");
     row.branches = vec![GraphBranchLabel { name: "main".to_string(), is_local: true, lane: Some(0) }];
     row.tags = vec![GraphTagLabel { name: "v1".to_string(), lane: Some(0) }];
@@ -149,8 +154,8 @@ fn message_projection_toggles_refs_without_hiding_reflog_labels() {
     }];
     row.reflog = Some(GraphReflogLabel { selector: "HEAD@{0}".to_string(), message: "commit: summary".to_string(), lane: Some(0) });
 
-    let shown = render_message_projection(&theme, &[row.clone()], true, true, 0, &UncommittedChanges::default(), true);
-    let hidden = render_message_projection(&theme, &[row], true, false, 0, &UncommittedChanges::default(), true);
+    let shown = render_message_projection(&theme, &symbols, &[row.clone()], true, true, 0, &UncommittedChanges::default(), true);
+    let hidden = render_message_projection(&theme, &symbols, &[row], true, false, 0, &UncommittedChanges::default(), true);
     let shown = line_text(&shown[0]);
     let hidden = line_text(&hidden[0]);
 
@@ -165,4 +170,34 @@ fn message_projection_toggles_refs_without_hiding_reflog_labels() {
     assert!(!hidden.contains("v1"));
     assert!(!hidden.contains("stash"));
     assert!(!hidden.contains("wt"));
+}
+
+#[test]
+fn graph_projection_uses_ascii_symbols_when_requested() {
+    let theme = Theme::classic();
+    let symbols = SymbolTheme::ascii();
+    let row = graph_row_with_alias(0, 1);
+    let history = GraphHistory::from(Vector::from(vec![Vector::from(vec![Chunk::commit(1, NONE, NONE)])]));
+
+    let lines = render_graph_projection(&theme, &symbols, &[row], &history, NONE, 0, 1, true);
+    let rendered = line_text(&lines[0]);
+
+    assert!(rendered.contains(&symbols.graph.commit));
+    assert!(rendered.is_ascii());
+}
+
+#[test]
+fn message_projection_uses_ascii_symbols_when_requested() {
+    let theme = Theme::classic();
+    let symbols = SymbolTheme::ascii();
+    let mut row = graph_row(0, Oid::from_str("1111111111111111111111111111111111111111").unwrap(), "summary");
+    row.branches = vec![GraphBranchLabel { name: "main".to_string(), is_local: true, lane: Some(0) }];
+    row.tags = vec![GraphTagLabel { name: "v1".to_string(), lane: Some(0) }];
+
+    let lines = render_message_projection(&theme, &symbols, &[row], true, true, 0, &UncommittedChanges::default(), true);
+    let rendered = line_text(&lines[0]);
+
+    assert!(rendered.contains(&symbols.branch.local_visible));
+    assert!(rendered.contains(&symbols.entity.tag));
+    assert!(rendered.is_ascii());
 }

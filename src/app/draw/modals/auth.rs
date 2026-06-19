@@ -85,7 +85,7 @@ impl App {
         bg_block.render(frame.area(), frame.buffer_mut());
         self.theme.clear_area(modal_area, frame.buffer_mut());
 
-        let modal_block = modal_block(self.theme.COLOR_ORANGE, self.theme.COLOR_HIGHLIGHTED);
+        let modal_block = modal_block(self.theme.COLOR_ORANGE, self.theme.COLOR_HIGHLIGHTED, &self.symbols);
         Paragraph::new(Text::from(lines)).block(modal_block).alignment(Alignment::Center).render(modal_area, frame.buffer_mut());
 
         let field_width = modal_width.saturating_sub(14);
@@ -106,7 +106,7 @@ impl App {
         let text_style = Style::default().fg(self.theme.COLOR_TEXT);
         let border_style = Style::default().fg(border);
         let input = if field == AuthInputField::Username { &mut self.auth_username_input } else { &mut self.auth_secret_input };
-        render_modal_text_input(frame, area, input, masked, text_style, border_style, Some(Span::styled(format!(" {label} "), label_style)), active);
+        render_modal_text_input(frame, area, input, masked, text_style, border_style, Some(Span::styled(format!(" {label} "), label_style)), active, &self.symbols);
     }
 
     fn draw_auth_text_modal(&mut self, frame: &mut Frame, lines: Vec<Line>, border_color: ratatui::style::Color) {
@@ -122,7 +122,7 @@ impl App {
 
         self.theme.clear_area(modal_area, frame.buffer_mut());
 
-        let modal_block = modal_block(border_color, self.theme.COLOR_HIGHLIGHTED);
+        let modal_block = modal_block(border_color, self.theme.COLOR_HIGHLIGHTED, &self.symbols);
 
         Paragraph::new(Text::from(lines)).block(modal_block).alignment(Alignment::Center).render(modal_area, frame.buffer_mut());
     }

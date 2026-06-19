@@ -1,4 +1,14 @@
 use super::*;
+use std::{
+    fs,
+    path::PathBuf,
+    time::{SystemTime, UNIX_EPOCH},
+};
+
+fn temp_layout_path(name: &str) -> PathBuf {
+    let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+    std::env::temp_dir().join(format!("guitar-layout-{name}-{id}")).join("layout.json")
+}
 
 #[test]
 fn layout_config_reads_old_boolean_only_config() {
@@ -48,6 +58,25 @@ fn default_layout_shows_primary_workflow_panes() {
     assert!(!config.is_submodules);
     assert!(!config.is_search);
     assert!(!config.is_zen);
+}
+
+#[test]
+fn save_layout_config_writes_pretty_json_and_round_trips() {
+    let path = temp_layout_path("pretty");
+    let config = LayoutConfig { is_shas: false, is_tags: true, width_left_pane: 52, weight_status: 3, ..Default::default() };
+
+    save_layout_config_to_path(&path, &config);
+
+    let contents = fs::read_to_string(&path).unwrap();
+    assert!(contents.contains('\n'), "{contents}");
+    assert!(contents.contains("\n  \"is_shas\""), "{contents}");
+    assert!(contents.contains("\n  \"width_left_pane\""), "{contents}");
+
+    let loaded = facet_json::from_str::<LayoutConfig>(&contents).unwrap();
+    assert!(!loaded.is_shas);
+    assert!(loaded.is_tags);
+    assert_eq!(loaded.width_left_pane, 52);
+    assert_eq!(loaded.weight_status, 3);
 }
 
 #[test]

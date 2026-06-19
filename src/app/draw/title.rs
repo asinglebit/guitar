@@ -1,9 +1,6 @@
 use crate::app::app::{App, Focus, Viewport};
+use crate::helpers::localisation::{settings, status as status_text};
 use crate::helpers::text::truncate_start_with_ellipsis;
-use crate::helpers::{
-    localisation::{settings, status as status_text},
-    symbols::entity,
-};
 use ratatui::Frame;
 use ratatui::{
     style::Style,
@@ -28,7 +25,7 @@ impl App {
 
         let logo = self.logo.clone();
         let separator = Span::styled(" |", Style::default().fg(self.theme.COLOR_TEXT));
-        let folder = Span::styled(format!(" {} {}", entity::FOLDER, truncate_start_with_ellipsis(path.as_str(), available_width)), Style::default().fg(self.theme.COLOR_TEXT));
+        let folder = Span::styled(format!(" {} {}", self.symbols.entity.folder, truncate_start_with_ellipsis(path.as_str(), available_width)), Style::default().fg(self.theme.COLOR_TEXT));
 
         let line = Line::from([logo, vec![separator, folder]].concat());
         let paragraph = ratatui::widgets::Paragraph::new(line).left_aligned().block(Block::default());

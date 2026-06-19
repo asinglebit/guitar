@@ -1005,6 +1005,7 @@ The app writes:
 - `keymap.json`: keyboard mappings.
 - `layout.json`: pane visibility, widths, weights, graph metadata display, graph reflog setting, zen/minimal state.
 - `theme.json`: active theme and all color slots.
+- `symbols.json`: active symbol theme and all configurable UI symbols.
 - `recent.json`: recent repository paths.
 - `branch_visibility.json`: per-repository hidden branch names.
 
@@ -1165,6 +1166,40 @@ border, text, highlighted
 ```
 
 Malformed theme files fall back to `classic` and are rewritten.
+
+### symbols.json
+
+`symbols.json` stores the active symbol theme label and a full symbol map. The Display settings tab can switch between the built-in `main` and `ascii` symbol themes.
+
+- `main` matches the default Unicode and Nerd Font symbols.
+- `ascii` uses strict ASCII for graph marks, borders, forms, heatmap cells, status symbols, splash markers, and widget chrome.
+
+Users can customize individual symbols by editing `symbols.json`. Loading starts from the label's preset, applies any provided symbol overrides, then rewrites a normalized full file. Unknown labels or overrides become a custom symbol theme.
+
+Example:
+
+```json
+{
+  "label": "ascii",
+  "symbols": {
+    "branch": {
+      "local_visible": "*",
+      "local_hidden": "o"
+    },
+    "border": {
+      "horizontal": "-",
+      "vertical": "|",
+      "rounded_top_left": "+"
+    },
+    "form": {
+      "checkbox_off": "[ ]",
+      "checkbox_on": "[x]"
+    }
+  }
+}
+```
+
+Malformed symbol files fall back to `main` and are rewritten.
 
 ### recent.json
 

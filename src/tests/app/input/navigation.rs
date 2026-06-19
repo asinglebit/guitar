@@ -14,6 +14,7 @@ use crate::{
     helpers::{
         keymap::{Command, InputMode, KeyBinding, KeymapSelection, Keymaps, load_keymaps_from_path},
         layout::LayoutConfig,
+        symbols::SymbolTheme,
     },
 };
 use git2::{Repository, Signature};
@@ -1064,6 +1065,32 @@ fn settings_submodule_layout_command_toggles_and_stays_in_settings() {
     assert_eq!(app.focus, Focus::Viewport);
     assert_eq!(app.settings_selected, 12);
     assert_eq!(app.settings_scroll.get(), 4);
+}
+
+#[test]
+fn settings_symbol_theme_selection_updates_persists_and_stays_in_settings() {
+    let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+    let path = std::env::temp_dir().join(format!("guitar-symbol-theme-select-{id}.json"));
+    let mut app = App {
+        viewport: Viewport::Settings,
+        focus: Focus::Viewport,
+        settings_selected: 12,
+        settings_selections: vec![SettingsSelection { line: 12, kind: SettingsSelectionKind::SymbolTheme(1) }],
+        symbol_theme_save_path: Some(path.clone()),
+        ..Default::default()
+    };
+    app.settings_scroll.set(4);
+
+    app.on_select();
+
+    assert_eq!(app.symbols, SymbolTheme::ascii());
+    assert_eq!(app.viewport, Viewport::Settings);
+    assert_eq!(app.focus, Focus::Viewport);
+    assert_eq!(app.settings_selected, 12);
+    assert_eq!(app.settings_scroll.get(), 4);
+    let saved = fs::read_to_string(path).unwrap();
+    assert!(saved.contains("\"label\": \"ascii\""));
+    assert!(saved.contains("\"rounded_top_left\": \"+\""));
 }
 
 #[test]

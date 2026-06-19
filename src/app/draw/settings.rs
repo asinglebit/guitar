@@ -4,7 +4,7 @@ use crate::helpers::keymap::{Command, InputMode, KeymapSelection, action_keymap_
 use crate::helpers::layout::scrollbar_content_length;
 use crate::helpers::localisation::{common, empty, settings as settings_text};
 use crate::helpers::palette::*;
-use crate::helpers::symbols::{WEEKDAY_LABELS, form, scrollbar, settings as settings_symbol};
+use crate::helpers::symbols::{SymbolTheme, SymbolThemeName};
 use crate::helpers::version::VERSION;
 use crate::{
     app::app::{App, Direction, Focus, SettingsSelection, SettingsSelectionKind, SettingsTab, SettingsTabHitbox},
@@ -41,11 +41,6 @@ const SETTINGS_GRAPH_COMMANDS: &[(&str, Command, &str)] = &[
     ("$", Command::ToggleGraphRefs, settings_text::REFS),
 ];
 
-const SETTINGS_LAYOUT_OFF: &str = form::CHECKBOX_OFF;
-const SETTINGS_LAYOUT_ON: &str = form::CHECKBOX_ON;
-const SETTINGS_THEME_OFF: &str = form::RADIO_OFF;
-const SETTINGS_THEME_ON: &str = form::RADIO_ON;
-
 impl App {
     fn settings_section_line(&self, label: &str, width: usize) -> Line<'static> {
         Line::from(Span::styled(fill_width(label, "", width), Style::default().fg(self.theme.COLOR_HIGHLIGHTED))).centered()
@@ -58,108 +53,108 @@ impl App {
             .unwrap_or_else(|| fallback.to_string())
     }
 
-    fn settings_layout_command_state(&self, command: &Command) -> &'static str {
+    fn settings_layout_command_state(&self, command: &Command) -> String {
         match command {
             Command::ToggleBranches => {
                 if self.layout_config.is_branches {
-                    SETTINGS_LAYOUT_ON
+                    self.symbols.form.checkbox_on.clone()
                 } else {
-                    SETTINGS_LAYOUT_OFF
+                    self.symbols.form.checkbox_off.clone()
                 }
             },
             Command::ToggleTags => {
                 if self.layout_config.is_tags {
-                    SETTINGS_LAYOUT_ON
+                    self.symbols.form.checkbox_on.clone()
                 } else {
-                    SETTINGS_LAYOUT_OFF
+                    self.symbols.form.checkbox_off.clone()
                 }
             },
             Command::ToggleStashes => {
                 if self.layout_config.is_stashes {
-                    SETTINGS_LAYOUT_ON
+                    self.symbols.form.checkbox_on.clone()
                 } else {
-                    SETTINGS_LAYOUT_OFF
+                    self.symbols.form.checkbox_off.clone()
                 }
             },
             Command::ToggleStatus => {
                 if self.layout_config.is_status {
-                    SETTINGS_LAYOUT_ON
+                    self.symbols.form.checkbox_on.clone()
                 } else {
-                    SETTINGS_LAYOUT_OFF
+                    self.symbols.form.checkbox_off.clone()
                 }
             },
             Command::ToggleInspector => {
                 if self.layout_config.is_inspector {
-                    SETTINGS_LAYOUT_ON
+                    self.symbols.form.checkbox_on.clone()
                 } else {
-                    SETTINGS_LAYOUT_OFF
+                    self.symbols.form.checkbox_off.clone()
                 }
             },
             Command::ToggleWorktrees => {
                 if self.layout_config.is_worktrees {
-                    SETTINGS_LAYOUT_ON
+                    self.symbols.form.checkbox_on.clone()
                 } else {
-                    SETTINGS_LAYOUT_OFF
+                    self.symbols.form.checkbox_off.clone()
                 }
             },
             Command::ToggleSubmodules => {
                 if self.layout_config.is_submodules {
-                    SETTINGS_LAYOUT_ON
+                    self.symbols.form.checkbox_on.clone()
                 } else {
-                    SETTINGS_LAYOUT_OFF
+                    self.symbols.form.checkbox_off.clone()
                 }
             },
             Command::ToggleReflogs => {
                 if self.layout_config.is_reflogs {
-                    SETTINGS_LAYOUT_ON
+                    self.symbols.form.checkbox_on.clone()
                 } else {
-                    SETTINGS_LAYOUT_OFF
+                    self.symbols.form.checkbox_off.clone()
                 }
             },
             Command::ToggleSearch => {
                 if self.layout_config.is_search {
-                    SETTINGS_LAYOUT_ON
+                    self.symbols.form.checkbox_on.clone()
                 } else {
-                    SETTINGS_LAYOUT_OFF
+                    self.symbols.form.checkbox_off.clone()
                 }
             },
             Command::ToggleShas => {
                 if self.layout_config.is_shas {
-                    SETTINGS_LAYOUT_ON
+                    self.symbols.form.checkbox_on.clone()
                 } else {
-                    SETTINGS_LAYOUT_OFF
+                    self.symbols.form.checkbox_off.clone()
                 }
             },
             Command::ToggleGraphReflogs => {
                 if self.layout_config.is_graph_reflogs {
-                    SETTINGS_LAYOUT_ON
+                    self.symbols.form.checkbox_on.clone()
                 } else {
-                    SETTINGS_LAYOUT_OFF
+                    self.symbols.form.checkbox_off.clone()
                 }
             },
             Command::ToggleGraphDates => {
                 if self.layout_config.is_graph_dates {
-                    SETTINGS_LAYOUT_ON
+                    self.symbols.form.checkbox_on.clone()
                 } else {
-                    SETTINGS_LAYOUT_OFF
+                    self.symbols.form.checkbox_off.clone()
                 }
             },
             Command::ToggleGraphCommitters => {
                 if self.layout_config.is_graph_committers {
-                    SETTINGS_LAYOUT_ON
+                    self.symbols.form.checkbox_on.clone()
                 } else {
-                    SETTINGS_LAYOUT_OFF
+                    self.symbols.form.checkbox_off.clone()
                 }
             },
             Command::ToggleGraphRefs => {
                 if self.layout_config.is_graph_refs {
-                    SETTINGS_LAYOUT_ON
+                    self.symbols.form.checkbox_on.clone()
                 } else {
-                    SETTINGS_LAYOUT_OFF
+                    self.symbols.form.checkbox_off.clone()
                 }
             },
-            Command::ResetLayout => settings_text::ENTER_ACTION,
-            _ => "",
+            Command::ResetLayout => settings_text::ENTER_ACTION.to_string(),
+            _ => String::new(),
         }
     }
 
@@ -231,7 +226,7 @@ impl App {
 
         let compact_tab_gap = if width >= SettingsTab::ALL.len().saturating_mul(2).saturating_sub(1) { " " } else { "" };
         let visible_tabs = if compact_tab_gap.is_empty() { width.min(SettingsTab::ALL.len()) } else { SettingsTab::ALL.len() };
-        let compact_labels: Vec<(SettingsTab, String)> = SettingsTab::ALL.iter().take(visible_tabs).map(|&tab| (tab, settings_symbol::COMPACT_TAB.to_string())).collect();
+        let compact_labels: Vec<(SettingsTab, String)> = SettingsTab::ALL.iter().take(visible_tabs).map(|&tab| (tab, self.symbols.settings.compact_tab.clone())).collect();
 
         self.settings_tab_bar_from_labels(width, line, compact_tab_gap, &compact_labels)
     }
@@ -258,7 +253,9 @@ impl App {
         self.add_settings_selection(lines, SettingsSelectionKind::Info);
         lines.push(self.settings_filled_line(settings_text::THEME, format!(" {}/theme.json ", path).as_str(), width, shaded));
         self.add_settings_selection(lines, SettingsSelectionKind::Info);
-        lines.push(self.settings_filled_line(settings_text::RECENT_FILE, format!(" {}/recent.json ", path).as_str(), width, plain));
+        lines.push(self.settings_filled_line(settings_text::SYMBOLS, format!(" {}/symbols.json ", path).as_str(), width, plain));
+        self.add_settings_selection(lines, SettingsSelectionKind::Info);
+        lines.push(self.settings_filled_line(settings_text::RECENT_FILE, format!(" {}/recent.json ", path).as_str(), width, shaded));
         self.add_settings_selection(lines, SettingsSelectionKind::Info);
 
         lines.push(Line::default());
@@ -381,13 +378,41 @@ impl App {
 
         for (idx, preset) in Theme::presets().iter().enumerate() {
             let label = format!(" {}", preset.label);
-            let marker = format!("{} ", if self.theme.name == preset.theme.name { SETTINGS_THEME_ON } else { SETTINGS_THEME_OFF });
+            let marker = format!("{} ", if self.theme.name == preset.theme.name { &self.symbols.form.radio_on } else { &self.symbols.form.radio_off });
             let mut style = Style::default().fg(self.theme.COLOR_TEXT);
             if idx.is_multiple_of(2) {
                 style = style.bg(self.theme.background_or_default(self.theme.COLOR_GREY_900));
             }
             lines.push(self.settings_filled_line(&label, &marker, width, style));
             self.add_settings_selection(lines, SettingsSelectionKind::Theme(idx));
+        }
+    }
+
+    fn append_settings_symbol_themes(&mut self, lines: &mut Vec<Line<'static>>, width: usize) {
+        lines.push(Line::default());
+        lines.push(self.settings_section_line(settings_text::SYMBOL_THEMES, width));
+        lines.push(Line::default());
+
+        if self.symbols.name == SymbolThemeName::Custom {
+            lines.push(self.settings_filled_line(
+                settings_text::ACTIVE_CUSTOM_SYMBOLS,
+                format!(" {} ", self.symbols.label()).as_str(),
+                width,
+                Style::default().fg(self.theme.COLOR_TEXT).bg(self.theme.background_or_default(self.theme.COLOR_GREY_900)),
+            ));
+            lines.push(Line::default());
+        }
+
+        for (idx, preset) in SymbolTheme::presets().iter().enumerate() {
+            let preset_theme = preset.theme();
+            let label = format!(" {}", preset.label);
+            let marker = format!("{} ", if self.symbols.name == preset_theme.name { &self.symbols.form.radio_on } else { &self.symbols.form.radio_off });
+            let mut style = Style::default().fg(self.theme.COLOR_TEXT);
+            if idx.is_multiple_of(2) {
+                style = style.bg(self.theme.background_or_default(self.theme.COLOR_GREY_900));
+            }
+            lines.push(self.settings_filled_line(&label, &marker, width, style));
+            self.add_settings_selection(lines, SettingsSelectionKind::SymbolTheme(idx));
         }
     }
 
@@ -485,11 +510,11 @@ impl App {
 
         // Heatmap rows use weekday labels followed by the cropped commit grid.
         lines.push(Line::default());
-        for (day_idx, &label) in WEEKDAY_LABELS.iter().enumerate() {
+        for (day_idx, label) in self.symbols.weekday.labels().iter().enumerate() {
             let mut spans = Vec::new();
             spans.push(Span::styled(format!(" {}  ", label), Style::default().fg(self.theme.COLOR_TEXT)));
             spans.extend(self.heatmap[day_idx][week_start..].iter().map(|&count| {
-                let span = heat_cell(count, &self.theme);
+                let span = heat_cell(count, &self.theme, &self.symbols);
                 Span::styled(span.content.to_string(), span.style)
             }));
             lines.push(Line::from(spans).centered());
@@ -534,6 +559,7 @@ impl App {
             SettingsTab::Paths => self.append_settings_paths(&mut lines, heatmap_width),
             SettingsTab::Display => {
                 self.append_settings_layout(&mut lines, heatmap_width);
+                self.append_settings_symbol_themes(&mut lines, heatmap_width);
                 self.append_settings_themes(&mut lines, heatmap_width);
             },
             SettingsTab::Auth => self.append_settings_auth(&mut lines, repo, heatmap_width),
@@ -633,16 +659,16 @@ impl App {
 
         if self.layout_config.is_zen {
             // Zen mode frames settings as a standalone list.
-            let list = List::new(list_items).block(Block::default().borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded).padding(padding));
+            let list = List::new(list_items).block(Block::default().borders(Borders::ALL).border_set(self.symbols.border.block_set()).padding(padding));
 
             frame.render_widget(list, self.layout.graph);
 
             let mut scrollbar_state = ScrollbarState::new(scrollbar_content_length(total_lines, visible_height)).position(start);
             let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-                .begin_symbol(Some(scrollbar::BEGIN))
-                .end_symbol(Some(scrollbar::END))
-                .track_symbol(Some(scrollbar::TRACK))
-                .thumb_symbol(scrollbar::THUMB)
+                .begin_symbol(Some(self.symbols.scrollbar.begin.as_str()))
+                .end_symbol(Some(self.symbols.scrollbar.end.as_str()))
+                .track_symbol(Some(self.symbols.scrollbar.track.as_str()))
+                .thumb_symbol(self.symbols.scrollbar.thumb.as_str())
                 .thumb_style(Style::default().fg(if self.focus == Focus::Viewport { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 
             frame.render_stateful_widget(scrollbar, self.layout.app, &mut scrollbar_state);
@@ -657,10 +683,10 @@ impl App {
 
         let mut scrollbar_state = ScrollbarState::new(scrollbar_content_length(total_lines, visible_height)).position(start);
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(Some(scrollbar::BEGIN))
-            .end_symbol(Some(scrollbar::END))
-            .track_symbol(Some(scrollbar::TRACK))
-            .thumb_symbol(scrollbar::THUMB)
+            .begin_symbol(Some(self.symbols.scrollbar.begin.as_str()))
+            .end_symbol(Some(self.symbols.scrollbar.end.as_str()))
+            .track_symbol(Some(self.symbols.scrollbar.track.as_str()))
+            .thumb_symbol(self.symbols.scrollbar.thumb.as_str())
             .thumb_style(Style::default().fg(if self.focus == Focus::Viewport { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 
         frame.render_stateful_widget(scrollbar, self.layout.app, &mut scrollbar_state);

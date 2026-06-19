@@ -489,6 +489,10 @@ fn keymaps_round_trip_through_disk() {
         .unwrap();
 
     save_keymaps_to_path(path.as_path(), &maps).unwrap();
+    let contents = std::fs::read_to_string(path.as_path()).unwrap();
+    assert!(contents.contains('\n'), "{contents}");
+    assert!(contents.contains("\n  \"normal\""), "{contents}");
+    assert!(contents.contains("\n  \"action\""), "{contents}");
     let loaded = load_keymaps_from_path(path.as_path()).unwrap();
 
     assert_eq!(loaded, maps);

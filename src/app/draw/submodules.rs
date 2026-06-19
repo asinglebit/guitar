@@ -6,7 +6,6 @@ use crate::{
     helpers::{
         layout::scrollbar_content_length,
         localisation::{common, empty, status as status_text},
-        symbols::{border, branch as branch_symbol, scrollbar, submodule},
         text::{center_line, empty_state_top_padding, truncate_with_ellipsis},
     },
 };
@@ -23,7 +22,7 @@ impl App {
     fn submodule_status_suffix(&self, entry: &crate::core::submodules::SubmoduleEntry) -> String {
         let mut parts = Vec::new();
         if entry.is_uninitialized || !entry.is_open {
-            parts.push(submodule::UNINITIALIZED.to_string());
+            parts.push(self.symbols.submodule.uninitialized.clone());
         }
         if entry.is_index_modified {
             parts.push(status_text::STAGED.to_string());
@@ -38,7 +37,7 @@ impl App {
             parts.push(status_text::UNTRACKED.to_string());
         }
         if entry.is_dirty() && parts.is_empty() {
-            parts.push(submodule::DIRTY.to_string());
+            parts.push(self.symbols.submodule.dirty.clone());
         }
 
         if parts.is_empty() { String::new() } else { format!(" [{}]", parts.join(", ")) }
@@ -54,7 +53,7 @@ impl App {
             let target = entry
                 .branch
                 .as_ref()
-                .map(|branch| format!("{} {branch}", branch_symbol::LOCAL_VISIBLE))
+                .map(|branch| format!("{} {branch}", self.symbols.branch.local_visible))
                 .or_else(|| entry.workdir.map(|oid| format!("{} #{:.6}", status_text::DETACHED, oid)))
                 .unwrap_or_else(|| common::NOT_INITIALIZED.to_string());
             let suffix = self.submodule_status_suffix(entry);
@@ -68,7 +67,7 @@ impl App {
                 self.theme.COLOR_TEAL
             };
 
-            lines.push(Line::from(Span::styled(format!("{} {label}", submodule::DEFAULT), Style::default().fg(color))));
+            lines.push(Line::from(Span::styled(format!("{} {label}", self.symbols.submodule.default), Style::default().fg(color))));
         }
 
         let has_previous = self.layout_config.is_branches || self.layout_config.is_tags || self.layout_config.is_stashes || self.layout_config.is_reflogs || self.layout_config.is_worktrees;
@@ -82,7 +81,7 @@ impl App {
             for _ in 0..blank_lines_before {
                 lines.push(Line::default());
             }
-            let empty_text = format!("{} {}", submodule::EMPTY, empty::NO_SUBMODULES);
+            let empty_text = format!("{} {}", self.symbols.submodule.empty, empty::NO_SUBMODULES);
             lines.push(Line::from(Span::styled(center_line(&truncate_with_ellipsis(&empty_text, max_text_width), max_text_width + 3), Style::default().fg(self.theme.COLOR_GREY_800))));
         }
 
@@ -102,17 +101,17 @@ impl App {
         let list_items = zebra_list_items(&lines[start..end], visible_height, start, self.submodules_selected, self.focus == Focus::Submodules, !submodules_empty, &self.theme);
 
         if self.layout_config.is_zen {
-            let list = List::new(list_items).block(Block::default().borders(Borders::ALL).padding(padding).border_type(ratatui::widgets::BorderType::Rounded));
+            let list = List::new(list_items).block(Block::default().borders(Borders::ALL).padding(padding).border_set(self.symbols.border.block_set()));
 
             frame.render_widget(list, self.layout.submodules);
 
             let scroll_range = scrollbar_content_length(total_lines, visible_height);
             let mut scrollbar_state = ScrollbarState::new(scroll_range).position(self.submodules_scroll.get());
             let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-                .begin_symbol(Some(scrollbar::BEGIN))
-                .end_symbol(Some(scrollbar::END))
-                .track_symbol(Some(scrollbar::TRACK))
-                .thumb_symbol(if total_lines > visible_height { scrollbar::THUMB } else { scrollbar::INACTIVE_THUMB })
+                .begin_symbol(Some(self.symbols.scrollbar.begin.as_str()))
+                .end_symbol(Some(self.symbols.scrollbar.end.as_str()))
+                .track_symbol(Some(self.symbols.scrollbar.track.as_str()))
+                .thumb_symbol(if total_lines > visible_height { self.symbols.scrollbar.thumb.as_str() } else { self.symbols.scrollbar.inactive_thumb.as_str() })
                 .track_style(Style::default().fg(self.theme.COLOR_BORDER))
                 .thumb_style(Style::default().fg(if total_lines > visible_height && self.focus == Focus::Submodules { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 
@@ -122,7 +121,7 @@ impl App {
         }
 
         if has_previous {
-            let top_border = Paragraph::new(border::HORIZONTAL.repeat(self.layout.submodules.width.saturating_sub(1) as usize)).style(Style::default().fg(self.theme.COLOR_BORDER));
+            let top_border = Paragraph::new(self.symbols.border.horizontal.repeat(self.layout.submodules.width.saturating_sub(1) as usize)).style(Style::default().fg(self.theme.COLOR_BORDER));
             frame.render_widget(top_border, Rect { x: self.layout.submodules.x + 1, y: self.layout.submodules.y.saturating_sub(1), width: self.layout.submodules.width, height: 1 });
         }
 
@@ -132,10 +131,10 @@ impl App {
         let scroll_range = scrollbar_content_length(total_lines, visible_height);
         let mut scrollbar_state = ScrollbarState::new(scroll_range).position(start);
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(Some(if has_previous { border::VERTICAL } else { border::HORIZONTAL }))
-            .end_symbol(Some(if self.layout_config.is_search { border::VERTICAL } else { border::HORIZONTAL }))
-            .track_symbol(Some(scrollbar::TRACK))
-            .thumb_symbol(if total_lines > visible_height { scrollbar::THUMB } else { scrollbar::INACTIVE_THUMB })
+            .begin_symbol(Some(if has_previous { self.symbols.border.vertical.as_str() } else { self.symbols.border.horizontal.as_str() }))
+            .end_symbol(Some(if self.layout_config.is_search { self.symbols.border.vertical.as_str() } else { self.symbols.border.horizontal.as_str() }))
+            .track_symbol(Some(self.symbols.scrollbar.track.as_str()))
+            .thumb_symbol(if total_lines > visible_height { self.symbols.scrollbar.thumb.as_str() } else { self.symbols.scrollbar.inactive_thumb.as_str() })
             .track_style(Style::default().fg(self.theme.COLOR_BORDER))
             .thumb_style(Style::default().fg(if total_lines > visible_height && self.focus == Focus::Submodules { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 

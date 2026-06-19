@@ -4,7 +4,6 @@ use crate::{
     helpers::{
         layout::scrollbar_content_length,
         localisation::{common, empty},
-        symbols::{border, empty_state, scrollbar, status},
         text::*,
     },
 };
@@ -26,8 +25,8 @@ impl<'a> StatusRow<'a> {
         Self { line, path: None }
     }
 
-    fn file(path: &'a str, symbol: &'static str, symbol_style: Style, text_style: Style, max_width: usize) -> Self {
-        Self { line: Line::from(vec![Span::styled(symbol, symbol_style), Span::styled(truncate_with_ellipsis(path, max_width), text_style)]), path: Some(path) }
+    fn file(path: &'a str, symbol: &str, symbol_style: Style, text_style: Style, max_width: usize) -> Self {
+        Self { line: Line::from(vec![Span::styled(symbol.to_string(), symbol_style), Span::styled(truncate_with_ellipsis(path, max_width), text_style)]), path: Some(path) }
     }
 }
 
@@ -63,16 +62,40 @@ impl App {
             lines_status_bottom = centered_loading_lines(visible_height_status_bottom, max_status_bottom_width + 3, Style::default().fg(self.theme.COLOR_GREY_800));
         } else if is_showing_uncommitted {
             for file in self.uncommitted.conflicts.iter() {
-                lines_status_top.push(StatusRow::file(file, status::CONFLICT_SPACED, Style::default().fg(self.theme.COLOR_ORANGE), Style::default().fg(self.theme.COLOR_ORANGE), max_status_top_width));
+                lines_status_top.push(StatusRow::file(
+                    file,
+                    &self.symbols.status.conflict_spaced,
+                    Style::default().fg(self.theme.COLOR_ORANGE),
+                    Style::default().fg(self.theme.COLOR_ORANGE),
+                    max_status_top_width,
+                ));
             }
             for file in self.uncommitted.staged.modified.iter() {
-                lines_status_top.push(StatusRow::file(file, status::MODIFIED_SPACED, Style::default().fg(self.theme.COLOR_BLUE), Style::default().fg(self.theme.COLOR_TEXT), max_status_top_width));
+                lines_status_top.push(StatusRow::file(
+                    file,
+                    &self.symbols.status.modified_spaced,
+                    Style::default().fg(self.theme.COLOR_BLUE),
+                    Style::default().fg(self.theme.COLOR_TEXT),
+                    max_status_top_width,
+                ));
             }
             for file in self.uncommitted.staged.added.iter() {
-                lines_status_top.push(StatusRow::file(file, status::ADDED_SPACED, Style::default().fg(self.theme.COLOR_GREEN), Style::default().fg(self.theme.COLOR_TEXT), max_status_top_width));
+                lines_status_top.push(StatusRow::file(
+                    file,
+                    &self.symbols.status.added_spaced,
+                    Style::default().fg(self.theme.COLOR_GREEN),
+                    Style::default().fg(self.theme.COLOR_TEXT),
+                    max_status_top_width,
+                ));
             }
             for file in self.uncommitted.staged.deleted.iter() {
-                lines_status_top.push(StatusRow::file(file, status::DELETED_SPACED, Style::default().fg(self.theme.COLOR_RED), Style::default().fg(self.theme.COLOR_TEXT), max_status_top_width));
+                lines_status_top.push(StatusRow::file(
+                    file,
+                    &self.symbols.status.deleted_spaced,
+                    Style::default().fg(self.theme.COLOR_RED),
+                    Style::default().fg(self.theme.COLOR_TEXT),
+                    max_status_top_width,
+                ));
             }
 
             // Empty states are vertically padded to stay centered in short panes.
@@ -83,7 +106,7 @@ impl App {
                     lines_status_top.push(StatusRow::plain(Line::from("")));
                 }
                 lines_status_top.push(StatusRow::plain(Line::from(Span::styled(
-                    center_line(&truncate_with_ellipsis(&format!("{} {}", empty_state::MARK, empty::NO_STAGED_CHANGES), max_status_top_width), max_status_top_width + 3),
+                    center_line(&truncate_with_ellipsis(&format!("{} {}", self.symbols.empty_state.mark, empty::NO_STAGED_CHANGES), max_status_top_width), max_status_top_width + 3),
                     Style::default().fg(self.theme.COLOR_GREY_800),
                 ))));
             } else {
@@ -93,7 +116,7 @@ impl App {
             for file in self.uncommitted.conflicts.iter() {
                 lines_status_bottom.push(StatusRow::file(
                     file,
-                    status::CONFLICT_SPACED,
+                    &self.symbols.status.conflict_spaced,
                     Style::default().fg(self.theme.COLOR_ORANGE),
                     Style::default().fg(self.theme.COLOR_ORANGE),
                     max_status_bottom_width,
@@ -102,17 +125,29 @@ impl App {
             for file in self.uncommitted.unstaged.modified.iter() {
                 lines_status_bottom.push(StatusRow::file(
                     file,
-                    status::MODIFIED_SPACED,
+                    &self.symbols.status.modified_spaced,
                     Style::default().fg(self.theme.COLOR_BLUE),
                     Style::default().fg(self.theme.COLOR_TEXT),
                     max_status_bottom_width,
                 ));
             }
             for file in self.uncommitted.unstaged.added.iter() {
-                lines_status_bottom.push(StatusRow::file(file, status::ADDED_SPACED, Style::default().fg(self.theme.COLOR_GREEN), Style::default().fg(self.theme.COLOR_TEXT), max_status_bottom_width));
+                lines_status_bottom.push(StatusRow::file(
+                    file,
+                    &self.symbols.status.added_spaced,
+                    Style::default().fg(self.theme.COLOR_GREEN),
+                    Style::default().fg(self.theme.COLOR_TEXT),
+                    max_status_bottom_width,
+                ));
             }
             for file in self.uncommitted.unstaged.deleted.iter() {
-                lines_status_bottom.push(StatusRow::file(file, status::DELETED_SPACED, Style::default().fg(self.theme.COLOR_RED), Style::default().fg(self.theme.COLOR_TEXT), max_status_bottom_width));
+                lines_status_bottom.push(StatusRow::file(
+                    file,
+                    &self.symbols.status.deleted_spaced,
+                    Style::default().fg(self.theme.COLOR_RED),
+                    Style::default().fg(self.theme.COLOR_TEXT),
+                    max_status_bottom_width,
+                ));
             }
 
             // Empty states are vertically padded to stay centered in short panes.
@@ -123,7 +158,7 @@ impl App {
                     lines_status_bottom.push(StatusRow::plain(Line::from("")));
                 }
                 lines_status_bottom.push(StatusRow::plain(Line::from(Span::styled(
-                    center_line(&truncate_with_ellipsis(&format!("{} {}", empty_state::MARK, empty::NO_UNSTAGED_CHANGES), max_status_bottom_width), max_status_bottom_width + 3),
+                    center_line(&truncate_with_ellipsis(&format!("{} {}", self.symbols.empty_state.mark, empty::NO_UNSTAGED_CHANGES), max_status_bottom_width), max_status_bottom_width + 3),
                     Style::default().fg(self.theme.COLOR_GREY_800),
                 ))));
             } else {
@@ -136,11 +171,11 @@ impl App {
             // Commit rows use the selected commit's file diff in the top pane only.
             for file_change in self.current_diff.iter() {
                 let (symbol, color) = match file_change.status {
-                    FileStatus::Added => (status::ADDED_SPACED, self.theme.COLOR_GREEN),
-                    FileStatus::Modified => (status::MODIFIED_SPACED, self.theme.COLOR_BLUE),
-                    FileStatus::Deleted => (status::DELETED_SPACED, self.theme.COLOR_RED),
-                    FileStatus::Renamed => (status::RENAMED_ARROW_SPACED, self.theme.COLOR_YELLOW),
-                    FileStatus::Other => (status::OTHER_SPACED, self.theme.COLOR_TEXT),
+                    FileStatus::Added => (self.symbols.status.added_spaced.as_str(), self.theme.COLOR_GREEN),
+                    FileStatus::Modified => (self.symbols.status.modified_spaced.as_str(), self.theme.COLOR_BLUE),
+                    FileStatus::Deleted => (self.symbols.status.deleted_spaced.as_str(), self.theme.COLOR_RED),
+                    FileStatus::Renamed => (self.symbols.status.renamed_arrow_spaced.as_str(), self.theme.COLOR_YELLOW),
+                    FileStatus::Other => (self.symbols.status.other_spaced.as_str(), self.theme.COLOR_TEXT),
                 };
                 lines_status_top.push(StatusRow::file(&file_change.filename, symbol, Style::default().fg(color), Style::default().fg(self.theme.COLOR_TEXT), max_status_top_width));
             }
@@ -153,7 +188,7 @@ impl App {
                     lines_status_top.push(StatusRow::plain(Line::from("")));
                 }
                 lines_status_top.push(StatusRow::plain(Line::from(Span::styled(
-                    center_line(&truncate_with_ellipsis(&format!("{} {}", empty_state::MARK, empty::NO_STAGED_CHANGES), max_status_top_width), max_status_top_width + 3),
+                    center_line(&truncate_with_ellipsis(&format!("{} {}", self.symbols.empty_state.mark, empty::NO_STAGED_CHANGES), max_status_top_width), max_status_top_width + 3),
                     Style::default().fg(self.theme.COLOR_GREY_800),
                 ))));
             } else {
@@ -195,16 +230,16 @@ impl App {
             if self.layout_config.is_zen {
                 // Zen mode frames the pane as a full standalone list.
                 let list = List::new(list_items)
-                    .block(Block::default().padding(padding).borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded).border_style(Style::default().fg(self.theme.COLOR_BORDER)));
+                    .block(Block::default().padding(padding).borders(Borders::ALL).border_set(self.symbols.border.block_set()).border_style(Style::default().fg(self.theme.COLOR_BORDER)));
 
                 frame.render_widget(list, self.layout.status_top);
 
                 let mut scrollbar_state = ScrollbarState::new(scrollbar_content_length(total_lines, visible_height)).position(self.status_top_scroll.get());
                 let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-                    .begin_symbol(Some(scrollbar::BEGIN))
-                    .end_symbol(Some(scrollbar::END))
-                    .track_symbol(Some(scrollbar::TRACK))
-                    .thumb_symbol(if total_lines > visible_height { scrollbar::THUMB } else { scrollbar::INACTIVE_THUMB })
+                    .begin_symbol(Some(self.symbols.scrollbar.begin.as_str()))
+                    .end_symbol(Some(self.symbols.scrollbar.end.as_str()))
+                    .track_symbol(Some(self.symbols.scrollbar.track.as_str()))
+                    .thumb_symbol(if total_lines > visible_height { self.symbols.scrollbar.thumb.as_str() } else { self.symbols.scrollbar.inactive_thumb.as_str() })
                     .thumb_style(Style::default().fg(if total_lines > visible_height && self.focus == Focus::StatusTop { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 
                 frame.render_stateful_widget(scrollbar, self.layout.status_top_scrollbar, &mut scrollbar_state);
@@ -221,10 +256,14 @@ impl App {
 
                 let mut scrollbar_state = ScrollbarState::new(scrollbar_content_length(total_lines, visible_height)).position(self.status_top_scroll.get());
                 let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-                    .begin_symbol(if self.layout_config.is_inspector && (self.graph_selected != 0 || self.uncommitted.has_conflicts) { Some(border::VERTICAL) } else { Some(scrollbar::BEGIN) })
-                    .end_symbol(if self.graph_selected == 0 { Some(border::T_RIGHT) } else { Some(scrollbar::END) })
-                    .track_symbol(Some(scrollbar::TRACK))
-                    .thumb_symbol(if total_lines > visible_height { scrollbar::THUMB } else { scrollbar::INACTIVE_THUMB })
+                    .begin_symbol(if self.layout_config.is_inspector && (self.graph_selected != 0 || self.uncommitted.has_conflicts) {
+                        Some(self.symbols.border.vertical.as_str())
+                    } else {
+                        Some(self.symbols.scrollbar.begin.as_str())
+                    })
+                    .end_symbol(if self.graph_selected == 0 { Some(self.symbols.border.t_right.as_str()) } else { Some(self.symbols.scrollbar.end.as_str()) })
+                    .track_symbol(Some(self.symbols.scrollbar.track.as_str()))
+                    .thumb_symbol(if total_lines > visible_height { self.symbols.scrollbar.thumb.as_str() } else { self.symbols.scrollbar.inactive_thumb.as_str() })
                     .thumb_style(Style::default().fg(if total_lines > visible_height && self.focus == Focus::StatusTop { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 
                 frame.render_stateful_widget(scrollbar, self.layout.status_top_scrollbar, &mut scrollbar_state);
@@ -264,16 +303,16 @@ impl App {
                 if self.layout_config.is_zen {
                     // Zen mode frames the pane as a full standalone list.
                     let list = List::new(list_items)
-                        .block(Block::default().padding(padding).borders(Borders::ALL).border_type(ratatui::widgets::BorderType::Rounded).border_style(Style::default().fg(self.theme.COLOR_BORDER)));
+                        .block(Block::default().padding(padding).borders(Borders::ALL).border_set(self.symbols.border.block_set()).border_style(Style::default().fg(self.theme.COLOR_BORDER)));
 
                     frame.render_widget(list, self.layout.status_bottom);
 
                     let mut scrollbar_state = ScrollbarState::new(scrollbar_content_length(total_lines, visible_height)).position(self.status_bottom_scroll.get());
                     let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-                        .begin_symbol(Some(scrollbar::BEGIN))
-                        .end_symbol(Some(scrollbar::END))
-                        .track_symbol(Some(scrollbar::TRACK))
-                        .thumb_symbol(if total_lines > visible_height { scrollbar::THUMB } else { scrollbar::INACTIVE_THUMB })
+                        .begin_symbol(Some(self.symbols.scrollbar.begin.as_str()))
+                        .end_symbol(Some(self.symbols.scrollbar.end.as_str()))
+                        .track_symbol(Some(self.symbols.scrollbar.track.as_str()))
+                        .thumb_symbol(if total_lines > visible_height { self.symbols.scrollbar.thumb.as_str() } else { self.symbols.scrollbar.inactive_thumb.as_str() })
                         .thumb_style(Style::default().fg(if total_lines > visible_height && self.focus == Focus::StatusBottom { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 
                     frame.render_stateful_widget(scrollbar, self.layout.status_bottom_scrollbar, &mut scrollbar_state);
@@ -288,10 +327,10 @@ impl App {
 
                 let mut scrollbar_state = ScrollbarState::new(scrollbar_content_length(total_lines, visible_height)).position(self.status_bottom_scroll.get());
                 let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-                    .begin_symbol(Some(border::VERTICAL))
-                    .end_symbol(Some(scrollbar::END))
-                    .track_symbol(Some(scrollbar::TRACK))
-                    .thumb_symbol(if total_lines > visible_height { scrollbar::THUMB } else { scrollbar::INACTIVE_THUMB })
+                    .begin_symbol(Some(self.symbols.border.vertical.as_str()))
+                    .end_symbol(Some(self.symbols.scrollbar.end.as_str()))
+                    .track_symbol(Some(self.symbols.scrollbar.track.as_str()))
+                    .thumb_symbol(if total_lines > visible_height { self.symbols.scrollbar.thumb.as_str() } else { self.symbols.scrollbar.inactive_thumb.as_str() })
                     .thumb_style(Style::default().fg(if total_lines > visible_height && self.focus == Focus::StatusBottom { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 
                 frame.render_stateful_widget(scrollbar, self.layout.status_bottom_scrollbar, &mut scrollbar_state);

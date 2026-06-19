@@ -18,7 +18,7 @@ use crate::{
         layout::LayoutConfig,
         localisation::{errors, modal, operations, settings},
         recent::{load_recent, save_recent, save_recent_to_path},
-        symbols::splash,
+        symbols::{SymbolTheme, load_symbol_theme, load_symbol_theme_from_path, save_symbol_theme, save_symbol_theme_to_path},
     },
 };
 use crate::{
@@ -292,6 +292,7 @@ pub enum SettingsSelectionKind {
     RemoteAdd,
     Remote(String),
     Theme(usize),
+    SymbolTheme(usize),
     KeyBinding(KeymapSelection),
     LayoutCommand(Command),
 }
@@ -467,6 +468,7 @@ pub struct App {
     pub mode: InputMode,
     pub last_input_direction: Option<Direction>,
     pub theme: Theme,
+    pub symbols: SymbolTheme,
     pub heatmap: [[usize; WEEKS]; DAYS],
 
     // Git identity used when creating commits.
@@ -572,6 +574,7 @@ pub struct App {
     pub modal_key_capture_candidate: Option<KeyBinding>,
     pub modal_key_capture_error: Option<KeymapEditError>,
     pub keymap_save_path: Option<PathBuf>,
+    pub symbol_theme_save_path: Option<PathBuf>,
 
     // Inspector
     pub inspector_selected: usize,
@@ -660,6 +663,7 @@ impl App {
             self.load_recent();
             self.load_layout();
             self.load_theme_config();
+            self.load_symbol_theme_config();
             self.load_keymap();
             self.reload(None);
 
@@ -711,10 +715,7 @@ impl App {
         let is_splash = self.viewport == Viewport::Splash;
 
         frame.render_widget(
-            Block::default()
-                .borders(if is_splash { Borders::NONE } else { Borders::ALL })
-                .border_style(Style::default().fg(self.theme.COLOR_BORDER))
-                .border_type(ratatui::widgets::BorderType::Rounded),
+            Block::default().borders(if is_splash { Borders::NONE } else { Borders::ALL }).border_style(Style::default().fg(self.theme.COLOR_BORDER)).border_set(self.symbols.border.block_set()),
             self.layout.app,
         );
 
@@ -986,7 +987,7 @@ impl App {
 
             // The worker streams partial graph state so large repositories become usable quickly.
             let handle = spawn_graph_service(
-                GraphServiceConfig { generation, path: absolute_path, amount: 10000, hidden_branch_names, include_head_reflog_roots, worktrees },
+                GraphServiceConfig { generation, path: absolute_path, amount: 10000, hidden_branch_names, include_head_reflog_roots, worktrees, symbols: self.symbols.clone() },
                 command_rx,
                 event_tx,
                 cancel_clone,
@@ -1335,7 +1336,10 @@ impl App {
 
     fn refresh_theme_assets(&mut self) {
         self.color = Rc::new(RefCell::new(ColorPicker::from_theme(&self.theme)));
-        self.logo = vec![Span::styled(splash::LOGO_WORD_PREFIX, Style::default().fg(self.theme.COLOR_GRASS)), Span::styled(splash::LOGO_CORNER, Style::default().fg(self.theme.COLOR_GREEN))];
+        self.logo = vec![
+            Span::styled(self.symbols.splash.logo_word_prefix.clone(), Style::default().fg(self.theme.COLOR_GRASS)),
+            Span::styled(self.symbols.splash.logo_corner.clone(), Style::default().fg(self.theme.COLOR_GREEN)),
+        ];
     }
 
     pub fn set_theme(&mut self, theme: Theme) {
@@ -1349,6 +1353,24 @@ impl App {
 
     pub fn save_theme_config(&self) {
         save_theme(&self.theme);
+    }
+
+    pub fn set_symbol_theme(&mut self, symbols: SymbolTheme) {
+        self.symbols = symbols;
+        self.refresh_theme_assets();
+    }
+
+    pub fn load_symbol_theme_config(&mut self) {
+        let symbols = if let Some(path) = &self.symbol_theme_save_path { load_symbol_theme_from_path(path.as_path()) } else { load_symbol_theme() };
+        self.set_symbol_theme(symbols);
+    }
+
+    pub fn save_symbol_theme_config(&self) {
+        if let Some(path) = &self.symbol_theme_save_path {
+            save_symbol_theme_to_path(path.as_path(), &self.symbols);
+        } else {
+            save_symbol_theme(&self.symbols);
+        }
     }
 
     pub fn exit(&mut self) {

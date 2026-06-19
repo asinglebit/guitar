@@ -1,4 +1,4 @@
-use crate::helpers::palette::Theme;
+use crate::helpers::{palette::Theme, symbols::SymbolTheme};
 use chrono::{Datelike, NaiveDate};
 use chrono::{TimeZone, Utc};
 use git2::{Oid, Repository};
@@ -80,17 +80,10 @@ pub fn build_heatmap(repo: &Repository, oids: &Vec<Oid>) -> [[usize; WEEKS]; DAY
     grid
 }
 
-pub fn heat_cell(count: usize, theme: &Theme) -> Span<'_> {
+pub fn heat_cell(count: usize, theme: &Theme, symbols: &SymbolTheme) -> Span<'static> {
     let (character, color) = match count {
-        0 => ("⠁", Some(theme.COLOR_TEXT)),
-        1 => ("⠁", Some(theme.COLOR_GRASS)),
-        2 => ("⠃", Some(theme.COLOR_GRASS)),
-        3 => ("⠇", Some(theme.COLOR_GRASS)),
-        4 => ("⠏", Some(theme.COLOR_GRASS)),
-        5 => ("⠟", Some(theme.COLOR_GRASS)),
-        6 => ("⠿", Some(theme.COLOR_GRASS)),
-        7 => ("⡿", Some(theme.COLOR_GRASS)),
-        _ => ("⣿", Some(theme.COLOR_GRASS)),
+        0 => (symbols.heatmap.cell(count), Some(theme.COLOR_TEXT)),
+        _ => (symbols.heatmap.cell(count), Some(theme.COLOR_GRASS)),
     };
     let style = if let Some(c) = color { Style::default().fg(c) } else { Style::default() };
     Span::styled(format!("{:>2}", character), style)

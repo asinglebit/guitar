@@ -1,5 +1,8 @@
 use super::*;
-use crate::app::app::{ContextMenuAction, ContextMenuItem, ContextMenuState};
+use crate::{
+    app::app::{ContextMenuAction, ContextMenuItem, ContextMenuState},
+    helpers::symbols::SymbolTheme,
+};
 use ratatui::{Terminal, backend::TestBackend};
 
 fn rendered_symbols(terminal: &Terminal<TestBackend>) -> String {
@@ -84,4 +87,22 @@ fn context_menu_clamps_to_lower_right_terminal_edge() {
     assert_eq!(buffer[(x + width - 1, y)].symbol(), "╮");
     assert_eq!(buffer[(x, y + height - 1)].symbol(), "╰");
     assert_eq!(buffer[(x + width - 1, y + height - 1)].symbol(), "╯");
+}
+
+#[test]
+fn context_menu_ascii_symbol_theme_renders_ascii_chrome() {
+    let backend = TestBackend::new(80, 24);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let state = menu_state(4, 3, 5);
+    let width = state.width();
+    let mut app = App { context_menu: Some(state), symbols: SymbolTheme::ascii(), ..Default::default() };
+
+    terminal.draw(|frame| app.draw_context_menu(frame)).unwrap();
+
+    let buffer = terminal.backend().buffer();
+    let rendered = rendered_symbols(&terminal);
+    assert!(rendered.is_ascii(), "{rendered}");
+    assert!(rendered.contains("----"), "{rendered}");
+    assert_eq!(buffer[(4, 3)].symbol(), "+");
+    assert_eq!(buffer[(4 + width - 1, 3)].symbol(), "+");
 }

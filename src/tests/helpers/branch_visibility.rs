@@ -46,6 +46,9 @@ fn branch_visibility_save_sorts_and_dedupes_hidden_names() {
     save_branch_visibility_to_path(&path, "/repo/a", &hidden(&["zeta", "alpha", "alpha"]));
 
     let contents = fs::read_to_string(&path).unwrap();
+    assert!(contents.contains('\n'), "{contents}");
+    assert!(contents.contains("\n  \"repositories\""), "{contents}");
+    assert!(contents.contains("\n      \"hidden\""), "{contents}");
     let config = facet_json::from_str::<BranchVisibilityConfig>(&contents).unwrap();
     assert_eq!(config.repositories[0].hidden, vec!["alpha", "zeta"]);
 }

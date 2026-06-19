@@ -2,7 +2,10 @@ use super::*;
 use crate::{
     app::app::{SettingsTab, Viewport},
     git::queries::remotes::GUITAR_DEFAULT_REMOTE_CONFIG,
-    helpers::keymap::{Command, InputMode, KeyBinding},
+    helpers::{
+        keymap::{Command, InputMode, KeyBinding},
+        symbols::SymbolTheme,
+    },
 };
 use git2::Repository;
 use indexmap::IndexMap;
@@ -108,6 +111,7 @@ fn settings_active_tabs_render_their_grouped_sections_only() {
     let display = rendered_settings(&mut app, &repo, 160, 160);
     assert!(display.contains("pane visibility:"));
     assert!(display.contains("graph metadata:"));
+    assert!(display.contains("symbol themes:"));
     assert!(display.contains("themes:"));
     assert!(!display.contains("recent repositories:"));
     assert!(!display.contains("remotes:"));
@@ -246,6 +250,56 @@ fn settings_renders_theme_rows_with_unicode_markers() {
 }
 
 #[test]
+fn settings_paths_tab_includes_symbols_json() {
+    let (_path, repo) = temp_repo("symbols-path");
+    let mut app = settings_app();
+    app.layout.graph = Rect::new(0, 0, 140, 120);
+    app.layout.app = Rect::new(0, 0, 140, 120);
+
+    let rendered = rendered_settings(&mut app, &repo, 140, 120);
+
+    assert!(rendered.contains("symbols:"));
+    assert!(rendered.contains("/symbols.json"));
+}
+
+#[test]
+fn settings_display_tab_renders_symbol_theme_rows() {
+    let (_path, repo) = temp_repo("symbol-theme-rows");
+    let mut app = settings_app();
+    app.settings_tab = SettingsTab::Display;
+    app.layout.graph = Rect::new(0, 0, 120, 120);
+    app.layout.app = Rect::new(0, 0, 120, 120);
+
+    let rendered = rendered_settings(&mut app, &repo, 120, 120);
+
+    assert!(rendered.contains("symbol themes:"));
+    assert!(rendered.contains("main"));
+    assert!(rendered.contains("ascii"));
+    assert!(app.settings_selections.iter().any(|selection| selection.kind == SettingsSelectionKind::SymbolTheme(0)));
+    assert!(app.settings_selections.iter().any(|selection| selection.kind == SettingsSelectionKind::SymbolTheme(1)));
+}
+
+#[test]
+fn settings_display_tab_uses_active_symbol_theme_form_markers() {
+    let (_path, repo) = temp_repo("symbol-theme-markers");
+    let mut app = settings_app();
+    app.symbols = SymbolTheme::ascii();
+    app.settings_tab = SettingsTab::Display;
+    app.layout.graph = Rect::new(0, 0, 120, 120);
+    app.layout.app = Rect::new(0, 0, 120, 120);
+
+    let rendered = rendered_settings(&mut app, &repo, 120, 120);
+
+    assert!(rendered.contains("(*)"));
+    assert!(rendered.contains("( )"));
+    assert!(rendered.contains("[x]"));
+    assert!(rendered.contains("[ ]"));
+    assert!(!rendered.contains("🞊"));
+    assert!(!rendered.contains("🞅"));
+    assert!(rendered.is_ascii(), "{rendered}");
+}
+
+#[test]
 fn settings_narrow_tab_bar_uses_compact_bullets() {
     let (_path, repo) = temp_repo("compact-tabs");
     let mut app = settings_app();
@@ -290,7 +344,7 @@ fn settings_section_names_use_highlight_color() {
 
     for (tab, labels) in [
         (SettingsTab::Paths, vec!["paths:", "recent repositories:"]),
-        (SettingsTab::Display, vec!["pane visibility:", "graph metadata:", "themes:"]),
+        (SettingsTab::Display, vec!["pane visibility:", "graph metadata:", "symbol themes:", "themes:"]),
         (SettingsTab::Auth, vec!["credentials:"]),
         (SettingsTab::Repo, vec!["remotes:"]),
         (SettingsTab::Shortcuts, vec!["shortcuts / normal mode:", "shortcuts / action mode:"]),

@@ -9,6 +9,7 @@ use crate::{
         graph_service::{GraphCommand, GraphFileHistoryRow, GraphHistory, GraphRow},
     },
     git::queries::helpers::FileStatus,
+    helpers::symbols::SymbolTheme,
 };
 use git2::{Oid, Repository, Signature};
 use im::Vector;
@@ -235,6 +236,20 @@ fn graph_short_page_stripes_blank_tail_rows() {
     assert!(lines[0].contains("row0"), "{lines:?}");
     assert!(!lines[2].contains("row"), "{lines:?}");
     assert_eq!(terminal.backend().buffer()[(1, 2)].bg, zebra);
+}
+
+#[test]
+fn graph_ascii_symbol_theme_renders_ascii_only_output() {
+    let (_path, repo, oid) = temp_repo("ascii-theme");
+    let mut app = app_with_cached_window(0, &["row0", "row1"], oid);
+    app.symbols = SymbolTheme::ascii();
+
+    let backend = TestBackend::new(80, 3);
+    let mut terminal = Terminal::new(backend).unwrap();
+    terminal.draw(|frame| app.draw_graph(frame, &repo)).unwrap();
+
+    let rendered = rendered_lines(&terminal).join("");
+    assert!(rendered.is_ascii(), "{rendered:?}");
 }
 
 #[test]

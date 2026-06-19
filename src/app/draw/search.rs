@@ -7,7 +7,7 @@ use crate::{
     helpers::{
         layout::scrollbar_content_length,
         localisation::{common, empty},
-        symbols::{border, scrollbar, status},
+        symbols::SymbolTheme,
         text::{center_line, empty_state_top_padding, truncate_with_ellipsis},
     },
 };
@@ -19,13 +19,13 @@ use ratatui::{
     widgets::{Block, Borders, List, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState},
 };
 
-fn status_marker(status: FileStatus) -> &'static str {
+fn status_marker(status: FileStatus, symbols: &SymbolTheme) -> &str {
     match status {
-        FileStatus::Added => status::ADDED,
-        FileStatus::Modified => status::MODIFIED,
-        FileStatus::Deleted => status::DELETED,
-        FileStatus::Renamed => status::RENAMED,
-        FileStatus::Other => status::OTHER,
+        FileStatus::Added => symbols.status.added.as_str(),
+        FileStatus::Modified => symbols.status.modified.as_str(),
+        FileStatus::Deleted => symbols.status.deleted.as_str(),
+        FileStatus::Renamed => symbols.status.renamed.as_str(),
+        FileStatus::Other => symbols.status.other.as_str(),
     }
 }
 
@@ -68,7 +68,7 @@ impl App {
             }
             lines.push(Line::from(Span::styled(center_line(&truncate_with_ellipsis(error, max_text_width), max_text_width + 3), Style::default().fg(self.theme.COLOR_ORANGE))));
         } else if total_lines == 0 {
-            let message = if self.search_path.is_some() { format!("{} {}", crate::helpers::symbols::empty_state::MARK, empty::NO_COMMITS) } else { empty::SEARCH.to_string() };
+            let message = if self.search_path.is_some() { format!("{} {}", self.symbols.empty_state.mark, empty::NO_COMMITS) } else { empty::SEARCH.to_string() };
             let blank_lines_before = empty_state_top_padding(visible_height);
             for _ in 0..blank_lines_before {
                 lines.push(Line::default());
@@ -85,7 +85,7 @@ impl App {
                     FileStatus::Other => self.theme.COLOR_TEXT,
                 };
                 lines.push(Line::from(vec![
-                    Span::styled(format!("{} ", status_marker(row.status)), Style::default().fg(marker_color)),
+                    Span::styled(format!("{} ", status_marker(row.status, &self.symbols)), Style::default().fg(marker_color)),
                     Span::styled(format!("{} ", row.short_oid), Style::default().fg(self.theme.COLOR_GREY_600)),
                     Span::styled(truncate_with_ellipsis(&row.summary, summary_width), Style::default().fg(self.theme.COLOR_TEXT)),
                 ]));
@@ -96,16 +96,16 @@ impl App {
         let list_items = zebra_list_items(&lines, visible_height, display_start, self.search_selected, self.focus == Focus::Search, selection_enabled, &self.theme);
 
         if self.layout_config.is_zen {
-            let list = List::new(list_items).block(Block::default().borders(Borders::ALL).padding(padding).border_type(ratatui::widgets::BorderType::Rounded));
+            let list = List::new(list_items).block(Block::default().borders(Borders::ALL).padding(padding).border_set(self.symbols.border.block_set()));
             frame.render_widget(list, self.layout.search);
 
             let scroll_range = scrollbar_content_length(total_lines, visible_height);
             let mut scrollbar_state = ScrollbarState::new(scroll_range).position(self.search_scroll.get());
             let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-                .begin_symbol(Some(scrollbar::BEGIN))
-                .end_symbol(Some(scrollbar::END))
-                .track_symbol(Some(scrollbar::TRACK))
-                .thumb_symbol(if total_lines > visible_height { scrollbar::THUMB } else { scrollbar::INACTIVE_THUMB })
+                .begin_symbol(Some(self.symbols.scrollbar.begin.as_str()))
+                .end_symbol(Some(self.symbols.scrollbar.end.as_str()))
+                .track_symbol(Some(self.symbols.scrollbar.track.as_str()))
+                .thumb_symbol(if total_lines > visible_height { self.symbols.scrollbar.thumb.as_str() } else { self.symbols.scrollbar.inactive_thumb.as_str() })
                 .track_style(Style::default().fg(self.theme.COLOR_BORDER))
                 .thumb_style(Style::default().fg(if total_lines > visible_height && self.focus == Focus::Search { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 
@@ -114,7 +114,7 @@ impl App {
         }
 
         if has_previous {
-            let top_border = Paragraph::new(border::HORIZONTAL.repeat(self.layout.search.width.saturating_sub(1) as usize)).style(Style::default().fg(self.theme.COLOR_BORDER));
+            let top_border = Paragraph::new(self.symbols.border.horizontal.repeat(self.layout.search.width.saturating_sub(1) as usize)).style(Style::default().fg(self.theme.COLOR_BORDER));
             frame.render_widget(top_border, Rect { x: self.layout.search.x + 1, y: self.layout.search.y.saturating_sub(1), width: self.layout.search.width, height: 1 });
         }
 
@@ -124,10 +124,10 @@ impl App {
         let scroll_range = scrollbar_content_length(total_lines, visible_height);
         let mut scrollbar_state = ScrollbarState::new(scroll_range).position(self.search_scroll.get());
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(Some(if has_previous { border::VERTICAL } else { border::HORIZONTAL }))
-            .end_symbol(Some(border::HORIZONTAL))
-            .track_symbol(Some(scrollbar::TRACK))
-            .thumb_symbol(if total_lines > visible_height { scrollbar::THUMB } else { scrollbar::INACTIVE_THUMB })
+            .begin_symbol(Some(if has_previous { self.symbols.border.vertical.as_str() } else { self.symbols.border.horizontal.as_str() }))
+            .end_symbol(Some(self.symbols.border.horizontal.as_str()))
+            .track_symbol(Some(self.symbols.scrollbar.track.as_str()))
+            .thumb_symbol(if total_lines > visible_height { self.symbols.scrollbar.thumb.as_str() } else { self.symbols.scrollbar.inactive_thumb.as_str() })
             .track_style(Style::default().fg(self.theme.COLOR_BORDER))
             .thumb_style(Style::default().fg(if total_lines > visible_height && self.focus == Focus::Search { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 

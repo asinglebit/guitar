@@ -1,6 +1,6 @@
 use crate::app::app::{App, Focus};
 use crate::helpers::keymap::{Command, InputMode, keybinding_to_visual_string};
-use crate::helpers::{localisation::splash as splash_text, symbols::splash as splash_symbol};
+use crate::helpers::localisation::splash as splash_text;
 use ratatui::Frame;
 use ratatui::{
     style::Style,
@@ -90,16 +90,16 @@ impl App {
         }
 
         if self.layout.app.width < 80 {
-            lines.push(Line::from(Span::styled(splash_symbol::LOGO_COMPACT.to_string(), Style::default().fg(self.theme.COLOR_GRASS))).centered());
+            lines.push(Line::from(Span::styled(self.symbols.splash.logo_compact.clone(), Style::default().fg(self.theme.COLOR_GRASS))).centered());
         } else if self.layout.app.width < 120 {
-            for (idx, row) in splash_symbol::LOGO_NARROW.iter().enumerate() {
+            for (idx, row) in self.symbols.splash.logo_narrow.iter().enumerate() {
                 let color = if idx < 4 { self.theme.COLOR_GRASS } else { self.theme.COLOR_GREEN };
-                lines.push(Line::from(Span::styled(row.to_string(), Style::default().fg(color))).centered());
+                lines.push(Line::from(Span::styled(row.clone(), Style::default().fg(color))).centered());
             }
         } else {
-            for (idx, row) in splash_symbol::LOGO_WIDE.iter().enumerate() {
+            for (idx, row) in self.symbols.splash.logo_wide.iter().enumerate() {
                 let color = if idx < 5 { self.theme.COLOR_GRASS } else { self.theme.COLOR_GREEN };
-                lines.push(Line::from(Span::styled(row.to_string(), Style::default().fg(color))).centered());
+                lines.push(Line::from(Span::styled(row.clone(), Style::default().fg(color))).centered());
             }
         }
 
@@ -133,9 +133,9 @@ impl App {
                 // Brackets make the current splash selection visible without changing row width too much.
                 if i == self.splash_selected && self.focus == Focus::Viewport && !self.spinner.is_running() {
                     let mut spans = Vec::new();
-                    spans.push(Span::styled(splash_symbol::SELECTED_LEFT, Style::default().fg(self.theme.COLOR_GRASS)));
+                    spans.push(Span::styled(self.symbols.splash.selected_left.clone(), Style::default().fg(self.theme.COLOR_GRASS)));
                     spans.extend(line.spans.clone());
-                    spans.push(Span::styled(splash_symbol::SELECTED_RIGHT, Style::default().fg(self.theme.COLOR_GRASS)));
+                    spans.push(Span::styled(self.symbols.splash.selected_right.clone(), Style::default().fg(self.theme.COLOR_GRASS)));
                     line = Line::from(spans).centered();
                 }
 

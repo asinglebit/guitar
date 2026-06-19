@@ -72,7 +72,7 @@ impl App {
         self.theme.clear_area(modal_area, frame.buffer_mut());
 
         let border_color = if self.modal_key_capture_error.is_some() { self.theme.COLOR_ORANGE } else { self.theme.COLOR_GREY_600 };
-        let modal_block = modal_block(border_color, self.theme.COLOR_HIGHLIGHTED);
+        let modal_block = modal_block(border_color, self.theme.COLOR_HIGHLIGHTED, &self.symbols);
 
         Paragraph::new(Text::from(lines)).block(modal_block).alignment(Alignment::Center).render(modal_area, frame.buffer_mut());
     }

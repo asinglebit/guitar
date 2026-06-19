@@ -5,7 +5,6 @@ use crate::{
     helpers::colors::ColorPicker,
     helpers::layout::scrollbar_content_length,
     helpers::localisation::empty,
-    helpers::symbols::{border, branch as branch_symbol, empty_state, scrollbar},
     helpers::text::{center_line, empty_state_top_padding, truncate_with_ellipsis},
 };
 use ratatui::Frame;
@@ -53,11 +52,11 @@ impl App {
                     let is_visible = !self.branches.hidden_branch_names.contains(name);
                     let truncated = truncate_with_ellipsis(name, max_text_width.saturating_sub(1));
                     let icon = if is_visible {
-                        if *is_local { branch_symbol::LOCAL_VISIBLE } else { branch_symbol::REMOTE_VISIBLE }
+                        if *is_local { self.symbols.branch.local_visible.as_str() } else { self.symbols.branch.remote_visible.as_str() }
                     } else if *is_local {
-                        branch_symbol::LOCAL_HIDDEN
+                        self.symbols.branch.local_hidden.as_str()
                     } else {
-                        branch_symbol::REMOTE_HIDDEN
+                        self.symbols.branch.remote_hidden.as_str()
                     };
                     let color = if is_visible { lane.map(|lane| color_picker.get_lane(lane)).unwrap_or(self.theme.COLOR_TEXT) } else { self.theme.COLOR_TEXT };
                     lines.push(Line::from(Span::styled(format!("{icon} {truncated}"), Style::default().fg(color))));
@@ -72,11 +71,11 @@ impl App {
 
                 let truncated = truncate_with_ellipsis(branch_name, max_text_width.saturating_sub(1));
                 let icon = if is_visible {
-                    if is_local { branch_symbol::LOCAL_VISIBLE } else { branch_symbol::REMOTE_VISIBLE }
+                    if is_local { self.symbols.branch.local_visible.as_str() } else { self.symbols.branch.remote_visible.as_str() }
                 } else if is_local {
-                    branch_symbol::LOCAL_HIDDEN
+                    self.symbols.branch.local_hidden.as_str()
                 } else {
-                    branch_symbol::REMOTE_HIDDEN
+                    self.symbols.branch.remote_hidden.as_str()
                 };
                 let color = if is_visible { self.branches.get_color(&self.theme, branch_alias) } else { self.theme.COLOR_TEXT };
 
@@ -94,7 +93,7 @@ impl App {
             for _ in 0..blank_lines_before {
                 lines.push(Line::default());
             }
-            let empty_text = format!("{} {}", empty_state::MARK, empty::NO_BRANCHES);
+            let empty_text = format!("{} {}", self.symbols.empty_state.mark, empty::NO_BRANCHES);
             lines.push(Line::from(Span::styled(center_line(&truncate_with_ellipsis(&empty_text, max_text_width), max_text_width + 3), Style::default().fg(self.theme.COLOR_GREY_800))));
         }
 
@@ -105,17 +104,17 @@ impl App {
 
         if self.layout_config.is_zen {
             // Zen mode frames the pane as a full standalone list.
-            let list = List::new(list_items).block(Block::default().borders(Borders::ALL).padding(padding).border_type(ratatui::widgets::BorderType::Rounded));
+            let list = List::new(list_items).block(Block::default().borders(Borders::ALL).padding(padding).border_set(self.symbols.border.block_set()));
 
             frame.render_widget(list, self.layout.branches);
 
             let scroll_range = scrollbar_content_length(total_lines, visible_height);
             let mut scrollbar_state = ScrollbarState::new(scroll_range).position(self.branches_scroll.get());
             let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-                .begin_symbol(Some(scrollbar::BEGIN))
-                .end_symbol(Some(scrollbar::END))
-                .track_symbol(Some(scrollbar::TRACK))
-                .thumb_symbol(if total_lines > visible_height { scrollbar::THUMB } else { scrollbar::INACTIVE_THUMB })
+                .begin_symbol(Some(self.symbols.scrollbar.begin.as_str()))
+                .end_symbol(Some(self.symbols.scrollbar.end.as_str()))
+                .track_symbol(Some(self.symbols.scrollbar.track.as_str()))
+                .thumb_symbol(if total_lines > visible_height { self.symbols.scrollbar.thumb.as_str() } else { self.symbols.scrollbar.inactive_thumb.as_str() })
                 .track_style(Style::default().fg(self.theme.COLOR_BORDER))
                 .thumb_style(Style::default().fg(if total_lines > visible_height && self.focus == Focus::Branches { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 
@@ -132,14 +131,14 @@ impl App {
         let scroll_range = scrollbar_content_length(total_lines, visible_height);
         let mut scrollbar_state = ScrollbarState::new(scroll_range).position(self.branches_scroll.get());
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(Some(border::HORIZONTAL))
+            .begin_symbol(Some(self.symbols.border.horizontal.as_str()))
             .end_symbol(Some(if self.layout_config.is_tags || self.layout_config.is_stashes || self.layout_config.is_reflogs || self.layout_config.is_worktrees || self.layout_config.is_search {
-                border::VERTICAL
+                self.symbols.border.vertical.as_str()
             } else {
-                border::HORIZONTAL
+                self.symbols.border.horizontal.as_str()
             }))
-            .track_symbol(Some(scrollbar::TRACK))
-            .thumb_symbol(if total_lines > visible_height { scrollbar::THUMB } else { scrollbar::INACTIVE_THUMB })
+            .track_symbol(Some(self.symbols.scrollbar.track.as_str()))
+            .thumb_symbol(if total_lines > visible_height { self.symbols.scrollbar.thumb.as_str() } else { self.symbols.scrollbar.inactive_thumb.as_str() })
             .track_style(Style::default().fg(self.theme.COLOR_BORDER))
             .thumb_style(Style::default().fg(if total_lines > visible_height && self.focus == Focus::Branches { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 

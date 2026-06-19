@@ -431,6 +431,7 @@ pub mod operations {
 pub mod settings {
     pub const ACTIONS: &str = " actions:";
     pub const ACTIVE_CUSTOM: &str = " active custom:";
+    pub const ACTIVE_CUSTOM_SYMBOLS: &str = " active custom symbols:";
     pub const AUTH: &str = "auth";
     pub const AUTHORIZATION: &str = " authorization:";
     pub const BRANCHES: &str = "branches";
@@ -475,9 +476,12 @@ pub mod settings {
     pub const STASHES: &str = "stashes";
     pub const STATUS: &str = "status";
     pub const SUBMODULES: &str = "submodules";
+    pub const SYMBOLS: &str = " symbols:";
     pub const TAGS: &str = "tags";
     pub const THEME: &str = " theme:";
     pub const THEMES: &str = " themes:";
+    pub const SYMBOL_THEME: &str = " symbol theme:";
+    pub const SYMBOL_THEMES: &str = " symbol themes:";
     pub const VERSION: &str = " version:";
     pub const WORKTREES: &str = "worktrees";
     pub const ADD_REMOTE: &str = " + add remote";

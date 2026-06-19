@@ -1,10 +1,6 @@
 use crate::app::app::{App, Focus};
 use crate::core::renderers::{GRAPH_COMMITTER_WIDTH, render_committer_projection, render_date_projection, render_graph_projection, render_message_projection, render_sha_projection};
-use crate::helpers::{
-    layout::scrollbar_content_length,
-    localisation::empty,
-    symbols::{border, empty_state, scrollbar},
-};
+use crate::helpers::{layout::scrollbar_content_length, localisation::empty};
 use ratatui::Frame;
 use ratatui::layout::{Alignment, Constraint, Direction, Layout};
 use ratatui::text::Line;
@@ -62,7 +58,7 @@ impl App {
 
                 let chunks = Layout::default().direction(Direction::Vertical).constraints([Constraint::Percentage(50), Constraint::Length(3), Constraint::Percentage(50)]).split(self.layout.graph);
 
-                let message = Paragraph::new(format!("{} {}", empty_state::MARK, empty::NO_COMMITS)).alignment(Alignment::Center).style(Style::default().fg(self.theme.COLOR_BORDER));
+                let message = Paragraph::new(format!("{} {}", self.symbols.empty_state.mark, empty::NO_COMMITS)).alignment(Alignment::Center).style(Style::default().fg(self.theme.COLOR_BORDER));
 
                 frame.render_widget(message, chunks[1]);
                 return;
@@ -77,9 +73,10 @@ impl App {
             let source_sha = if self.layout_config.is_shas { Some(render_sha_projection(&self.theme, &window.rows, self.graph_selected)) } else { None };
             let source_date = if self.layout_config.is_graph_dates { Some(render_date_projection(&self.theme, &window.rows, self.graph_selected)) } else { None };
             let source_committer = if self.layout_config.is_graph_committers { Some(render_committer_projection(&self.theme, &window.rows, self.graph_selected)) } else { None };
-            let source_graph = render_graph_projection(&self.theme, &window.rows, &window.history, window.head_alias, window.start, window.end, render_uncommitted_row);
+            let source_graph = render_graph_projection(&self.theme, &self.symbols, &window.rows, &window.history, window.head_alias, window.start, window.end, render_uncommitted_row);
             let source_message = render_message_projection(
                 &self.theme,
+                &self.symbols,
                 &window.rows,
                 self.layout_config.is_graph_reflogs,
                 self.layout_config.is_graph_refs,
@@ -158,7 +155,7 @@ impl App {
         if self.layout_config.is_zen {
             // Zen mode owns the full rounded graph frame.
             let table = Table::new(rows, constraints)
-                .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(self.theme.COLOR_BORDER)).border_type(ratatui::widgets::BorderType::Rounded))
+                .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(self.theme.COLOR_BORDER)).border_set(self.symbols.border.block_set()))
                 .column_spacing(1);
 
             frame.render_widget(table, self.layout.graph);
@@ -166,10 +163,10 @@ impl App {
             if total_lines > visible_height {
                 let mut scrollbar_state = ScrollbarState::new(scrollbar_content_length(total_lines, visible_height)).position(self.graph_scroll.get());
                 let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-                    .begin_symbol(Some(scrollbar::BEGIN))
-                    .end_symbol(Some(scrollbar::END))
-                    .track_symbol(Some(scrollbar::TRACK))
-                    .thumb_symbol(scrollbar::THUMB)
+                    .begin_symbol(Some(self.symbols.scrollbar.begin.as_str()))
+                    .end_symbol(Some(self.symbols.scrollbar.end.as_str()))
+                    .track_symbol(Some(self.symbols.scrollbar.track.as_str()))
+                    .thumb_symbol(self.symbols.scrollbar.thumb.as_str())
                     .thumb_style(Style::default().fg(if self.focus == Focus::Viewport { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 
                 frame.render_stateful_widget(scrollbar, self.layout.graph_scrollbar, &mut scrollbar_state);
@@ -180,7 +177,7 @@ impl App {
 
         // Normal mode draws only side borders because title and status bars provide the rest.
         let table = Table::new(rows, constraints)
-            .block(Block::default().borders(Borders::RIGHT | Borders::LEFT).border_style(Style::default().fg(self.theme.COLOR_BORDER)).border_type(ratatui::widgets::BorderType::Rounded))
+            .block(Block::default().borders(Borders::RIGHT | Borders::LEFT).border_style(Style::default().fg(self.theme.COLOR_BORDER)).border_set(self.symbols.border.block_set()))
             .column_spacing(1);
 
         frame.render_widget(table, self.layout.graph);
@@ -189,17 +186,17 @@ impl App {
             let mut scrollbar_state = ScrollbarState::new(scrollbar_content_length(total_lines, visible_height)).position(self.graph_scroll.get());
             let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
                 .begin_symbol(if (self.layout_config.is_inspector && (self.graph_selected != 0 || self.uncommitted.has_conflicts)) || self.layout_config.is_status {
-                    Some(border::HORIZONTAL)
+                    Some(self.symbols.border.horizontal.as_str())
                 } else {
-                    Some(scrollbar::BEGIN)
+                    Some(self.symbols.scrollbar.begin.as_str())
                 })
                 .end_symbol(if (self.layout_config.is_inspector && (self.graph_selected != 0 || self.uncommitted.has_conflicts)) || self.layout_config.is_status {
-                    Some(border::HORIZONTAL)
+                    Some(self.symbols.border.horizontal.as_str())
                 } else {
-                    Some(scrollbar::END)
+                    Some(self.symbols.scrollbar.end.as_str())
                 })
-                .track_symbol(Some(scrollbar::TRACK))
-                .thumb_symbol(scrollbar::THUMB)
+                .track_symbol(Some(self.symbols.scrollbar.track.as_str()))
+                .thumb_symbol(self.symbols.scrollbar.thumb.as_str())
                 .thumb_style(Style::default().fg(if self.focus == Focus::Viewport { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 
             frame.render_stateful_widget(scrollbar, self.layout.graph_scrollbar, &mut scrollbar_state);

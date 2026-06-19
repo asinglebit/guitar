@@ -14,6 +14,7 @@ use crate::{
         layout::LayoutConfig,
         localisation::errors,
         palette::Theme,
+        symbols::SymbolTheme,
     },
 };
 use git2::BranchType;
@@ -552,6 +553,24 @@ impl App {
                             self.set_theme(preset.theme);
                             self.save_theme_config();
                             self.reload(None);
+                        },
+                        Some(SettingsSelectionKind::SymbolTheme(symbol_idx)) => {
+                            let Some(preset) = SymbolTheme::presets().get(symbol_idx) else {
+                                return;
+                            };
+                            let selected_line = self.settings_selected;
+                            let scroll = self.settings_scroll.get();
+                            self.set_symbol_theme(preset.theme());
+                            self.save_symbol_theme_config();
+                            if self.repo.is_some() {
+                                self.reload(None);
+                            } else {
+                                self.mark_viewer_layout_dirty();
+                            }
+                            self.viewport = Viewport::Settings;
+                            self.focus = Focus::Viewport;
+                            self.settings_selected = selected_line;
+                            self.settings_scroll.set(scroll);
                         },
                         Some(SettingsSelectionKind::KeyBinding(selection)) => {
                             self.begin_key_capture(selection);

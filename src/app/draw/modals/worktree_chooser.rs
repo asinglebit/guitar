@@ -5,7 +5,6 @@ use crate::{
     },
     helpers::{
         localisation::{common, modal, status as status_text},
-        symbols::{branch as branch_symbol, worktree},
         text::truncate_with_ellipsis,
     },
 };
@@ -37,13 +36,13 @@ impl App {
             let target = entry
                 .branch
                 .as_ref()
-                .map(|branch| format!("{} {branch}", branch_symbol::LOCAL_VISIBLE))
+                .map(|branch| format!("{} {branch}", self.symbols.branch.local_visible))
                 .or_else(|| entry.head.map(|oid| format!("{} #{:.6}", status_text::DETACHED, oid)))
                 .unwrap_or_else(|| common::NO_HEAD.to_string());
-            let dirty = if entry.is_dirty { format!(" {}", worktree::DIRTY) } else { String::new() };
-            let locked = if entry.locked_reason.is_some() { format!(" {}", worktree::LOCKED) } else { String::new() };
-            let invalid = if !entry.is_valid { format!(" {}", worktree::INVALID) } else { String::new() };
-            let icon = if entry.is_current { worktree::CURRENT } else { worktree::OTHER };
+            let dirty = if entry.is_dirty { format!(" {}", self.symbols.worktree.dirty) } else { String::new() };
+            let locked = if entry.locked_reason.is_some() { format!(" {}", self.symbols.worktree.locked) } else { String::new() };
+            let invalid = if !entry.is_valid { format!(" {}", self.symbols.worktree.invalid) } else { String::new() };
+            let icon = if entry.is_current { &self.symbols.worktree.current } else { &self.symbols.worktree.other };
             let label = format!("{icon} {}  {}{}{}{}  {}", entry.name, target, dirty, locked, invalid, entry.path.display());
             let label = truncate_with_ellipsis(&label, max_line_width);
             length = length.max(label.len());
@@ -78,7 +77,7 @@ impl App {
         self.modal_area = Some(modal_area);
         self.theme.clear_area(modal_area, frame.buffer_mut());
 
-        let modal_block = modal_block(self.theme.COLOR_GREY_600, self.theme.COLOR_HIGHLIGHTED);
+        let modal_block = modal_block(self.theme.COLOR_GREY_600, self.theme.COLOR_HIGHLIGHTED, &self.symbols);
 
         let paragraph = Paragraph::new(Text::from(lines)).block(modal_block).alignment(Alignment::Center);
         paragraph.render(modal_area, frame.buffer_mut());

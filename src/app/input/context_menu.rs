@@ -502,7 +502,7 @@ impl App {
             SettingsSelectionKind::Remote(name) => {
                 REMOTE_ACTIONS.iter().enumerate().map(|(index, action)| Self::item(action.label(), ContextMenuAction::RemoteAction { name: name.clone(), index }, true)).collect()
             },
-            SettingsSelectionKind::Theme(_) => vec![Self::command_item(menu::APPLY_THEME, Command::Select)],
+            SettingsSelectionKind::Theme(_) | SettingsSelectionKind::SymbolTheme(_) => vec![Self::command_item(menu::APPLY_THEME, Command::Select)],
             SettingsSelectionKind::KeyBinding(_) => vec![Self::command_item(menu::REBIND_SHORTCUT, Command::Select)],
             SettingsSelectionKind::LayoutCommand(command) => {
                 let label = menu::run_command(&command_to_visual_string(&command));

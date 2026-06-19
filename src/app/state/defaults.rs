@@ -12,7 +12,7 @@ use crate::{
     },
     core::{branches::Branches, oids::Oids, tags::Tags},
     git::queries::helpers::UncommittedChanges,
-    helpers::{colors::ColorPicker, palette::*, spinner::Spinner, symbols::splash},
+    helpers::{colors::ColorPicker, palette::*, spinner::Spinner, symbols::SymbolTheme},
 };
 use indexmap::IndexMap;
 use ratatui::{style::Style, text::Span, widgets::ListItem};
@@ -35,9 +35,13 @@ pub enum ViewerMode {
 impl Default for App {
     fn default() -> Self {
         let theme = Theme::default();
+        let symbols = SymbolTheme::default();
         let color = Rc::new(RefCell::new(ColorPicker::from_theme(&theme)));
         let heatmap = empty_heatmap();
-        let logo = vec![Span::styled(splash::LOGO_WORD_PREFIX, Style::default().fg(theme.COLOR_GRASS)), Span::styled(splash::LOGO_CORNER, Style::default().fg(theme.COLOR_GREEN))];
+        let logo = vec![
+            Span::styled(symbols.splash.logo_word_prefix.clone(), Style::default().fg(theme.COLOR_GRASS)),
+            Span::styled(symbols.splash.logo_corner.clone(), Style::default().fg(theme.COLOR_GREEN)),
+        ];
 
         App {
             // General
@@ -50,6 +54,7 @@ impl Default for App {
             mode: InputMode::Normal,
             last_input_direction: None,
             theme,
+            symbols,
             heatmap,
 
             // User
@@ -151,6 +156,7 @@ impl Default for App {
             modal_key_capture_candidate: None,
             modal_key_capture_error: None,
             keymap_save_path: None,
+            symbol_theme_save_path: None,
 
             // Viewer
             viewer_selected: 0,

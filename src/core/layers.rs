@@ -4,9 +4,9 @@ use ratatui::{
     text::Span,
 };
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct LayerToken {
-    symbol: &'static str,
+    symbol: String,
     color: Color,
 }
 
@@ -36,23 +36,23 @@ impl LayersContext {
         self.pipes.reserve(additional);
     }
 
-    pub fn commit(&mut self, sym: &'static str, lane: usize) {
+    pub fn commit(&mut self, sym: &str, lane: usize) {
         let color = self.color.get_lane(lane);
-        self.commits.push(LayerToken { symbol: sym, color });
+        self.commits.push(LayerToken { symbol: sym.to_string(), color });
     }
 
-    pub fn pipe(&mut self, sym: &'static str, lane: usize) {
+    pub fn pipe(&mut self, sym: &str, lane: usize) {
         let color = self.color.get_lane(lane);
-        self.pipes.push(LayerToken { symbol: sym, color });
+        self.pipes.push(LayerToken { symbol: sym.to_string(), color });
     }
 
-    pub fn merge(&mut self, sym: &'static str, lane: usize) {
+    pub fn merge(&mut self, sym: &str, lane: usize) {
         let color = self.color.get_lane(lane);
-        self.merges.push(LayerToken { symbol: sym, color });
+        self.merges.push(LayerToken { symbol: sym.to_string(), color });
     }
 
-    pub fn pipe_custom(&mut self, sym: &'static str, _lane: usize, color: Color) {
-        self.pipes.push(LayerToken { symbol: sym, color });
+    pub fn pipe_custom(&mut self, sym: &str, _lane: usize, color: Color) {
+        self.pipes.push(LayerToken { symbol: sym.to_string(), color });
     }
 
     pub fn bake(&mut self, spans: &mut Vec<Span<'static>>) {
@@ -67,18 +67,18 @@ impl LayersContext {
             let token = self
                 .commits
                 .get(token_index)
-                .filter(|token| !is_empty(token.symbol))
-                .or_else(|| self.merges.get(token_index).filter(|token| !is_empty(token.symbol)))
-                .or_else(|| self.pipes.get(token_index).filter(|token| !is_empty(token.symbol)));
+                .filter(|token| !is_empty(&token.symbol))
+                .or_else(|| self.merges.get(token_index).filter(|token| !is_empty(&token.symbol)))
+                .or_else(|| self.pipes.get(token_index).filter(|token| !is_empty(&token.symbol)));
 
-            let (symbol, color) = token.map(|token| (token.symbol, token.color)).unwrap_or((" ", Color::Black));
+            let (symbol, color) = token.map(|token| (token.symbol.clone(), token.color)).unwrap_or_else(|| (" ".to_string(), Color::Black));
             spans.push(Span::styled(symbol, Style::default().fg(color)));
         }
     }
 }
 
 fn trim_empty(tokens: &mut Vec<LayerToken>) {
-    while tokens.last().is_some_and(|token| is_empty(token.symbol)) {
+    while tokens.last().is_some_and(|token| is_empty(&token.symbol)) {
         tokens.pop();
     }
 }

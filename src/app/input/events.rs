@@ -1026,8 +1026,8 @@ impl App {
             count = count.saturating_add(4).saturating_add(wrap_words(sanitize(entry.message.clone()), max_text_width).len());
         }
 
-        let summary = commit.summary().map(str::to_string).unwrap_or_else(|| format!("{} {}", crate::helpers::symbols::empty_state::MARK, crate::helpers::localisation::empty::NO_SUMMARY));
-        let body = commit.body().map(str::to_string).unwrap_or_else(|| format!("{} {}", crate::helpers::symbols::empty_state::MARK, crate::helpers::localisation::empty::NO_BODY));
+        let summary = commit.summary().map(str::to_string).unwrap_or_else(|| format!("{} {}", self.symbols.empty_state.mark, crate::helpers::localisation::empty::NO_SUMMARY));
+        let body = commit.body().map(str::to_string).unwrap_or_else(|| format!("{} {}", self.symbols.empty_state.mark, crate::helpers::localisation::empty::NO_BODY));
         count.saturating_add(10).saturating_add(wrap_words(sanitize(summary), max_text_width).len()).saturating_add(2).saturating_add(wrap_words(sanitize(body), max_text_width).len())
     }
 

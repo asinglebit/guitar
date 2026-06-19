@@ -56,7 +56,7 @@ impl App {
 
         self.theme.clear_area(modal_area, frame.buffer_mut());
 
-        let modal_block = modal_block(self.theme.COLOR_GREY_600, self.theme.COLOR_HIGHLIGHTED);
+        let modal_block = modal_block(self.theme.COLOR_GREY_600, self.theme.COLOR_HIGHLIGHTED, &self.symbols);
         modal_block.render(modal_area, frame.buffer_mut());
 
         let inner_width = modal_area.width.saturating_sub(8);
@@ -70,7 +70,7 @@ impl App {
 
         frame.render_widget(Paragraph::new(Line::from(Span::styled(title.to_string(), Style::default().fg(self.theme.COLOR_TEXT)))).alignment(Alignment::Center), title_area);
 
-        render_modal_text_input(frame, input_area, &mut self.modal_input, false, Style::default().fg(self.theme.COLOR_TEXT), Style::default().fg(self.theme.COLOR_GREY_800), None, true);
+        render_modal_text_input(frame, input_area, &mut self.modal_input, false, Style::default().fg(self.theme.COLOR_TEXT), Style::default().fg(self.theme.COLOR_GREY_800), None, true, &self.symbols);
 
         let total = self.modal_file_search_results.len();
         let visible_height = list_area.height as usize;

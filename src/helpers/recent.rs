@@ -33,6 +33,10 @@ pub fn save_recent_to_path(path: &Path, recent: &[String]) {
         let _ = fs::create_dir_all(parent);
     }
 
-    let recent_string = facet_json::to_string(recent).unwrap();
+    let recent_string = facet_json::to_string_pretty(recent).unwrap();
     fs::write(path, &recent_string).unwrap();
 }
+
+#[cfg(test)]
+#[path = "../tests/helpers/recent.rs"]
+mod tests;

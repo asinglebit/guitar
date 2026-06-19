@@ -7,11 +7,7 @@ use crate::{
         diffs::{get_conflict_file, get_file_at_oid, get_file_at_workdir, get_file_diff_at_oid, get_file_diff_at_workdir},
         helpers::{ConflictFile, FileChanges, Hunk},
     },
-    helpers::{
-        layout::scrollbar_content_length,
-        symbols::{border, scrollbar, status as status_symbol},
-        text::wrap_words,
-    },
+    helpers::{layout::scrollbar_content_length, text::wrap_words},
 };
 use git2::Oid;
 use ratatui::Frame;
@@ -130,16 +126,16 @@ impl App {
         if self.layout_config.is_zen {
             // Zen mode frames the viewer as a standalone surface.
             let list = List::new(list_items)
-                .block(Block::default().padding(padding).borders(Borders::ALL).border_style(Style::default().fg(self.theme.COLOR_BORDER)).border_type(ratatui::widgets::BorderType::Rounded));
+                .block(Block::default().padding(padding).borders(Borders::ALL).border_style(Style::default().fg(self.theme.COLOR_BORDER)).border_set(self.symbols.border.block_set()));
 
             frame.render_widget(list, self.layout.graph);
 
             let mut scrollbar_state = ScrollbarState::new(scrollbar_content_length(total_lines, visible_height)).position(self.viewer_scroll.get());
             let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-                .begin_symbol(Some(scrollbar::BEGIN))
-                .end_symbol(Some(scrollbar::END))
-                .track_symbol(Some(scrollbar::TRACK))
-                .thumb_symbol(scrollbar::THUMB)
+                .begin_symbol(Some(self.symbols.scrollbar.begin.as_str()))
+                .end_symbol(Some(self.symbols.scrollbar.end.as_str()))
+                .track_symbol(Some(self.symbols.scrollbar.track.as_str()))
+                .thumb_symbol(self.symbols.scrollbar.thumb.as_str())
                 .thumb_style(Style::default().fg(if self.focus == Focus::Viewport { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 
             frame.render_stateful_widget(scrollbar, self.layout.graph_scrollbar, &mut scrollbar_state);
@@ -148,18 +144,17 @@ impl App {
         }
 
         // Normal mode shares the graph viewport borders with neighboring panes.
-        let list = List::new(list_items).block(
-            Block::default().padding(padding).borders(Borders::RIGHT | Borders::LEFT).border_style(Style::default().fg(self.theme.COLOR_BORDER)).border_type(ratatui::widgets::BorderType::Rounded),
-        );
+        let list = List::new(list_items)
+            .block(Block::default().padding(padding).borders(Borders::RIGHT | Borders::LEFT).border_style(Style::default().fg(self.theme.COLOR_BORDER)).border_set(self.symbols.border.block_set()));
 
         frame.render_widget(list, self.layout.graph);
 
         let mut scrollbar_state = ScrollbarState::new(scrollbar_content_length(total_lines, visible_height)).position(self.viewer_scroll.get());
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(if self.layout_config.is_inspector || self.layout_config.is_status { Some(border::HORIZONTAL) } else { Some(scrollbar::BEGIN) })
-            .end_symbol(if self.layout_config.is_inspector || self.layout_config.is_status { Some(border::HORIZONTAL) } else { Some(scrollbar::END) })
-            .track_symbol(Some(scrollbar::TRACK))
-            .thumb_symbol(scrollbar::THUMB)
+            .begin_symbol(if self.layout_config.is_inspector || self.layout_config.is_status { Some(self.symbols.border.horizontal.as_str()) } else { Some(self.symbols.scrollbar.begin.as_str()) })
+            .end_symbol(if self.layout_config.is_inspector || self.layout_config.is_status { Some(self.symbols.border.horizontal.as_str()) } else { Some(self.symbols.scrollbar.end.as_str()) })
+            .track_symbol(Some(self.symbols.scrollbar.track.as_str()))
+            .thumb_symbol(self.symbols.scrollbar.thumb.as_str())
             .thumb_style(Style::default().fg(if self.focus == Focus::Viewport { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 
         frame.render_stateful_widget(scrollbar, self.layout.graph_scrollbar, &mut scrollbar_state);
@@ -204,10 +199,10 @@ impl App {
         let left_borders = if self.layout_config.is_zen { Borders::LEFT | Borders::TOP | Borders::BOTTOM } else { Borders::LEFT };
         let right_borders = if self.layout_config.is_zen { Borders::RIGHT | Borders::TOP | Borders::BOTTOM } else { Borders::RIGHT };
 
-        let left_list = List::new(left_items)
-            .block(Block::default().padding(padding).borders(left_borders).border_style(Style::default().fg(self.theme.COLOR_BORDER)).border_type(ratatui::widgets::BorderType::Rounded));
+        let left_list =
+            List::new(left_items).block(Block::default().padding(padding).borders(left_borders).border_style(Style::default().fg(self.theme.COLOR_BORDER)).border_set(self.symbols.border.block_set()));
         let right_list = List::new(right_items)
-            .block(Block::default().padding(padding).borders(right_borders).border_style(Style::default().fg(self.theme.COLOR_BORDER)).border_type(ratatui::widgets::BorderType::Rounded));
+            .block(Block::default().padding(padding).borders(right_borders).border_style(Style::default().fg(self.theme.COLOR_BORDER)).border_set(self.symbols.border.block_set()));
 
         frame.render_widget(left_list, self.layout.viewer_split_left);
         frame.render_widget(right_list, self.layout.viewer_split_right);
@@ -215,10 +210,18 @@ impl App {
 
         let mut scrollbar_state = ScrollbarState::new(scrollbar_content_length(total_lines, visible_height)).position(self.viewer_scroll.get());
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(if !self.layout_config.is_zen && (self.layout_config.is_inspector || self.layout_config.is_status) { Some(border::HORIZONTAL) } else { Some(scrollbar::BEGIN) })
-            .end_symbol(if !self.layout_config.is_zen && (self.layout_config.is_inspector || self.layout_config.is_status) { Some(border::HORIZONTAL) } else { Some(scrollbar::END) })
-            .track_symbol(Some(scrollbar::TRACK))
-            .thumb_symbol(scrollbar::THUMB)
+            .begin_symbol(if !self.layout_config.is_zen && (self.layout_config.is_inspector || self.layout_config.is_status) {
+                Some(self.symbols.border.horizontal.as_str())
+            } else {
+                Some(self.symbols.scrollbar.begin.as_str())
+            })
+            .end_symbol(if !self.layout_config.is_zen && (self.layout_config.is_inspector || self.layout_config.is_status) {
+                Some(self.symbols.border.horizontal.as_str())
+            } else {
+                Some(self.symbols.scrollbar.end.as_str())
+            })
+            .track_symbol(Some(self.symbols.scrollbar.track.as_str()))
+            .thumb_symbol(self.symbols.scrollbar.thumb.as_str())
             .thumb_style(Style::default().fg(if self.focus == Focus::Viewport { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 
         frame.render_stateful_widget(scrollbar, self.layout.graph_scrollbar, &mut scrollbar_state);
@@ -233,11 +236,11 @@ impl App {
         let lines: Vec<Line> = (0..area.height)
             .map(|y| {
                 let symbol = if self.layout_config.is_zen && y == 0 {
-                    border::TOP_T
+                    self.symbols.border.top_t.as_str()
                 } else if self.layout_config.is_zen && y + 1 == area.height {
-                    border::BOTTOM_T
+                    self.symbols.border.bottom_t.as_str()
                 } else {
-                    border::VERTICAL
+                    self.symbols.border.vertical.as_str()
                 };
                 Line::from(Span::styled(symbol, Style::default().fg(self.theme.COLOR_BORDER)))
             })
@@ -411,14 +414,14 @@ impl App {
                 let (style, prefix, side, fg, count) = match line.origin {
                     '-' => (
                         Style::default().bg(self.theme.background_or_default(self.theme.COLOR_DARK_RED)).fg(self.theme.COLOR_RED),
-                        status_symbol::DELETED_SPACED.to_string(),
+                        self.symbols.status.deleted_spaced.clone(),
                         self.theme.COLOR_RED,
                         self.theme.COLOR_RED,
                         current_line_old + 1,
                     ),
                     '+' => (
                         Style::default().bg(self.theme.background_or_default(self.theme.COLOR_LIGHT_GREEN_900)).fg(self.theme.COLOR_GREEN),
-                        status_symbol::ADDED_SPACED.to_string(),
+                        self.symbols.status.added_spaced.clone(),
                         self.theme.COLOR_GREEN,
                         self.theme.COLOR_GREEN,
                         current_line + 1,
@@ -528,13 +531,16 @@ impl App {
 
     fn push_conflict_unified_line(&mut self, number: usize, origin: char, text: &str) {
         let (style, prefix, number_fg, text_fg) = match origin {
-            '!' => (Style::default().fg(self.theme.COLOR_ORANGE), status_symbol::CONFLICT_SPACED, self.theme.COLOR_ORANGE, self.theme.COLOR_ORANGE),
-            '-' => {
-                (Style::default().bg(self.theme.background_or_default(self.theme.COLOR_DARK_RED)).fg(self.theme.COLOR_RED), status_symbol::DELETED_SPACED, self.theme.COLOR_RED, self.theme.COLOR_RED)
-            },
+            '!' => (Style::default().fg(self.theme.COLOR_ORANGE), self.symbols.status.conflict_spaced.as_str(), self.theme.COLOR_ORANGE, self.theme.COLOR_ORANGE),
+            '-' => (
+                Style::default().bg(self.theme.background_or_default(self.theme.COLOR_DARK_RED)).fg(self.theme.COLOR_RED),
+                self.symbols.status.deleted_spaced.as_str(),
+                self.theme.COLOR_RED,
+                self.theme.COLOR_RED,
+            ),
             '+' => (
                 Style::default().bg(self.theme.background_or_default(self.theme.COLOR_LIGHT_GREEN_900)).fg(self.theme.COLOR_GREEN),
-                status_symbol::ADDED_SPACED,
+                self.symbols.status.added_spaced.as_str(),
                 self.theme.COLOR_GREEN,
                 self.theme.COLOR_GREEN,
             ),
@@ -763,12 +769,12 @@ impl App {
     }
 
     fn unified_changed_wrap_count(&self, origin: char, text: &str) -> usize {
-        wrap_words(format!("{}{}", Self::split_prefix(origin), text), (self.layout.graph.width as usize).saturating_sub(9)).len().max(1)
+        wrap_words(format!("{}{}", self.split_prefix(origin), text), (self.layout.graph.width as usize).saturating_sub(9)).len().max(1)
     }
 
     fn push_split_pair(&mut self, left: Option<SplitCell>, right: Option<SplitCell>, left_width: usize, right_width: usize, unified_indices: Vec<usize>) {
-        let left_wrapped = left.as_ref().map(|cell| wrap_words(format!("{}{}", Self::split_prefix(cell.origin), cell.text), left_width)).unwrap_or_else(|| vec![String::new()]);
-        let right_wrapped = right.as_ref().map(|cell| wrap_words(format!("{}{}", Self::split_prefix(cell.origin), cell.text), right_width)).unwrap_or_else(|| vec![String::new()]);
+        let left_wrapped = left.as_ref().map(|cell| wrap_words(format!("{}{}", self.split_prefix(cell.origin), cell.text), left_width)).unwrap_or_else(|| vec![String::new()]);
+        let right_wrapped = right.as_ref().map(|cell| wrap_words(format!("{}{}", self.split_prefix(cell.origin), cell.text), right_width)).unwrap_or_else(|| vec![String::new()]);
 
         let rows = left_wrapped.len().max(right_wrapped.len()).max(1);
         for idx in 0..rows {
@@ -785,11 +791,11 @@ impl App {
         }
     }
 
-    fn split_prefix(origin: char) -> &'static str {
+    fn split_prefix(&self, origin: char) -> &str {
         match origin {
-            '-' => status_symbol::DELETED_SPACED,
-            '+' => status_symbol::ADDED_SPACED,
-            '!' => status_symbol::CONFLICT_SPACED,
+            '-' => self.symbols.status.deleted_spaced.as_str(),
+            '+' => self.symbols.status.added_spaced.as_str(),
+            '!' => self.symbols.status.conflict_spaced.as_str(),
             _ => "",
         }
     }

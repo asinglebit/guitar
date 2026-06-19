@@ -1,12 +1,9 @@
-use crate::{
-    app::app::{App, ContextMenuAction},
-    helpers::symbols,
-};
+use crate::app::app::{App, ContextMenuAction};
 use ratatui::{
     Frame,
     style::Style,
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, List, ListItem},
+    widgets::{Block, Borders, List, ListItem},
 };
 
 impl App {
@@ -39,7 +36,7 @@ impl App {
                 .enumerate()
                 .map(|(index, item)| {
                     if item.action == ContextMenuAction::Divider {
-                        let text = format!(" {} ", symbols::border::HORIZONTAL.repeat(divider_width));
+                        let text = format!(" {} ", self.symbols.border.horizontal.repeat(divider_width));
                         return ListItem::new(Line::from(Span::styled(text, Style::default().fg(self.theme.COLOR_BORDER).bg(menu_bg)))).style(Style::default().bg(menu_bg));
                     }
                     if item.action == ContextMenuAction::Spacer {
@@ -49,7 +46,7 @@ impl App {
                     let enabled = item.enabled;
                     let selected = enabled && index == menu.selected;
                     let style = Style::default().fg(if enabled { self.theme.COLOR_TEXT } else { self.theme.COLOR_GREY_600 }).bg(if selected { selected_bg } else { menu_bg });
-                    let marker = if selected { symbols::modal::SELECTED } else { symbols::modal::UNSELECTED };
+                    let marker = if selected { &self.symbols.modal.selected } else { &self.symbols.modal.unselected };
                     let text = format!(" {marker} {:<width$}  ", item.label, width = label_width);
 
                     ListItem::new(Line::from(Span::styled(text, style))).style(style)
@@ -58,7 +55,11 @@ impl App {
         );
         items.push(ListItem::new(Line::from(Span::styled("", Style::default().bg(menu_bg)))).style(Style::default().bg(menu_bg)));
 
-        let block = Block::default().borders(Borders::ALL).border_style(Style::default().fg(self.theme.COLOR_BORDER).bg(menu_bg)).border_type(BorderType::Rounded).style(Style::default().bg(menu_bg));
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(self.theme.COLOR_BORDER).bg(menu_bg))
+            .border_set(self.symbols.border.block_set())
+            .style(Style::default().bg(menu_bg));
 
         frame.render_widget(List::new(items).block(block).style(Style::default().bg(menu_bg)), area);
     }
