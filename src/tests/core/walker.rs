@@ -39,6 +39,13 @@ fn commit(repo: &Repository, file: &str, message: &str) -> Oid {
     repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents).unwrap()
 }
 
+fn stash_tracked_change(repo: &mut Repository, file: &str, message: &str) -> Oid {
+    let workdir = repo.workdir().unwrap().to_path_buf();
+    fs::write(workdir.join(file), message).unwrap();
+    let sig = repo.signature().unwrap();
+    repo.stash_save(&sig, message, None).unwrap()
+}
+
 fn commit_with_parents(repo: &Repository, file: &str, message: &str, parents: &[Oid], time: i64) -> Oid {
     let workdir = repo.workdir().unwrap().to_path_buf();
     fs::write(workdir.join(file), message).unwrap();
@@ -145,4 +152,44 @@ fn walker_expires_new_right_merge_lane_before_next_rendered_row() {
     let merge_col = merge_text.chars().position(|ch| ch == graph::MERGE.chars().next().unwrap()).unwrap();
 
     assert_ne!(next_text.chars().nth(merge_col), graph::VERTICAL.chars().next());
+}
+
+#[test]
+fn walker_records_ref_stash_and_reflog_lanes_from_update_lane() {
+    let (path, mut repo) = temp_repo("cached-lanes");
+    let base = commit(&repo, "file.txt", "base");
+    {
+        let base_commit = repo.find_commit(base).unwrap();
+        repo.tag_lightweight("v-base", base_commit.as_object(), false).unwrap();
+    }
+    let stash = stash_tracked_change(&mut repo, "file.txt", "stashed change");
+
+    let mut walker = Walker::new(path.display().to_string(), 100, HashSet::new(), true).unwrap();
+    while walker.walk() {}
+
+    let base_alias = walker.oids.aliases.get(&base).copied().unwrap();
+    let stash_alias = walker.oids.aliases.get(&stash).copied().unwrap();
+
+    assert!(walker.branches_lanes.contains_key(&base_alias));
+    assert!(walker.tags_lanes.contains_key(&base_alias));
+    assert!(walker.reflogs_lanes.contains_key(&base_alias));
+    assert!(walker.stashes_lanes.contains_key(&stash_alias));
+}
+
+#[test]
+fn walker_keeps_stash_adjacent_to_its_base_parent() {
+    let (path, mut repo) = temp_repo("stash-order");
+    let base = commit(&repo, "file.txt", "base");
+    let stash = stash_tracked_change(&mut repo, "file.txt", "stashed change");
+
+    let mut walker = Walker::new(path.display().to_string(), 100, HashSet::new(), false).unwrap();
+    while walker.walk() {}
+
+    let aliases = walker.oids.get_sorted_aliases();
+    let base_alias = walker.oids.aliases.get(&base).copied().unwrap();
+    let stash_alias = walker.oids.aliases.get(&stash).copied().unwrap();
+    let base_idx = aliases.iter().position(|alias| *alias == base_alias).unwrap();
+    let stash_idx = aliases.iter().position(|alias| *alias == stash_alias).unwrap();
+
+    assert_eq!(stash_idx + 1, base_idx);
 }

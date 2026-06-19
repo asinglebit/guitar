@@ -74,3 +74,24 @@ fn transient_lane_survives_one_snapshot_then_expires() {
     assert_eq!(history[3].len(), 2);
     assert!(history[3].iter().all(|chunk| chunk.alias != 6));
 }
+
+#[test]
+fn update_records_only_changed_parent_lanes() {
+    let mut buffer = Buffer::default();
+
+    buffer.update(Chunk::commit(3, 2, NONE));
+    buffer.update(Chunk::commit(4, 99, NONE));
+    let untouched = buffer.curr[1];
+
+    buffer.update(Chunk::commit(2, NONE, NONE));
+
+    assert_eq!(buffer.curr[1], untouched);
+    assert!(!buffer.delta.ops.iter().any(|op| matches!(op, DeltaOp::Replace { index: 1, .. })));
+
+    buffer.backup();
+    let history = buffer.window(1, buffer.deltas.len());
+    let latest = history.back().unwrap();
+
+    assert_eq!(latest[0], Chunk::commit(2, NONE, NONE));
+    assert_eq!(latest[1], untouched);
+}

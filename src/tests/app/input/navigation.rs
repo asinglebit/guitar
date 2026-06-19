@@ -1180,6 +1180,7 @@ fn graph_reflog_shift_digit_shortcut_toggles_and_reloads() {
     let mut keymaps = minimal_keymaps();
     keymaps.get_mut(&InputMode::Normal).unwrap().insert(KeyBinding::new(KeyCode::Char('0'), KeyModifiers::SHIFT), Command::ToggleGraphReflogs);
     let mut app = App { path: Some(path.clone()), recent: vec![path], repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Branches, keymaps, ..Default::default() };
+    app.layout_config.is_graph_reflogs = false;
 
     app.handle_key_event(KeyEvent::new(KeyCode::Char('0'), KeyModifiers::SHIFT));
 

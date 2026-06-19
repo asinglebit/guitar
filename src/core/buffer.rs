@@ -3,10 +3,10 @@ use im::{OrdMap, Vector};
 
 #[derive(Default, Clone)]
 pub struct Delta {
-    pub ops: Vector<DeltaOp>,
+    pub ops: Vec<DeltaOp>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DeltaOp {
     Insert { index: usize, item: Chunk },
     Remove { index: usize },
@@ -26,18 +26,18 @@ pub struct Buffer {
     pub deltas: Vector<Delta>,
     pub checkpoints: OrdMap<usize, Vector<Chunk>>,
     pub delta: Delta,
-    mergers: Vector<u32>,
-    transient_lanes: Vector<usize>,
+    mergers: Vec<u32>,
+    transient_lanes: Vec<usize>,
 }
 
 impl Buffer {
     pub fn merger(&mut self, alias: u32) {
-        self.mergers.push_back(alias);
+        self.mergers.push(alias);
     }
 
     pub fn expire_lane_after_snapshot(&mut self, lane_idx: usize) {
         if !self.transient_lanes.iter().any(|idx| *idx == lane_idx) {
-            self.transient_lanes.push_back(lane_idx);
+            self.transient_lanes.push(lane_idx);
         }
     }
 
@@ -48,7 +48,7 @@ impl Buffer {
         for lane_idx in transient_lanes {
             if lane_idx < self.curr.len() && !self.curr[lane_idx].is_dummy() {
                 self.curr[lane_idx] = Chunk::dummy();
-                self.delta.ops.push_back(DeltaOp::Replace { index: lane_idx, new: self.curr[lane_idx].clone() });
+                self.delta.ops.push(DeltaOp::Replace { index: lane_idx, new: self.curr[lane_idx] });
             }
         }
 
@@ -58,7 +58,7 @@ impl Buffer {
                 break;
             }
             self.curr.pop_back();
-            self.delta.ops.push_back(DeltaOp::Remove { index: last_idx });
+            self.delta.ops.push(DeltaOp::Remove { index: last_idx });
         }
 
         // Planned mergers split a lane so the second parent can draw toward its target later.
@@ -71,19 +71,19 @@ impl Buffer {
             clone.parent_a = clone.parent_b;
             clone.parent_b = NONE;
             self.curr[merger_idx].parent_b = NONE;
-            self.curr.push_back(clone.clone());
+            self.curr.push_back(clone);
 
-            self.delta.ops.push_back(DeltaOp::Replace { index: merger_idx, new: self.curr[merger_idx].clone() });
+            self.delta.ops.push(DeltaOp::Replace { index: merger_idx, new: self.curr[merger_idx] });
 
-            self.delta.ops.push_back(DeltaOp::Insert { index: self.curr.len() - 1, item: clone });
+            self.delta.ops.push(DeltaOp::Insert { index: self.curr.len() - 1, item: clone });
         }
 
         // Prefer replacing the parent lane; append only when the commit starts a new lane.
         if let Some(first_idx) = self.curr.iter().position(|inner| inner.parent_a == chunk.alias) {
             let old_alias = chunk.alias;
 
-            self.curr[first_idx] = chunk.clone();
-            self.delta.ops.push_back(DeltaOp::Replace { index: first_idx, new: chunk });
+            self.curr[first_idx] = chunk;
+            self.delta.ops.push(DeltaOp::Replace { index: first_idx, new: chunk });
 
             // Clear consumed parent pointers so inactive branch lanes collapse into dummies.
             for (i, inner) in self.curr.iter_mut().enumerate() {
@@ -103,17 +103,19 @@ impl Buffer {
                     parents_changed = true;
                 }
 
-                if parents_changed && inner.parent_a == NONE && inner.parent_b == NONE {
-                    *inner = Chunk::dummy();
-                }
+                if parents_changed {
+                    if inner.parent_a == NONE && inner.parent_b == NONE {
+                        *inner = Chunk::dummy();
+                    }
 
-                self.delta.ops.push_back(DeltaOp::Replace { index: i, new: inner.clone() });
+                    self.delta.ops.push(DeltaOp::Replace { index: i, new: *inner });
+                }
             }
 
             UpdateOutcome { lane_idx: first_idx, started_lane: false }
         } else {
-            self.curr.push_back(chunk.clone());
-            self.delta.ops.push_back(DeltaOp::Insert { index: self.curr.len() - 1, item: chunk });
+            self.curr.push_back(chunk);
+            self.delta.ops.push(DeltaOp::Insert { index: self.curr.len() - 1, item: chunk });
             UpdateOutcome { lane_idx: self.curr.len() - 1, started_lane: true }
         }
     }
@@ -143,13 +145,13 @@ impl Buffer {
             for op in delta.ops.iter() {
                 match op {
                     DeltaOp::Insert { index, item } => {
-                        curr.insert(*index, item.clone());
+                        curr.insert(*index, *item);
                     },
                     DeltaOp::Remove { index } => {
                         curr.remove(*index);
                     },
                     DeltaOp::Replace { index, new } => {
-                        curr[*index] = new.clone();
+                        curr[*index] = *new;
                     },
                 }
             }

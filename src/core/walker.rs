@@ -11,7 +11,11 @@ use crate::{
 };
 use git2::Repository;
 use im::{HashSet, Vector};
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet as StdHashSet},
+    rc::Rc,
+};
 
 // Walks git history into lane snapshots and ref lookup tables.
 pub struct Walker {
@@ -37,6 +41,9 @@ pub struct Walker {
     pub stashes_lanes: HashMap<u32, usize>,
     pub reflogs_lanes: HashMap<u32, usize>,
     pub head_reflog_entries: Vec<HeadReflogEntry>,
+    stash_aliases: StdHashSet<u32>,
+    reflog_aliases: StdHashSet<u32>,
+    stash_parent_aliases: Vec<(u32, u32)>,
 
     // Number of commits requested per walk iteration.
     pub amount: usize,
@@ -67,11 +74,22 @@ impl Walker {
             let mut repo_mut = repo.borrow_mut();
             oids.stashes = get_stashed_commits(&mut repo_mut, &mut oids);
         }
+        let stash_aliases: StdHashSet<u32> = oids.stashes.iter().copied().collect();
+        let mut stash_parent_aliases = Vec::with_capacity(oids.stashes.len());
+        for stash_alias in oids.stashes.clone() {
+            let parent_oid = repo.borrow().find_commit(*oids.get_oid_by_alias(stash_alias)).ok().and_then(|commit| commit.parent_ids().next());
+            if let Some(parent_oid) = parent_oid {
+                let parent_alias = oids.get_alias_by_oid(parent_oid);
+                stash_parent_aliases.push((stash_alias, parent_alias));
+            }
+        }
 
         let head_reflog_entries = get_head_reflog_entries(&repo.borrow()).unwrap_or_default();
         let mut head_reflog_roots = Vec::new();
+        let mut reflog_aliases = StdHashSet::new();
         for entry in &head_reflog_entries {
-            oids.get_alias_by_oid(entry.new_oid);
+            let alias = oids.get_alias_by_oid(entry.new_oid);
+            reflog_aliases.insert(alias);
             if include_head_reflog_roots && !head_reflog_roots.contains(&entry.new_oid) {
                 head_reflog_roots.push(entry.new_oid);
             }
@@ -79,7 +97,24 @@ impl Walker {
 
         let batcher = Batcher::new(repo.clone(), &hidden_branch_names, &head_reflog_roots).expect("Error");
 
-        Ok(Self { repo, batcher, buffer, oids, branches_lanes, branches_local, branches_remote, tags_lanes, tags_local, stashes_lanes, reflogs_lanes, head_reflog_entries, amount })
+        Ok(Self {
+            repo,
+            batcher,
+            buffer,
+            oids,
+            branches_lanes,
+            branches_local,
+            branches_remote,
+            tags_lanes,
+            tags_local,
+            stashes_lanes,
+            reflogs_lanes,
+            head_reflog_entries,
+            stash_aliases,
+            reflog_aliases,
+            stash_parent_aliases,
+            amount,
+        })
     }
 
     // Process one revwalk page and update lane snapshots for the renderer.
@@ -104,20 +139,10 @@ impl Walker {
             self.buffer.borrow_mut().update(Chunk::uncommitted(head_alias, NONE));
         }
 
-        let stashes: Vec<u32> = self.oids.stashes.clone();
-        let reflog_aliases: Vec<u32> = self.head_reflog_entries.iter().filter_map(|entry| self.oids.aliases.get(&entry.new_oid).copied()).collect();
-
         // Place each stash near its first parent so it reads as a side snapshot.
-        for &stash_alias in &stashes {
-            let stash_oid = self.oids.get_oid_by_alias(stash_alias);
-            let stash_commit = repo.find_commit(*stash_oid).unwrap();
-
-            if let Some(parent_oid) = stash_commit.parent_ids().next() {
-                let parent_alias = self.oids.get_alias_by_oid(parent_oid);
-
-                if let Some(pos) = sorted_batch.iter().position(|&a| a == parent_alias) {
-                    sorted_batch.insert(if pos == 0 { 0 } else { pos - 1 }, stash_alias);
-                }
+        for &(stash_alias, parent_alias) in &self.stash_parent_aliases {
+            if let Some(pos) = sorted_batch.iter().position(|&a| a == parent_alias) {
+                sorted_batch.insert(if pos == 0 { 0 } else { pos - 1 }, stash_alias);
             }
         }
 
@@ -136,7 +161,7 @@ impl Walker {
             let parent_b_oid = parents_iter.next();
 
             // Stashes should point only to their base commit, not the index/worktree parents.
-            let (parent_a, parent_b) = if stashes.contains(&alias) {
+            let (parent_a, parent_b) = if self.stash_aliases.contains(&alias) {
                 (parent_a_oid.map(|p| self.oids.get_alias_by_oid(p)).unwrap_or(NONE), NONE)
             } else {
                 (parent_a_oid.map(|p| self.oids.get_alias_by_oid(p)).unwrap_or(NONE), parent_b_oid.map(|p| self.oids.get_alias_by_oid(p)).unwrap_or(NONE))
@@ -146,44 +171,40 @@ impl Walker {
 
             let update = buffer.update(chunk);
 
-            for (lane_idx, chunk) in buffer.curr.iter().enumerate() {
-                if !chunk.is_dummy() && alias == chunk.alias {
-                    // Ref lanes are captured after the buffer decides where this alias sits.
-                    if self.branches_local.contains_key(&alias) || self.branches_remote.contains_key(&alias) {
-                        self.branches_lanes.insert(alias, lane_idx);
-                    }
+            if let Some(chunk) = buffer.curr.get(update.lane_idx)
+                && !chunk.is_dummy()
+                && alias == chunk.alias
+            {
+                let lane_idx = update.lane_idx;
 
-                    if self.tags_local.contains_key(&alias) {
-                        self.tags_lanes.insert(alias, lane_idx);
-                    }
+                // Ref lanes are captured after the buffer decides where this alias sits.
+                if self.branches_local.contains_key(&alias) || self.branches_remote.contains_key(&alias) {
+                    self.branches_lanes.insert(alias, lane_idx);
+                }
 
-                    if stashes.contains(&alias) {
-                        self.stashes_lanes.insert(alias, lane_idx);
-                    }
+                if self.tags_local.contains_key(&alias) {
+                    self.tags_lanes.insert(alias, lane_idx);
+                }
 
-                    if reflog_aliases.contains(&alias) {
-                        self.reflogs_lanes.insert(alias, lane_idx);
-                    }
+                if self.stash_aliases.contains(&alias) {
+                    self.stashes_lanes.insert(alias, lane_idx);
+                }
 
-                    if chunk.parent_a != NONE && chunk.parent_b != NONE {
-                        // If the second parent is not already visible as a lane, mark a deferred merge.
-                        let mut is_merger_found = false;
-                        for chunk_nested in buffer.curr.iter() {
-                            if chunk_nested.parent_a != NONE && chunk_nested.parent_b == NONE && chunk.parent_b == chunk_nested.parent_a {
-                                is_merger_found = true;
-                                break;
-                            }
-                        }
-                        if !is_merger_found {
-                            merger_alias = chunk.alias;
-                        } else if update.started_lane
-                            && update.lane_idx == lane_idx
-                            && lane_idx + 1 == buffer.curr.len()
-                            && parent_is_on_prior_lane(&buffer.curr, chunk.parent_a, lane_idx)
-                            && parent_is_on_prior_lane(&buffer.curr, chunk.parent_b, lane_idx)
-                        {
-                            transient_lane = Some(lane_idx);
-                        }
+                if self.reflog_aliases.contains(&alias) {
+                    self.reflogs_lanes.insert(alias, lane_idx);
+                }
+
+                if chunk.parent_a != NONE && chunk.parent_b != NONE {
+                    // If the second parent is not already visible as a lane, mark a deferred merge.
+                    let is_merger_found = buffer.curr.iter().any(|chunk_nested| chunk_nested.parent_a != NONE && chunk_nested.parent_b == NONE && chunk.parent_b == chunk_nested.parent_a);
+                    if !is_merger_found {
+                        merger_alias = chunk.alias;
+                    } else if update.started_lane
+                        && lane_idx + 1 == buffer.curr.len()
+                        && parent_is_on_prior_lane(&buffer.curr, chunk.parent_a, lane_idx)
+                        && parent_is_on_prior_lane(&buffer.curr, chunk.parent_b, lane_idx)
+                    {
+                        transient_lane = Some(lane_idx);
                     }
                 }
             }

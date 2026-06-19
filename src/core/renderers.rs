@@ -1,4 +1,7 @@
-use crate::core::graph_service::{GraphHistory, GraphRow};
+use crate::core::{
+    graph_service::{GraphHistory, GraphRow},
+    layers::LayersContext,
+};
 use crate::helpers::text::truncate_with_ellipsis;
 use crate::helpers::{
     keymap::{Command, KeyBinding, keycode_to_visual_string},
@@ -13,22 +16,20 @@ use crate::{
         symbols::{branch as branch_symbol, entity, graph, status, worktree},
         text::{modifiers_to_string, pascal_to_spaced},
     },
-    layers,
 };
-use im::{HashSet, Vector};
+use im::Vector;
 use indexmap::IndexMap;
 use ratatui::{
     style::Style,
     text::{Line, Span},
 };
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub const GRAPH_COMMITTER_WIDTH: usize = 18;
 
 // Render graph symbols from worker-projected rows. The lane history is still
 // precomputed by Buffer, but only for the requested visible range.
 pub fn render_graph_projection(theme: &Theme, rows: &[GraphRow], history: &GraphHistory, head_alias: u32, start: usize, end: usize, render_uncommitted_row: bool) -> Vec<Line<'static>> {
-    let mut layers = layers!(Rc::new(RefCell::new(ColorPicker::from_theme(theme))));
+    let mut layers = LayersContext::new(ColorPicker::from_theme(theme));
     let mut lines: Vec<Line> = Vec::new();
 
     for row in rows {
@@ -57,6 +58,7 @@ pub fn render_graph_projection(theme: &Theme, rows: &[GraphRow], history: &Graph
                 continue;
             },
         };
+        layers.reserve(last.len().saturating_mul(2));
 
         if row.alias == NONE {
             lines.push(Line::from(Span::styled(format!(" {}", graph::UNCOMMITTED), Style::default().fg(theme.COLOR_GREY_400))));
@@ -81,14 +83,15 @@ pub fn render_graph_projection(theme: &Theme, rows: &[GraphRow], history: &Graph
                 branching_lanes.push(lane_idx);
             }
         }
+        let mut branching_lane_idx = 0;
 
         for chunk in last.iter() {
             if is_commit_found
                 && !branching_lanes.is_empty()
-                && let Some(&closest_lane) = branching_lanes.first()
+                && let Some(&closest_lane) = branching_lanes.get(branching_lane_idx)
             {
                 if closest_lane == lane_idx {
-                    branching_lanes.remove(0);
+                    branching_lane_idx += 1;
                 } else if lane_idx < closest_lane {
                     layers.merge(graph::EMPTY, closest_lane);
                     layers.merge(graph::EMPTY, closest_lane);
@@ -334,42 +337,59 @@ fn single_active_parent(chunk: &Chunk) -> Option<u32> {
 
 // Remove graph lane pairs that are visually empty across every rendered row.
 pub fn remove_empty_columns(lines: &mut Vec<Line<'_>>) {
-    let mut non_empty_counts: HashMap<usize, usize> = HashMap::new();
+    let pair_count = lines.iter().map(|line| line.spans.len() / 2).max().unwrap_or(0);
+    if pair_count == 0 {
+        return;
+    }
+
+    let mut seen_pair = vec![false; pair_count];
+    let mut keep_pair = vec![false; pair_count];
 
     // Graph lanes occupy two spans, so pruning must happen in span pairs.
     for line in lines.iter() {
-        let spans = &line.spans;
-        let mut idx = 0;
-        while idx + 1 < spans.len() {
-            let a = &spans[idx];
-            let b = &spans[idx + 1];
-            let x = non_empty_counts.entry(idx).or_insert(0);
-            if a.content != graph::EMPTY && a.content != graph::HORIZONTAL || b.content != graph::EMPTY && b.content != graph::HORIZONTAL {
-                *x += 1;
+        for (pair_idx, pair) in line.spans.chunks_exact(2).enumerate() {
+            seen_pair[pair_idx] = true;
+            if is_visible_lane_symbol(&pair[0]) || is_visible_lane_symbol(&pair[1]) {
+                keep_pair[pair_idx] = true;
             }
-            idx += 2;
         }
     }
 
-    // Missing entries are not empty; only recorded zero-count pairs are removed.
-    let empty_indices: HashSet<usize> = non_empty_counts.iter().filter_map(|(&idx, &count)| if count == 0 { Some(idx) } else { None }).collect();
+    // Missing entries are not empty; only observed all-empty/horizontal pairs are removed.
+    for (idx, keep) in keep_pair.iter_mut().enumerate() {
+        *keep = *keep || !seen_pair[idx];
+    }
 
     for line in lines.iter_mut() {
-        let mut new_spans: Vec<Span> = Vec::with_capacity(line.spans.len());
-        let mut idx = 0;
-        while idx + 1 < line.spans.len() {
-            if !empty_indices.contains(&idx) {
-                new_spans.push(line.spans[idx].clone());
-                new_spans.push(line.spans[idx + 1].clone());
+        let old_spans = std::mem::take(&mut line.spans);
+        let mut new_spans = Vec::with_capacity(old_spans.len());
+        let mut pending_pair_start = None;
+
+        for (span_idx, span) in old_spans.into_iter().enumerate() {
+            let pair_idx = span_idx / 2;
+            let keep = keep_pair.get(pair_idx).copied().unwrap_or(true);
+            if span_idx.is_multiple_of(2) {
+                if keep {
+                    pending_pair_start = Some(span);
+                } else {
+                    pending_pair_start = None;
+                }
+            } else if keep && let Some(first) = pending_pair_start.take() {
+                new_spans.push(first);
+                new_spans.push(span);
             }
-            idx += 2;
         }
+
         // Preserve any leading or trailing single span outside lane pairs.
-        if idx < line.spans.len() {
-            new_spans.push(line.spans[idx].clone());
+        if let Some(span) = pending_pair_start {
+            new_spans.push(span);
         }
-        *line = Line::from(new_spans);
+        line.spans = new_spans;
     }
+}
+
+fn is_visible_lane_symbol(span: &Span<'_>) -> bool {
+    span.content != graph::EMPTY && span.content != graph::HORIZONTAL
 }
 
 pub fn render_sha_projection(theme: &Theme, rows: &[GraphRow], selected: usize) -> Vec<Line<'static>> {
@@ -539,6 +559,7 @@ mod tests {
     };
     use git2::Oid;
     use im::Vector;
+    use ratatui::style::Color;
     use std::path::PathBuf;
 
     fn graph_row(index: usize, oid: Oid, summary: &str) -> GraphRow {
@@ -642,6 +663,21 @@ mod tests {
 
         assert!(line_text(&with_up[0]).contains(graph::MERGE_RIGHT_FROM_AND_UP), "{:?}", line_text(&with_up[0]));
         assert!(!line_text(&without_up[0]).contains(graph::MERGE_RIGHT_FROM_AND_UP), "{:?}", line_text(&without_up[0]));
+    }
+
+    #[test]
+    fn empty_column_pruning_preserves_visible_spans_and_styles() {
+        let visible_style = Style::default().fg(Color::Red);
+        let mut lines = vec![
+            Line::from(vec![Span::raw(graph::EMPTY), Span::raw(graph::HORIZONTAL), Span::styled(graph::VERTICAL, visible_style), Span::raw(graph::EMPTY)]),
+            Line::from(vec![Span::raw(graph::HORIZONTAL), Span::raw(graph::EMPTY), Span::raw(graph::EMPTY), Span::raw(graph::EMPTY)]),
+        ];
+
+        remove_empty_columns(&mut lines);
+
+        assert_eq!(line_text(&lines[0]), format!("{}{}", graph::VERTICAL, graph::EMPTY));
+        assert_eq!(lines[0].spans[0].style.fg, Some(Color::Red));
+        assert_eq!(line_text(&lines[1]), format!("{}{}", graph::EMPTY, graph::EMPTY));
     }
 
     #[test]
