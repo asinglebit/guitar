@@ -24,16 +24,16 @@ impl App {
         };
 
         let mut lines = Vec::new();
-        lines.push(Line::from(Span::styled(modal::SET_SHORTCUT, Style::default().fg(self.theme.COLOR_TEXT))));
+        lines.push(Line::from(Span::styled(modal::SET_SHORTCUT(), Style::default().fg(self.theme.COLOR_TEXT))));
         lines.push(Line::default());
         lines.push(Line::from(Span::styled(format!("{} / {}", input_mode_to_visual_string(selection.mode), command_to_visual_string(&selection.command)), Style::default().fg(self.theme.COLOR_TEXT))));
-        lines.push(Line::from(Span::styled(format!("{} {}", modal::CURRENT_SHORTCUT, keybinding_to_visual_string(&selection.key)), Style::default().fg(self.theme.COLOR_GREY_600))));
+        lines.push(Line::from(Span::styled(format!("{} {}", modal::CURRENT_SHORTCUT(), keybinding_to_visual_string(&selection.key)), Style::default().fg(self.theme.COLOR_GREY_600))));
 
         if let Some(candidate) = &self.modal_key_capture_candidate {
             let color = if self.modal_key_capture_error.is_some() { self.theme.COLOR_ORANGE } else { self.theme.COLOR_GRASS };
-            lines.push(Line::from(Span::styled(format!("{} {}", modal::NEW_SHORTCUT, keybinding_to_visual_string(candidate)), Style::default().fg(color))));
+            lines.push(Line::from(Span::styled(format!("{} {}", modal::NEW_SHORTCUT(), keybinding_to_visual_string(candidate)), Style::default().fg(color))));
         } else {
-            lines.push(Line::from(Span::styled(modal::NEW_SHORTCUT_WAITING, Style::default().fg(self.theme.COLOR_GREY_600))));
+            lines.push(Line::from(Span::styled(modal::NEW_SHORTCUT_WAITING(), Style::default().fg(self.theme.COLOR_GREY_600))));
         }
 
         if let Some(error) = &self.modal_key_capture_error {
@@ -53,9 +53,9 @@ impl App {
 
         lines.push(Line::default());
         let line = if self.modal_key_capture_candidate.is_some() && self.modal_key_capture_error.is_none() {
-            action_row(&[(modal::ACTION_SAVE, modal::KEY_ENTER)], Style::default().fg(self.theme.COLOR_HIGHLIGHTED))
+            action_row(&[(modal::ACTION_SAVE(), modal::KEY_ENTER())], Style::default().fg(self.theme.COLOR_HIGHLIGHTED))
         } else {
-            Line::from(Span::styled(modal::PRESS_KEY, Style::default().fg(self.theme.COLOR_HIGHLIGHTED)))
+            Line::from(Span::styled(modal::PRESS_KEY(), Style::default().fg(self.theme.COLOR_HIGHLIGHTED)))
         };
         lines.push(line);
 

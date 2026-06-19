@@ -26,12 +26,12 @@ pub(crate) enum RemoteAction {
 impl RemoteAction {
     pub(crate) fn label(self) -> &'static str {
         match self {
-            RemoteAction::Fetch => crate::helpers::localisation::menu::FETCH,
-            RemoteAction::SetDefault => crate::helpers::localisation::menu::SET_AS_DEFAULT,
-            RemoteAction::Rename => crate::helpers::localisation::menu::RENAME_REMOTE,
-            RemoteAction::EditFetchUrl => crate::helpers::localisation::menu::EDIT_FETCH_URL,
-            RemoteAction::EditPushUrl => crate::helpers::localisation::menu::EDIT_PUSH_URL,
-            RemoteAction::Delete => crate::helpers::localisation::menu::DELETE_REMOTE,
+            RemoteAction::Fetch => crate::helpers::localisation::menu::FETCH(),
+            RemoteAction::SetDefault => crate::helpers::localisation::menu::SET_AS_DEFAULT(),
+            RemoteAction::Rename => crate::helpers::localisation::menu::RENAME_REMOTE(),
+            RemoteAction::EditFetchUrl => crate::helpers::localisation::menu::EDIT_FETCH_URL(),
+            RemoteAction::EditPushUrl => crate::helpers::localisation::menu::EDIT_PUSH_URL(),
+            RemoteAction::Delete => crate::helpers::localisation::menu::DELETE_REMOTE(),
         }
     }
 }
@@ -65,11 +65,11 @@ impl App {
 
     pub(crate) fn remote_input_title(&self) -> &'static str {
         match self.modal_remote_input_action {
-            RemoteInputAction::AddName => modal::PROMPT_REMOTE_ADD_NAME,
-            RemoteInputAction::AddUrl => modal::PROMPT_REMOTE_ADD_URL,
-            RemoteInputAction::Rename => modal::PROMPT_REMOTE_RENAME,
-            RemoteInputAction::EditUrl => modal::PROMPT_REMOTE_EDIT_URL,
-            RemoteInputAction::EditPushUrl => modal::PROMPT_REMOTE_EDIT_PUSH_URL,
+            RemoteInputAction::AddName => modal::PROMPT_REMOTE_ADD_NAME(),
+            RemoteInputAction::AddUrl => modal::PROMPT_REMOTE_ADD_URL(),
+            RemoteInputAction::Rename => modal::PROMPT_REMOTE_RENAME(),
+            RemoteInputAction::EditUrl => modal::PROMPT_REMOTE_EDIT_URL(),
+            RemoteInputAction::EditPushUrl => modal::PROMPT_REMOTE_EDIT_PUSH_URL(),
         }
     }
 
@@ -112,7 +112,7 @@ impl App {
                         self.viewport = crate::app::app::Viewport::Settings;
                         self.reload(None);
                     },
-                    Err(error) => self.show_error(errors::with_error(errors::SET_DEFAULT_REMOTE, error)),
+                    Err(error) => self.show_error(errors::with_error(errors::SET_DEFAULT_REMOTE(), error)),
                 }
             },
             RemoteAction::Rename => {
@@ -162,7 +162,7 @@ impl App {
                     return;
                 }
                 if !git2::Remote::is_valid_name(&name) {
-                    self.show_error(errors::ADD_REMOTE_INVALID_NAME);
+                    self.show_error(errors::ADD_REMOTE_INVALID_NAME());
                     return;
                 }
                 self.modal_remote_name = name;
@@ -176,7 +176,7 @@ impl App {
                     return;
                 };
                 let Some(old_name) = self.modal_remote_target.clone() else {
-                    self.show_error(errors::RENAME_REMOTE_NO_PENDING);
+                    self.show_error(errors::RENAME_REMOTE_NO_PENDING());
                     return;
                 };
                 let new_name = self.modal_input.value().trim().to_string();
@@ -187,7 +187,7 @@ impl App {
                         self.viewport = crate::app::app::Viewport::Settings;
                         self.reload(None);
                     },
-                    Err(error) => self.show_error(errors::with_error(errors::RENAME_REMOTE, error)),
+                    Err(error) => self.show_error(errors::with_error(errors::RENAME_REMOTE(), error)),
                 }
             },
             _ => {},
@@ -210,12 +210,12 @@ impl App {
                         self.viewport = crate::app::app::Viewport::Settings;
                         self.reload(None);
                     },
-                    Err(error) => self.show_error(errors::with_error(errors::ADD_REMOTE, error)),
+                    Err(error) => self.show_error(errors::with_error(errors::ADD_REMOTE(), error)),
                 }
             },
             RemoteInputAction::EditUrl => {
                 let Some(remote_name) = self.modal_remote_target.clone() else {
-                    self.show_error(errors::EDIT_REMOTE_NO_PENDING);
+                    self.show_error(errors::EDIT_REMOTE_NO_PENDING());
                     return;
                 };
                 let url = self.modal_input.value().trim().to_string();
@@ -225,12 +225,12 @@ impl App {
                         self.viewport = crate::app::app::Viewport::Settings;
                         self.reload(None);
                     },
-                    Err(error) => self.show_error(errors::with_error(errors::EDIT_REMOTE, error)),
+                    Err(error) => self.show_error(errors::with_error(errors::EDIT_REMOTE(), error)),
                 }
             },
             RemoteInputAction::EditPushUrl => {
                 let Some(remote_name) = self.modal_remote_target.clone() else {
-                    self.show_error(errors::EDIT_REMOTE_NO_PENDING);
+                    self.show_error(errors::EDIT_REMOTE_NO_PENDING());
                     return;
                 };
                 let push_url = self.modal_input.value().trim().to_string();
@@ -240,7 +240,7 @@ impl App {
                         self.viewport = crate::app::app::Viewport::Settings;
                         self.reload(None);
                     },
-                    Err(error) => self.show_error(errors::with_error(errors::EDIT_REMOTE, error)),
+                    Err(error) => self.show_error(errors::with_error(errors::EDIT_REMOTE(), error)),
                 }
             },
             _ => {},
@@ -253,7 +253,7 @@ impl App {
             return;
         };
         let Some(remote_name) = self.modal_remote_target.clone() else {
-            self.show_error(errors::DELETE_REMOTE_NO_PENDING);
+            self.show_error(errors::DELETE_REMOTE_NO_PENDING());
             return;
         };
 
@@ -264,7 +264,7 @@ impl App {
                 self.viewport = crate::app::app::Viewport::Settings;
                 self.reload(None);
             },
-            Err(error) => self.show_error(errors::with_error(errors::DELETE_REMOTE, error)),
+            Err(error) => self.show_error(errors::with_error(errors::DELETE_REMOTE(), error)),
         }
     }
 

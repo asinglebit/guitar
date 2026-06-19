@@ -21,11 +21,11 @@ pub enum NetworkRequest {
 impl NetworkRequest {
     pub fn label(&self) -> &'static str {
         match self {
-            NetworkRequest::Fetch { .. } => network::FETCH,
-            NetworkRequest::PushBranch { .. } => network::PUSH,
-            NetworkRequest::PushTags { .. } => network::PUSH_TAGS,
-            NetworkRequest::DeleteRemoteBranch { .. } => network::DELETE_REMOTE_BRANCH,
-            NetworkRequest::UpdateSubmodule { .. } => network::UPDATE_SUBMODULE,
+            NetworkRequest::Fetch { .. } => network::FETCH(),
+            NetworkRequest::PushBranch { .. } => network::PUSH(),
+            NetworkRequest::PushTags { .. } => network::PUSH_TAGS(),
+            NetworkRequest::DeleteRemoteBranch { .. } => network::DELETE_REMOTE_BRANCH(),
+            NetworkRequest::UpdateSubmodule { .. } => network::UPDATE_SUBMODULE(),
         }
     }
 

@@ -12,7 +12,13 @@ use crate::{
     },
     core::{branches::Branches, oids::Oids, tags::Tags},
     git::queries::helpers::UncommittedChanges,
-    helpers::{colors::ColorPicker, palette::*, spinner::Spinner, symbols::SymbolTheme},
+    helpers::{
+        colors::ColorPicker,
+        localisation::{Language, set_active_language},
+        palette::*,
+        spinner::Spinner,
+        symbols::SymbolTheme,
+    },
 };
 use indexmap::IndexMap;
 use ratatui::{style::Style, text::Span, widgets::ListItem};
@@ -36,6 +42,8 @@ impl Default for App {
     fn default() -> Self {
         let theme = Theme::default();
         let symbols = SymbolTheme::default();
+        let language = Language::English;
+        set_active_language(language);
         let color = Rc::new(RefCell::new(ColorPicker::from_theme(&theme)));
         let heatmap = empty_heatmap();
         let logo = vec![
@@ -55,6 +63,7 @@ impl Default for App {
             last_input_direction: None,
             theme,
             symbols,
+            language,
             heatmap,
 
             // User
@@ -157,6 +166,7 @@ impl Default for App {
             modal_key_capture_error: None,
             keymap_save_path: None,
             symbol_theme_save_path: None,
+            language_save_path: None,
 
             // Viewer
             viewer_selected: 0,

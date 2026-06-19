@@ -33,20 +33,20 @@ impl App {
         frame.render_widget(paragraph, self.layout.title_left);
 
         let focus_name = match self.focus {
-            Focus::Viewport if self.viewport == Viewport::Settings => settings::SETTINGS,
-            Focus::Viewport if self.viewport == Viewport::Viewer => status_text::VIEWER,
-            Focus::Viewport => status_text::GRAPH,
-            Focus::Branches => settings::BRANCHES,
-            Focus::Tags => settings::TAGS,
-            Focus::Stashes => settings::STASHES,
-            Focus::Reflogs => settings::REFLOG,
-            Focus::Worktrees => settings::WORKTREES,
-            Focus::Submodules => settings::SUBMODULES,
-            Focus::Search => status_text::SEARCH,
-            Focus::Inspector => status_text::INSPECTOR,
-            Focus::StatusTop => status_text::STAGED,
-            Focus::StatusBottom => status_text::UNSTAGED,
-            _ => status_text::MODAL,
+            Focus::Viewport if self.viewport == Viewport::Settings => settings::SETTINGS(),
+            Focus::Viewport if self.viewport == Viewport::Viewer => status_text::VIEWER(),
+            Focus::Viewport => status_text::GRAPH(),
+            Focus::Branches => settings::BRANCHES(),
+            Focus::Tags => settings::TAGS(),
+            Focus::Stashes => settings::STASHES(),
+            Focus::Reflogs => settings::REFLOG(),
+            Focus::Worktrees => settings::WORKTREES(),
+            Focus::Submodules => settings::SUBMODULES(),
+            Focus::Search => status_text::SEARCH(),
+            Focus::Inspector => status_text::INSPECTOR(),
+            Focus::StatusTop => status_text::STAGED(),
+            Focus::StatusBottom => status_text::UNSTAGED(),
+            _ => status_text::MODAL(),
         };
 
         let hint_line = Line::from(Span::styled(format!("{} ", focus_name), Style::default().fg(self.theme.COLOR_HIGHLIGHTED)));

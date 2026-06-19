@@ -331,7 +331,7 @@ fn file_history_rows(walk_ctx: &Walker, path: &str, symbols: &SymbolTheme) -> Re
 }
 
 fn no_message(symbols: &SymbolTheme) -> String {
-    format!("{} {}", symbols.empty_state.mark, empty::NO_MESSAGE)
+    format!("{} {}", symbols.empty_state.mark, empty::NO_MESSAGE())
 }
 
 fn graph_rows(walk_ctx: &Walker, worktrees: &Worktrees, hidden_branch_names: &HashSet<String>, symbols: &SymbolTheme, start: usize, end: usize) -> Vec<GraphRow> {
@@ -349,7 +349,7 @@ fn graph_rows(walk_ctx: &Walker, worktrees: &Worktrees, hidden_branch_names: &Ha
             let summary = commit.summary().map(str::to_string).unwrap_or_else(|| no_message(symbols));
             let committer = commit.committer();
             let committer_date = timestamp_to_utc_date_time(committer.when());
-            let committer_name = committer.name().unwrap_or(common::UNKNOWN).to_string();
+            let committer_name = committer.name().unwrap_or(common::UNKNOWN()).to_string();
             (summary, committer_date, committer_name)
         } else {
             (no_message(symbols), String::new(), String::new())
@@ -416,7 +416,7 @@ fn pane_rows(pane: GraphPane, walk_ctx: &Walker) -> Vec<GraphPaneRow> {
                 .iter()
                 .map(|&alias| {
                     let oid = *walk_ctx.oids.get_oid_by_alias(alias);
-                    let summary = repo.find_commit(oid).ok().and_then(|commit| commit.summary().map(str::to_string)).unwrap_or_else(|| status_text::STASH.to_string());
+                    let summary = repo.find_commit(oid).ok().and_then(|commit| commit.summary().map(str::to_string)).unwrap_or_else(|| status_text::STASH().to_string());
                     GraphPaneRow::Stash { alias, summary, lane: walk_ctx.stashes_lanes.get(&alias).copied(), graph_index: index_map.get(&alias).copied() }
                 })
                 .collect()

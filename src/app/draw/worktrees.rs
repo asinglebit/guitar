@@ -30,8 +30,8 @@ impl App {
                 .branch
                 .as_ref()
                 .map(|branch| format!("{} {branch}", self.symbols.branch.local_visible))
-                .or_else(|| entry.head.map(|oid| format!("{} #{:.6}", status_text::DETACHED, oid)))
-                .unwrap_or_else(|| common::NO_HEAD.to_string());
+                .or_else(|| entry.head.map(|oid| format!("{} #{:.6}", status_text::DETACHED(), oid)))
+                .unwrap_or_else(|| common::NO_HEAD().to_string());
 
             // Status icons stack on the right edge of the row; the worktree name and branch stay on the left.
             let mut status_parts: Vec<&str> = Vec::new();
@@ -85,7 +85,7 @@ impl App {
             for _ in 0..blank_lines_before {
                 lines.push(Line::default());
             }
-            let empty_text = format!("{}{}", self.symbols.worktree.empty, empty::NO_WORKTREES);
+            let empty_text = format!("{}{}", self.symbols.worktree.empty, empty::NO_WORKTREES());
             lines.push(Line::from(Span::styled(center_line(&truncate_with_ellipsis(&empty_text, max_text_width), max_text_width + 3), Style::default().fg(self.theme.COLOR_GREY_800))));
         }
 

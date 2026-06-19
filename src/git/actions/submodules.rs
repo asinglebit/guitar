@@ -37,7 +37,7 @@ pub fn update_submodule(repo_path: &str, name: &str, auth_session: AuthSession) 
     let name = name.to_string();
 
     thread::spawn(move || {
-        let attempt = AuthAttempt::new(auth_session, network::UPDATE_SUBMODULE);
+        let attempt = AuthAttempt::new(auth_session, network::UPDATE_SUBMODULE());
         let result = (|| -> Result<(), git2::Error> {
             let repo = Repository::open(&repo_path)?;
             let config = repo.config()?;
@@ -56,7 +56,7 @@ pub fn update_submodule(repo_path: &str, name: &str, auth_session: AuthSession) 
             submodule.update(true, Some(&mut options))
         })();
 
-        network_result(network::UPDATE_SUBMODULE, &attempt, result)
+        network_result(network::UPDATE_SUBMODULE(), &attempt, result)
     })
 }
 

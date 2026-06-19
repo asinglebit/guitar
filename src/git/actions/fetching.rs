@@ -13,7 +13,7 @@ pub fn fetch_remote(repo_path: &str, remote_name: &str, auth_session: AuthSessio
     let remote_name = remote_name.to_string();
 
     thread::spawn(move || {
-        let attempt = AuthAttempt::new(auth_session, network::FETCH);
+        let attempt = AuthAttempt::new(auth_session, network::FETCH());
         let result = (|| -> Result<(), git2::Error> {
             let repo = Repository::open(repo_path)?;
             let mut remote = repo.find_remote(&remote_name)?;
@@ -38,6 +38,6 @@ pub fn fetch_remote(repo_path: &str, remote_name: &str, auth_session: AuthSessio
             Ok(())
         })();
 
-        network_result(network::FETCH, &attempt, result)
+        network_result(network::FETCH(), &attempt, result)
     })
 }

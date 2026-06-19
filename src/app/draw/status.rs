@@ -106,7 +106,7 @@ impl App {
                     lines_status_top.push(StatusRow::plain(Line::from("")));
                 }
                 lines_status_top.push(StatusRow::plain(Line::from(Span::styled(
-                    center_line(&truncate_with_ellipsis(&format!("{} {}", self.symbols.empty_state.mark, empty::NO_STAGED_CHANGES), max_status_top_width), max_status_top_width + 3),
+                    center_line(&truncate_with_ellipsis(&format!("{} {}", self.symbols.empty_state.mark, empty::NO_STAGED_CHANGES()), max_status_top_width), max_status_top_width + 3),
                     Style::default().fg(self.theme.COLOR_GREY_800),
                 ))));
             } else {
@@ -158,7 +158,7 @@ impl App {
                     lines_status_bottom.push(StatusRow::plain(Line::from("")));
                 }
                 lines_status_bottom.push(StatusRow::plain(Line::from(Span::styled(
-                    center_line(&truncate_with_ellipsis(&format!("{} {}", self.symbols.empty_state.mark, empty::NO_UNSTAGED_CHANGES), max_status_bottom_width), max_status_bottom_width + 3),
+                    center_line(&truncate_with_ellipsis(&format!("{} {}", self.symbols.empty_state.mark, empty::NO_UNSTAGED_CHANGES()), max_status_bottom_width), max_status_bottom_width + 3),
                     Style::default().fg(self.theme.COLOR_GREY_800),
                 ))));
             } else {
@@ -188,7 +188,7 @@ impl App {
                     lines_status_top.push(StatusRow::plain(Line::from("")));
                 }
                 lines_status_top.push(StatusRow::plain(Line::from(Span::styled(
-                    center_line(&truncate_with_ellipsis(&format!("{} {}", self.symbols.empty_state.mark, empty::NO_STAGED_CHANGES), max_status_top_width), max_status_top_width + 3),
+                    center_line(&truncate_with_ellipsis(&format!("{} {}", self.symbols.empty_state.mark, empty::NO_STAGED_CHANGES()), max_status_top_width), max_status_top_width + 3),
                     Style::default().fg(self.theme.COLOR_GREY_800),
                 ))));
             } else {
@@ -344,7 +344,7 @@ fn centered_loading_lines(visible_height: usize, width: usize, style: Style) -> 
     for _ in 0..empty_state_top_padding(visible_height) {
         lines.push(StatusRow::plain(Line::from("")));
     }
-    lines.push(StatusRow::plain(Line::from(Span::styled(center_line(&truncate_with_ellipsis(common::LOADING, width), width), style))));
+    lines.push(StatusRow::plain(Line::from(Span::styled(center_line(&truncate_with_ellipsis(common::LOADING(), width), width), style))));
     lines
 }
 

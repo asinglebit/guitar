@@ -17,7 +17,7 @@ impl App {
         };
 
         if !entry.can_open() {
-            self.show_error(errors::OPEN_SUBMODULE_NOT_INITIALIZED);
+            self.show_error(errors::OPEN_SUBMODULE_NOT_INITIALIZED());
             return;
         }
 
@@ -75,7 +75,7 @@ impl App {
                 self.focus = Focus::Submodules;
                 self.reload(None);
             },
-            Err(error) => self.show_error(errors::with_error(errors::SYNC_SUBMODULE, error)),
+            Err(error) => self.show_error(errors::with_error(errors::SYNC_SUBMODULE(), error)),
         }
     }
 }

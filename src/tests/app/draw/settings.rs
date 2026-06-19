@@ -4,6 +4,7 @@ use crate::{
     git::queries::remotes::GUITAR_DEFAULT_REMOTE_CONFIG,
     helpers::{
         keymap::{Command, InputMode, KeyBinding},
+        localisation::Language,
         symbols::SymbolTheme,
     },
 };
@@ -260,6 +261,31 @@ fn settings_paths_tab_includes_symbols_json() {
 
     assert!(rendered.contains("symbols:"));
     assert!(rendered.contains("/symbols.json"));
+    assert!(rendered.contains("language:"));
+    assert!(rendered.contains("/language.json"));
+}
+
+#[test]
+fn settings_display_tab_renders_language_rows() {
+    let (_path, repo) = temp_repo("language-rows");
+    let mut app = settings_app();
+    app.settings_tab = SettingsTab::Display;
+    app.language = Language::French;
+    app.layout.graph = Rect::new(0, 0, 120, 120);
+    app.layout.app = Rect::new(0, 0, 120, 120);
+
+    let lines = app.settings_lines(&repo);
+    let rendered = lines.iter().map(line_text).collect::<Vec<_>>().join("\n");
+
+    assert!(rendered.contains("language:"));
+    assert!(rendered.contains("English"));
+    assert!(rendered.contains("Español"));
+    assert!(rendered.contains("Français"));
+    assert!(rendered.contains("Русский"));
+    assert!(rendered.contains("Türkçe"));
+    assert!(app.settings_selections.iter().any(|selection| selection.kind == SettingsSelectionKind::Language(0)));
+    assert!(app.settings_selections.iter().any(|selection| selection.kind == SettingsSelectionKind::Language(4)));
+    assert!(!app.settings_selections.iter().any(|selection| selection.kind == SettingsSelectionKind::Language(5)));
 }
 
 #[test]
@@ -296,7 +322,8 @@ fn settings_display_tab_uses_active_symbol_theme_form_markers() {
     assert!(rendered.contains("[ ]"));
     assert!(!rendered.contains("🞊"));
     assert!(!rendered.contains("🞅"));
-    assert!(rendered.is_ascii(), "{rendered}");
+    assert!(rendered.contains("Español"));
+    assert!(rendered.contains("Türkçe"));
 }
 
 #[test]

@@ -30,8 +30,8 @@ impl App {
         match get_current_branch(repo) {
             Some(branch) => left_spans.push(Span::styled(format!("{} {}", self.symbols.branch.local_visible, branch), Style::default().fg(self.theme.COLOR_GRASS))),
             None => match repo.head().ok().and_then(|h| h.target()) {
-                Some(oid) => left_spans.push(Span::styled(format!("{} #{:.6}", status_text::DETACHED_HEAD, oid), Style::default().fg(self.theme.COLOR_TEXT))),
-                None => left_spans.push(Span::styled(status_text::NO_HEAD_NO_COMMITS, Style::default().fg(self.theme.COLOR_TEXT))),
+                Some(oid) => left_spans.push(Span::styled(format!("{} #{:.6}", status_text::DETACHED_HEAD(), oid), Style::default().fg(self.theme.COLOR_TEXT))),
+                None => left_spans.push(Span::styled(status_text::NO_HEAD_NO_COMMITS(), Style::default().fg(self.theme.COLOR_TEXT))),
             },
         }
         let lines = Line::from(left_spans);

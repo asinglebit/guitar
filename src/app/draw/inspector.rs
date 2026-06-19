@@ -32,14 +32,14 @@ impl App {
 
         if is_showing_uncommitted && self.uncommitted.has_conflicts {
             lines = vec![
-                Line::from(Span::styled(inspector::REPOSITORY_STATE, Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
-                Line::from(Span::styled(inspector::OPERATION_CONFLICTS, Style::default().fg(self.theme.COLOR_ORANGE))),
+                Line::from(Span::styled(inspector::REPOSITORY_STATE(), Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
+                Line::from(Span::styled(inspector::OPERATION_CONFLICTS(), Style::default().fg(self.theme.COLOR_ORANGE))),
                 Line::default(),
-                Line::from(Span::styled(inspector::CONFLICTED_FILES, Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
+                Line::from(Span::styled(inspector::CONFLICTED_FILES(), Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
                 Line::from(Span::styled(self.uncommitted.conflict_count.to_string(), Style::default().fg(self.theme.COLOR_ORANGE))),
                 Line::default(),
-                Line::from(Span::styled(inspector::NEXT_ACTION, Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
-                Line::from(Span::styled(inspector::RESOLVE_CONFLICTS_ACTION, Style::default().fg(self.theme.COLOR_TEXT))),
+                Line::from(Span::styled(inspector::NEXT_ACTION(), Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
+                Line::from(Span::styled(inspector::RESOLVE_CONFLICTS_ACTION(), Style::default().fg(self.theme.COLOR_TEXT))),
             ];
         } else if !is_showing_uncommitted {
             // Commit metadata is read lazily for the selected graph row.
@@ -49,15 +49,15 @@ impl App {
                 let commit = repo.find_commit(oid).unwrap();
                 let author = commit.author();
                 let committer = commit.committer();
-                let summary = commit.summary().map(str::to_string).unwrap_or_else(|| format!("{} {}", self.symbols.empty_state.mark, empty::NO_SUMMARY));
-                let body = commit.body().map(str::to_string).unwrap_or_else(|| format!("{} {}", self.symbols.empty_state.mark, empty::NO_BODY));
+                let summary = commit.summary().map(str::to_string).unwrap_or_else(|| format!("{} {}", self.symbols.empty_state.mark, empty::NO_SUMMARY()));
+                let body = commit.body().map(str::to_string).unwrap_or_else(|| format!("{} {}", self.symbols.empty_state.mark, empty::NO_BODY()));
 
                 // Sections are plain list rows so they scroll with the same pane machinery.
                 lines = vec![
-                    Line::from(Span::styled(inspector::COMMIT_SHA, Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
+                    Line::from(Span::styled(inspector::COMMIT_SHA(), Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
                     Line::from(Span::styled(truncate_with_ellipsis(&format!("#{}", oid), max_text_width), Style::default().fg(self.theme.COLOR_TEXT))),
                     Line::default(),
-                    Line::from(Span::styled(inspector::PARENT_SHAS, Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
+                    Line::from(Span::styled(inspector::PARENT_SHAS(), Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
                 ];
                 for parent_id in commit.parent_ids() {
                     let text = truncate_with_ellipsis(&format!("#{}", parent_id), max_text_width);
@@ -68,7 +68,7 @@ impl App {
                 {
                     let color_picker = ColorPicker::from_theme(&self.theme);
                     lines.push(Line::default());
-                    lines.push(Line::from(Span::styled(inspector::FEATURED_BRANCHES, Style::default().fg(self.theme.COLOR_HIGHLIGHTED))));
+                    lines.push(Line::from(Span::styled(inspector::FEATURED_BRANCHES(), Style::default().fg(self.theme.COLOR_HIGHLIGHTED))));
                     for branch in &row.branches {
                         let text = truncate_with_ellipsis(&format!("{} {}", self.symbols.branch.local_visible, branch.name), max_text_width);
                         let color = branch.lane.map(|lane| color_picker.get_lane(lane)).unwrap_or(self.theme.COLOR_TEXT);
@@ -78,7 +78,7 @@ impl App {
                     && let Some(color) = self.branches.colors.get(&alias)
                 {
                     lines.push(Line::default());
-                    lines.push(Line::from(Span::styled(inspector::FEATURED_BRANCHES, Style::default().fg(self.theme.COLOR_HIGHLIGHTED))));
+                    lines.push(Line::from(Span::styled(inspector::FEATURED_BRANCHES(), Style::default().fg(self.theme.COLOR_HIGHLIGHTED))));
                     for branch in branches.iter().filter(|branch| !self.branches.hidden_branch_names.contains(*branch)) {
                         let text = truncate_with_ellipsis(&format!("{} {}", self.symbols.branch.local_visible, branch), max_text_width);
                         lines.push(Line::from(Span::styled(text, Style::default().fg(*color))));
@@ -88,7 +88,7 @@ impl App {
                     && let Some(entry) = &row.reflog
                 {
                     lines.push(Line::default());
-                    lines.push(Line::from(Span::styled(inspector::HEAD_REFLOG, Style::default().fg(self.theme.COLOR_HIGHLIGHTED))));
+                    lines.push(Line::from(Span::styled(inspector::HEAD_REFLOG(), Style::default().fg(self.theme.COLOR_HIGHLIGHTED))));
                     lines.push(Line::from(Span::styled(truncate_with_ellipsis(&entry.selector, max_text_width), Style::default().fg(self.theme.COLOR_TEXT))));
                     let wrapped = wrap_words(sanitize(entry.message.clone()), max_text_width);
                     for line in wrapped {
@@ -96,7 +96,7 @@ impl App {
                     }
                 } else if let Some(entry) = self.reflogs.latest_for_alias(alias) {
                     lines.push(Line::default());
-                    lines.push(Line::from(Span::styled(inspector::HEAD_REFLOG, Style::default().fg(self.theme.COLOR_HIGHLIGHTED))));
+                    lines.push(Line::from(Span::styled(inspector::HEAD_REFLOG(), Style::default().fg(self.theme.COLOR_HIGHLIGHTED))));
                     lines.push(Line::from(Span::styled(truncate_with_ellipsis(&entry.selector, max_text_width), Style::default().fg(self.reflogs.get_color(alias).unwrap_or(self.theme.COLOR_TEXT)))));
                     lines.push(Line::from(Span::styled(timestamp_to_utc(entry.time), Style::default().fg(self.theme.COLOR_TEXT))));
                     let wrapped = wrap_words(sanitize(entry.message.clone()), max_text_width);
@@ -106,21 +106,21 @@ impl App {
                 }
                 lines.push(Line::default());
                 lines.extend(vec![
-                    Line::from(Span::styled(format!("{} {}", inspector::AUTHORED_BY, author.name().unwrap_or(common::UNKNOWN)), Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
+                    Line::from(Span::styled(format!("{} {}", inspector::AUTHORED_BY(), author.name().unwrap_or(common::UNKNOWN())), Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
                     Line::from(Span::styled(author.email().unwrap_or("").to_string(), Style::default().fg(self.theme.COLOR_TEXT))),
                     Line::from(Span::styled(timestamp_to_utc(author.when()), Style::default().fg(self.theme.COLOR_TEXT))),
                     Line::default(),
-                    Line::from(Span::styled(format!("{} {}", inspector::COMMITTED_BY, committer.name().unwrap_or(common::UNKNOWN)), Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
+                    Line::from(Span::styled(format!("{} {}", inspector::COMMITTED_BY(), committer.name().unwrap_or(common::UNKNOWN())), Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
                     Line::from(Span::styled(committer.email().unwrap_or("").to_string(), Style::default().fg(self.theme.COLOR_TEXT))),
                     Line::from(Span::styled(timestamp_to_utc(committer.when()).to_string(), Style::default().fg(self.theme.COLOR_TEXT))),
                     Line::default(),
-                    Line::from(Span::styled(inspector::MESSAGE_SUMMARY, Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
+                    Line::from(Span::styled(inspector::MESSAGE_SUMMARY(), Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
                 ]);
                 let wrapped = wrap_words(sanitize(summary), max_text_width);
                 for line in wrapped {
                     lines.push(Line::from(Span::styled(line, Style::default().fg(self.theme.COLOR_TEXT))));
                 }
-                lines.extend(vec![Line::default(), Line::from(Span::styled(inspector::MESSAGE_BODY, Style::default().fg(self.theme.COLOR_HIGHLIGHTED)))]);
+                lines.extend(vec![Line::default(), Line::from(Span::styled(inspector::MESSAGE_BODY(), Style::default().fg(self.theme.COLOR_HIGHLIGHTED)))]);
                 let wrapped = wrap_words(sanitize(body), max_text_width);
                 for line in wrapped {
                     lines.push(Line::from(Span::styled(line, Style::default().fg(self.theme.COLOR_TEXT))));
@@ -203,7 +203,7 @@ fn centered_loading_lines(visible_height: usize, max_width: usize, style: Style)
     for _ in 0..empty_state_top_padding(visible_height) {
         lines.push(Line::from(""));
     }
-    lines.push(Line::from(Span::styled(center_line(&truncate_with_ellipsis(common::LOADING, max_width), max_width), style)));
+    lines.push(Line::from(Span::styled(center_line(&truncate_with_ellipsis(common::LOADING(), max_width), max_width), style)));
     lines
 }
 

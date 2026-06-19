@@ -498,3 +498,25 @@ fn keymaps_round_trip_through_disk() {
     assert_eq!(loaded, maps);
     assert_eq!(loaded.get(&InputMode::Action).unwrap().get(&KeyBinding::new(Char('R'), KeyModifiers::SHIFT)), Some(&Command::Revert));
 }
+
+#[test]
+fn keymap_config_serialization_stays_english_while_visual_labels_localise() {
+    crate::helpers::localisation::set_active_language(crate::helpers::localisation::Language::Spanish);
+    assert_eq!(command_to_visual_string(&Command::ScrollDown), "Desplazar abajo");
+
+    let id = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+    let path = std::env::temp_dir().join(format!("guitar-keymap-localised-{id}")).join("keymap.json");
+    let mut maps = Keymaps::new();
+    let mut normal = ModeKeymap::new();
+    normal.insert(KeyBinding::new(Char('j'), KeyModifiers::NONE), Command::ScrollDown);
+    maps.insert(InputMode::Normal, normal);
+    maps.insert(InputMode::Action, ModeKeymap::new());
+
+    save_keymaps_to_path(path.as_path(), &maps).unwrap();
+    let contents = std::fs::read_to_string(path.as_path()).unwrap();
+
+    assert!(contents.contains("\"command\": \"ScrollDown\""), "{contents}");
+    assert!(!contents.contains("Desplazar"), "{contents}");
+
+    crate::helpers::localisation::set_active_language(crate::helpers::localisation::Language::English);
+}

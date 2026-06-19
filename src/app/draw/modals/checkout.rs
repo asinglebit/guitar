@@ -18,7 +18,7 @@ impl App {
             return;
         };
         let mut lines = Vec::new();
-        let line_text = modal::SELECT_BRANCH_CHECKOUT;
+        let line_text = modal::SELECT_BRANCH_CHECKOUT();
         lines.push(Line::default());
         lines.push(Line::from(vec![Span::styled(line_text, Style::default().fg(self.theme.COLOR_TEXT))]));
         lines.push(Line::default());

@@ -58,7 +58,7 @@ impl App {
 
                 let chunks = Layout::default().direction(Direction::Vertical).constraints([Constraint::Percentage(50), Constraint::Length(3), Constraint::Percentage(50)]).split(self.layout.graph);
 
-                let message = Paragraph::new(format!("{} {}", self.symbols.empty_state.mark, empty::NO_COMMITS)).alignment(Alignment::Center).style(Style::default().fg(self.theme.COLOR_BORDER));
+                let message = Paragraph::new(format!("{} {}", self.symbols.empty_state.mark, empty::NO_COMMITS())).alignment(Alignment::Center).style(Style::default().fg(self.theme.COLOR_BORDER));
 
                 frame.render_widget(message, chunks[1]);
                 return;

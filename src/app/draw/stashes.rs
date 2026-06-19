@@ -69,7 +69,7 @@ impl App {
             for stash_alias in &self.oids.stashes {
                 let oid = self.oids.get_oid_by_alias(*stash_alias);
                 let commit = repo.find_commit(*oid).unwrap();
-                let message = commit.summary().unwrap_or(empty::NO_MESSAGE).to_string();
+                let message = commit.summary().unwrap_or(empty::NO_MESSAGE()).to_string();
 
                 let truncated = truncate_with_ellipsis(message.as_str(), max_text_width.saturating_sub(1));
                 let color = if let Some(color) = self.stashes.colors.get(stash_alias) { *color } else { self.theme.COLOR_TEXT };
@@ -88,7 +88,7 @@ impl App {
             for _ in 0..blank_lines_before {
                 lines.push(Line::default());
             }
-            let empty_text = format!("{} {}", self.symbols.empty_state.mark, empty::NO_STASHES);
+            let empty_text = format!("{} {}", self.symbols.empty_state.mark, empty::NO_STASHES());
             lines.push(Line::from(Span::styled(center_line(&truncate_with_ellipsis(&empty_text, max_text_width), max_text_width + 3), Style::default().fg(self.theme.COLOR_GREY_800))));
         }
 

@@ -13,7 +13,7 @@ pub(crate) fn modal_padding() -> Padding {
 }
 
 pub(crate) fn esc_title(color: Color) -> Span<'static> {
-    Span::styled(format!(" ({}) ", keymap::ESC.to_lowercase()), Style::default().fg(color))
+    Span::styled(format!(" ({}) ", keymap::ESC().to_lowercase()), Style::default().fg(color))
 }
 
 pub(crate) fn modal_block<'a>(border_color: Color, esc_color: Color, symbols: &'a SymbolTheme) -> Block<'a> {

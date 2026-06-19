@@ -16,7 +16,7 @@ use crate::{
         heatmap::{DAYS, WEEKS, empty_heatmap},
         keymap::{Command, KeyBinding, KeymapEditError, KeymapSelection},
         layout::LayoutConfig,
-        localisation::{errors, modal, operations, settings},
+        localisation::{Language, errors, load_language, load_language_from_path, modal, operations, save_language, save_language_to_path, set_active_language, settings},
         recent::{load_recent, save_recent, save_recent_to_path},
         symbols::{SymbolTheme, load_symbol_theme, load_symbol_theme_from_path, save_symbol_theme, save_symbol_theme_to_path},
     },
@@ -133,10 +133,10 @@ pub enum OperationKind {
 impl OperationKind {
     pub fn label(self) -> &'static str {
         match self {
-            OperationKind::Rebase => operations::REBASE,
-            OperationKind::Cherrypick => operations::CHERRYPICK,
-            OperationKind::Revert => operations::REVERT,
-            OperationKind::Merge => operations::MERGE,
+            OperationKind::Rebase => operations::REBASE(),
+            OperationKind::Cherrypick => operations::CHERRYPICK(),
+            OperationKind::Revert => operations::REVERT(),
+            OperationKind::Merge => operations::MERGE(),
         }
     }
 }
@@ -266,11 +266,11 @@ impl SettingsTab {
 
     pub fn label(self) -> &'static str {
         match self {
-            SettingsTab::Paths => settings::PATHS,
-            SettingsTab::Display => settings::DISPLAY,
-            SettingsTab::Auth => settings::AUTH,
-            SettingsTab::Repo => settings::REPO,
-            SettingsTab::Shortcuts => settings::SHORTCUTS,
+            SettingsTab::Paths => settings::PATHS(),
+            SettingsTab::Display => settings::DISPLAY(),
+            SettingsTab::Auth => settings::AUTH(),
+            SettingsTab::Repo => settings::REPO(),
+            SettingsTab::Shortcuts => settings::SHORTCUTS(),
         }
     }
 
@@ -291,6 +291,7 @@ pub enum SettingsSelectionKind {
     RecentRepository(usize),
     RemoteAdd,
     Remote(String),
+    Language(usize),
     Theme(usize),
     SymbolTheme(usize),
     KeyBinding(KeymapSelection),
@@ -469,6 +470,7 @@ pub struct App {
     pub last_input_direction: Option<Direction>,
     pub theme: Theme,
     pub symbols: SymbolTheme,
+    pub language: Language,
     pub heatmap: [[usize; WEEKS]; DAYS],
 
     // Git identity used when creating commits.
@@ -575,6 +577,7 @@ pub struct App {
     pub modal_key_capture_error: Option<KeymapEditError>,
     pub keymap_save_path: Option<PathBuf>,
     pub symbol_theme_save_path: Option<PathBuf>,
+    pub language_save_path: Option<PathBuf>,
 
     // Inspector
     pub inspector_selected: usize,
@@ -660,6 +663,7 @@ impl App {
 
         let run_result = (|| {
             // Load persisted state before the first repository scan.
+            self.load_language_config();
             self.load_recent();
             self.load_layout();
             self.load_theme_config();
@@ -814,40 +818,40 @@ impl App {
                     self.draw_modal_error(frame);
                 },
                 Focus::ModalCommit => {
-                    self.draw_modal_input(frame, modal::PROMPT_CREATE_COMMIT);
+                    self.draw_modal_input(frame, modal::PROMPT_CREATE_COMMIT());
                 },
                 Focus::ModalCherrypick => {
-                    self.draw_modal_input(frame, modal::PROMPT_CHERRYPICK_COMMIT);
+                    self.draw_modal_input(frame, modal::PROMPT_CHERRYPICK_COMMIT());
                 },
                 Focus::ModalRevert => {
-                    self.draw_modal_input(frame, modal::PROMPT_REVERT_COMMIT);
+                    self.draw_modal_input(frame, modal::PROMPT_REVERT_COMMIT());
                 },
                 Focus::ModalCreateBranch => {
-                    self.draw_modal_input(frame, modal::PROMPT_CREATE_BRANCH);
+                    self.draw_modal_input(frame, modal::PROMPT_CREATE_BRANCH());
                 },
                 Focus::ModalRenameBranch => {
-                    self.draw_modal_input(frame, modal::PROMPT_RENAME_BRANCH);
+                    self.draw_modal_input(frame, modal::PROMPT_RENAME_BRANCH());
                 },
                 Focus::ModalCreateWorktreeName => {
-                    self.draw_modal_input(frame, modal::PROMPT_CREATE_WORKTREE_NAME);
+                    self.draw_modal_input(frame, modal::PROMPT_CREATE_WORKTREE_NAME());
                 },
                 Focus::ModalCreateWorktreePath => {
-                    self.draw_modal_input(frame, modal::PROMPT_CREATE_WORKTREE_PATH);
+                    self.draw_modal_input(frame, modal::PROMPT_CREATE_WORKTREE_PATH());
                 },
                 Focus::ModalLockWorktree => {
-                    self.draw_modal_input(frame, modal::PROMPT_LOCK_WORKTREE);
+                    self.draw_modal_input(frame, modal::PROMPT_LOCK_WORKTREE());
                 },
                 Focus::ModalRemoteName | Focus::ModalRemoteUrl => {
                     self.draw_modal_input(frame, self.remote_input_title());
                 },
                 Focus::ModalGrep => {
-                    self.draw_modal_input(frame, modal::PROMPT_FIND_SHA);
+                    self.draw_modal_input(frame, modal::PROMPT_FIND_SHA());
                 },
                 Focus::ModalFileSearch => {
-                    self.draw_modal_file_search(frame, modal::PROMPT_FIND_FILE);
+                    self.draw_modal_file_search(frame, modal::PROMPT_FIND_FILE());
                 },
                 Focus::ModalTag => {
-                    self.draw_modal_input(frame, modal::PROMPT_CREATE_TAG);
+                    self.draw_modal_input(frame, modal::PROMPT_CREATE_TAG());
                 },
                 Focus::ModalKeyCapture => {
                     self.draw_modal_key_capture(frame);
@@ -1031,7 +1035,7 @@ impl App {
                         },
                         Err(error) => {
                             self.uncommitted = UncommittedChanges::default();
-                            self.show_error(errors::with_error(errors::FILE_DIFF, error));
+                            self.show_error(errors::with_error(errors::FILE_DIFF(), error));
                         },
                     }
                     self.is_uncommitted_loaded = true;
@@ -1292,7 +1296,7 @@ impl App {
 
         let Some(tx) = self.graph_tx.clone() else {
             self.search_is_loading = false;
-            self.search_error = Some(errors::FILE_HISTORY_WORKER_UNAVAILABLE.to_string());
+            self.search_error = Some(errors::FILE_HISTORY_WORKER_UNAVAILABLE().to_string());
             self.search_request_id = None;
             return;
         };
@@ -1301,7 +1305,7 @@ impl App {
         self.search_request_id = Some(request_id);
         if tx.send(GraphCommand::QueryFileHistory { generation: self.graph.generation, request_id, path }).is_err() {
             self.search_is_loading = false;
-            self.search_error = Some(errors::FILE_HISTORY_WORKER_UNAVAILABLE.to_string());
+            self.search_error = Some(errors::FILE_HISTORY_WORKER_UNAVAILABLE().to_string());
             self.search_request_id = None;
         }
     }
@@ -1353,6 +1357,22 @@ impl App {
 
     pub fn save_theme_config(&self) {
         save_theme(&self.theme);
+    }
+
+    pub fn set_language(&mut self, language: Language) {
+        self.language = language;
+        set_active_language(language);
+        self.mark_viewer_layout_dirty();
+    }
+
+    pub fn load_language_config(&mut self) {
+        let language = if let Some(path) = &self.language_save_path { load_language_from_path(path.as_path()) } else { load_language() };
+        self.set_language(language);
+    }
+
+    pub fn save_language_config(&self) {
+        let result = if let Some(path) = &self.language_save_path { save_language_to_path(path.as_path(), self.language) } else { save_language(self.language) };
+        let _ = result;
     }
 
     pub fn set_symbol_theme(&mut self, symbols: SymbolTheme) {

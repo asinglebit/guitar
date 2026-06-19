@@ -16,12 +16,12 @@ use ratatui::{
 
 impl App {
     pub fn draw_modal_remote_action(&mut self, frame: &mut Frame) {
-        let remote_name = self.modal_remote_target.as_deref().unwrap_or(modal::REMOTE_FALLBACK);
+        let remote_name = self.modal_remote_target.as_deref().unwrap_or(modal::REMOTE_FALLBACK());
         let mut lines = Vec::new();
         let mut length = 36usize;
 
         lines.push(Line::default());
-        lines.push(Line::from(Span::styled(format!("{} {remote_name}", modal::REMOTE_LABEL), Style::default().fg(self.theme.COLOR_TEXT))));
+        lines.push(Line::from(Span::styled(format!("{} {remote_name}", modal::REMOTE_LABEL()), Style::default().fg(self.theme.COLOR_TEXT))));
         lines.push(Line::default());
 
         for (idx, action) in REMOTE_ACTIONS.iter().enumerate() {
@@ -33,25 +33,25 @@ impl App {
         }
 
         lines.push(Line::default());
-        lines.push(action_row(&[(modal::ACTION_CONFIRM, modal::KEY_ENTER)], Style::default().fg(self.theme.COLOR_HIGHLIGHTED)));
+        lines.push(action_row(&[(modal::ACTION_CONFIRM(), modal::KEY_ENTER())], Style::default().fg(self.theme.COLOR_HIGHLIGHTED)));
         self.draw_remote_lines_modal(frame, lines, length);
     }
 
     pub fn draw_modal_delete_remote(&mut self, frame: &mut Frame) {
-        let remote_name = self.modal_remote_target.as_deref().unwrap_or(modal::REMOTE_FALLBACK);
+        let remote_name = self.modal_remote_target.as_deref().unwrap_or(modal::REMOTE_FALLBACK());
         let mut lines = Vec::new();
         let mut length = 34usize;
 
         lines.push(Line::default());
-        lines.push(Line::from(Span::styled(modal::DELETE_SELECTED_REMOTE, Style::default().fg(self.theme.COLOR_TEXT))));
+        lines.push(Line::from(Span::styled(modal::DELETE_SELECTED_REMOTE(), Style::default().fg(self.theme.COLOR_TEXT))));
         lines.push(Line::default());
 
-        let name_line = format!("{} {}", modal::NAME_LABEL, truncate_with_ellipsis(remote_name, 60));
+        let name_line = format!("{} {}", modal::NAME_LABEL(), truncate_with_ellipsis(remote_name, 60));
         length = length.max(name_line.len());
         lines.push(Line::from(Span::styled(name_line, Style::default().fg(self.theme.COLOR_GRAPEFRUIT))));
 
         lines.push(Line::default());
-        lines.push(action_row(&[(modal::ACTION_CONFIRM, modal::KEY_ENTER)], Style::default().fg(self.theme.COLOR_RED)));
+        lines.push(action_row(&[(modal::ACTION_CONFIRM(), modal::KEY_ENTER())], Style::default().fg(self.theme.COLOR_RED)));
         self.draw_remote_lines_modal(frame, lines, length);
     }
 

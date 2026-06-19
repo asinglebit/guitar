@@ -76,7 +76,7 @@ impl App {
         };
 
         if !entry.is_valid {
-            self.show_error(errors::OPEN_WORKTREE_INVALID_PATH);
+            self.show_error(errors::OPEN_WORKTREE_INVALID_PATH());
             return;
         }
 
@@ -146,7 +146,7 @@ impl App {
         };
 
         if !entry.can_remove() {
-            self.show_error(errors::REMOVE_WORKTREE_FORBIDDEN);
+            self.show_error(errors::REMOVE_WORKTREE_FORBIDDEN());
             return;
         }
 
@@ -157,7 +157,7 @@ impl App {
                 self.focus = return_focus;
                 self.reload(None);
             },
-            Err(error) => self.show_error(errors::with_error(errors::REMOVE_WORKTREE, error)),
+            Err(error) => self.show_error(errors::with_error(errors::REMOVE_WORKTREE(), error)),
         }
     }
 
@@ -186,7 +186,7 @@ impl App {
                 };
 
                 if !entry.can_remove() {
-                    self.show_error(errors::REMOVE_WORKTREE_FORBIDDEN);
+                    self.show_error(errors::REMOVE_WORKTREE_FORBIDDEN());
                     return;
                 }
 
@@ -197,7 +197,7 @@ impl App {
                 let removable = self.graph_remove_worktree_indices();
 
                 match removable.len() {
-                    0 if !all.is_empty() => self.show_error(errors::REMOVE_WORKTREE_FORBIDDEN),
+                    0 if !all.is_empty() => self.show_error(errors::REMOVE_WORKTREE_FORBIDDEN()),
                     0 => {},
                     1 => self.open_remove_worktree_confirmation(removable[0], Focus::Viewport),
                     _ => self.open_worktree_chooser(WorktreeModalAction::Remove, removable, Focus::Viewport),
@@ -220,7 +220,7 @@ impl App {
         };
 
         if !entry.can_lock() {
-            self.show_error(errors::LOCK_WORKTREE_INVALID);
+            self.show_error(errors::LOCK_WORKTREE_INVALID());
             return;
         }
 
@@ -230,7 +230,7 @@ impl App {
                     self.focus = Focus::Worktrees;
                     self.reload(None);
                 },
-                Err(error) => self.show_error(errors::with_error(errors::UNLOCK_WORKTREE, error)),
+                Err(error) => self.show_error(errors::with_error(errors::UNLOCK_WORKTREE(), error)),
             }
             return;
         }

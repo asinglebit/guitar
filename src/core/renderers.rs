@@ -488,7 +488,7 @@ pub fn render_message_projection(
 
             if show_ref_labels && row.is_stash {
                 let color = row.stash_lane.map(|lane| color_picker.get_lane(lane)).unwrap_or(theme.COLOR_TEXT);
-                spans.push(Span::styled(format!("{} {} ", graph.commit_stash, status_text::STASH), Style::default().fg(color)));
+                spans.push(Span::styled(format!("{} {} ", graph.commit_stash, status_text::STASH()), Style::default().fg(color)));
             }
             let has_stash_label = show_ref_labels && row.is_stash;
 

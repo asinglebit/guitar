@@ -20,9 +20,9 @@ impl App {
         };
         let mut lines = Vec::new();
         let line_text = match self.modal_branch_action {
-            BranchModalAction::Solo => modal::SELECT_BRANCH_SOLO,
-            BranchModalAction::Toggle => modal::SELECT_BRANCH_TOGGLE,
-            BranchModalAction::Rename => modal::SELECT_BRANCH_RENAME,
+            BranchModalAction::Solo => modal::SELECT_BRANCH_SOLO(),
+            BranchModalAction::Toggle => modal::SELECT_BRANCH_TOGGLE(),
+            BranchModalAction::Rename => modal::SELECT_BRANCH_RENAME(),
         };
         lines.push(Line::default());
         lines.push(Line::from(vec![Span::styled(line_text, Style::default().fg(self.theme.COLOR_TEXT))]));

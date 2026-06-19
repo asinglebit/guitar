@@ -54,8 +54,11 @@ impl App {
         let selection_enabled = !self.search_is_loading && self.search_error.is_none() && total_lines > 0;
 
         if self.search_is_loading {
-            let message =
-                self.search_path.as_ref().map(|path| format!("{} {}", common::LOADING, truncate_with_ellipsis(path, max_text_width.saturating_sub(8)))).unwrap_or_else(|| common::LOADING.to_string());
+            let message = self
+                .search_path
+                .as_ref()
+                .map(|path| format!("{} {}", common::LOADING(), truncate_with_ellipsis(path, max_text_width.saturating_sub(8))))
+                .unwrap_or_else(|| common::LOADING().to_string());
             let blank_lines_before = empty_state_top_padding(visible_height);
             for _ in 0..blank_lines_before {
                 lines.push(Line::default());
@@ -68,7 +71,7 @@ impl App {
             }
             lines.push(Line::from(Span::styled(center_line(&truncate_with_ellipsis(error, max_text_width), max_text_width + 3), Style::default().fg(self.theme.COLOR_ORANGE))));
         } else if total_lines == 0 {
-            let message = if self.search_path.is_some() { format!("{} {}", self.symbols.empty_state.mark, empty::NO_COMMITS) } else { empty::SEARCH.to_string() };
+            let message = if self.search_path.is_some() { format!("{} {}", self.symbols.empty_state.mark, empty::NO_COMMITS()) } else { empty::SEARCH().to_string() };
             let blank_lines_before = empty_state_top_padding(visible_height);
             for _ in 0..blank_lines_before {
                 lines.push(Line::default());

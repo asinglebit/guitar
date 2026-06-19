@@ -19,8 +19,8 @@ use ratatui::{
 impl App {
     pub fn draw_modal_worktree_chooser(&mut self, frame: &mut Frame) {
         let title = match self.modal_worktree_action {
-            WorktreeModalAction::Open => modal::SELECT_WORKTREE_OPEN,
-            WorktreeModalAction::Remove => modal::SELECT_WORKTREE_REMOVE,
+            WorktreeModalAction::Open => modal::SELECT_WORKTREE_OPEN(),
+            WorktreeModalAction::Remove => modal::SELECT_WORKTREE_REMOVE(),
         };
 
         let mut length = title.len().max(34);
@@ -37,8 +37,8 @@ impl App {
                 .branch
                 .as_ref()
                 .map(|branch| format!("{} {branch}", self.symbols.branch.local_visible))
-                .or_else(|| entry.head.map(|oid| format!("{} #{:.6}", status_text::DETACHED, oid)))
-                .unwrap_or_else(|| common::NO_HEAD.to_string());
+                .or_else(|| entry.head.map(|oid| format!("{} #{:.6}", status_text::DETACHED(), oid)))
+                .unwrap_or_else(|| common::NO_HEAD().to_string());
             let dirty = if entry.is_dirty { format!(" {}", self.symbols.worktree.dirty) } else { String::new() };
             let locked = if entry.locked_reason.is_some() { format!(" {}", self.symbols.worktree.locked) } else { String::new() };
             let invalid = if !entry.is_valid { format!(" {}", self.symbols.worktree.invalid) } else { String::new() };

@@ -193,13 +193,13 @@ pub fn sanitize(string: String) -> String {
 pub fn modifiers_to_string(mods: KeyModifiers) -> String {
     let mut parts = Vec::new();
     if mods.contains(KeyModifiers::CONTROL) {
-        parts.push(keymap::CTRL);
+        parts.push(keymap::CTRL());
     }
     if mods.contains(KeyModifiers::SHIFT) {
-        parts.push(keymap::SHIFT);
+        parts.push(keymap::SHIFT());
     }
     if mods.contains(KeyModifiers::ALT) {
-        parts.push(keymap::ALT);
+        parts.push(keymap::ALT());
     }
     parts.join(" + ")
 }

@@ -20,11 +20,11 @@ pub enum AuthProtocol {
 impl AuthProtocol {
     pub fn label(self) -> &'static str {
         match self {
-            AuthProtocol::Https => network::PROTOCOL_HTTPS,
-            AuthProtocol::Http => network::PROTOCOL_HTTP,
-            AuthProtocol::Ssh => network::PROTOCOL_SSH,
-            AuthProtocol::Local => network::PROTOCOL_LOCAL,
-            AuthProtocol::Other => network::PROTOCOL_REMOTE,
+            AuthProtocol::Https => network::PROTOCOL_HTTPS(),
+            AuthProtocol::Http => network::PROTOCOL_HTTP(),
+            AuthProtocol::Ssh => network::PROTOCOL_SSH(),
+            AuthProtocol::Local => network::PROTOCOL_LOCAL(),
+            AuthProtocol::Other => network::PROTOCOL_REMOTE(),
         }
     }
 

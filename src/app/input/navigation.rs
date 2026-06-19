@@ -221,7 +221,7 @@ impl App {
             GraphPaneRow::Branch { graph_index, .. } | GraphPaneRow::Tag { graph_index, .. } | GraphPaneRow::Stash { graph_index, .. } => graph_index,
             GraphPaneRow::Reflog { graph_index, .. } => {
                 if graph_index.is_none() {
-                    self.show_error(errors::REFLOG_COMMIT_HIDDEN);
+                    self.show_error(errors::REFLOG_COMMIT_HIDDEN());
                 }
                 graph_index
             },
@@ -310,7 +310,7 @@ impl App {
             && !self.open_graph_at_alias(alias)
             && pane == GraphPane::Reflogs
         {
-            self.show_error(errors::REFLOG_COMMIT_HIDDEN);
+            self.show_error(errors::REFLOG_COMMIT_HIDDEN());
         }
     }
 
@@ -572,6 +572,19 @@ impl App {
                             self.settings_selected = selected_line;
                             self.settings_scroll.set(scroll);
                         },
+                        Some(SettingsSelectionKind::Language(language_idx)) => {
+                            let Some(language) = crate::helpers::localisation::Language::ALL.get(language_idx).copied() else {
+                                return;
+                            };
+                            let selected_line = self.settings_selected;
+                            let scroll = self.settings_scroll.get();
+                            self.set_language(language);
+                            self.save_language_config();
+                            self.viewport = Viewport::Settings;
+                            self.focus = Focus::Viewport;
+                            self.settings_selected = selected_line;
+                            self.settings_scroll.set(scroll);
+                        },
                         Some(SettingsSelectionKind::KeyBinding(selection)) => {
                             self.begin_key_capture(selection);
                         },
@@ -650,7 +663,7 @@ impl App {
                                 self.focus = Focus::Viewport;
                                 self.reload(None);
                             },
-                            Err(error) => self.show_error(errors::with_error(errors::CHECKOUT, error)),
+                            Err(error) => self.show_error(errors::with_error(errors::CHECKOUT(), error)),
                         }
                     }
                 }
@@ -715,7 +728,7 @@ impl App {
                                 self.focus = Focus::Viewport;
                                 self.reload(None);
                             },
-                            Err(error) => self.show_error(errors::with_error(errors::DELETE_TAG, error)),
+                            Err(error) => self.show_error(errors::with_error(errors::DELETE_TAG(), error)),
                         }
                     }
                 }

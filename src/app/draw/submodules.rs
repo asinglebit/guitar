@@ -25,16 +25,16 @@ impl App {
             parts.push(self.symbols.submodule.uninitialized.clone());
         }
         if entry.is_index_modified {
-            parts.push(status_text::STAGED.to_string());
+            parts.push(status_text::STAGED().to_string());
         }
         if entry.has_new_commits {
-            parts.push(status_text::NEW_COMMITS.to_string());
+            parts.push(status_text::NEW_COMMITS().to_string());
         }
         if entry.has_modified_content {
-            parts.push(status_text::MODIFIED.to_string());
+            parts.push(status_text::MODIFIED().to_string());
         }
         if entry.has_untracked_content {
-            parts.push(status_text::UNTRACKED.to_string());
+            parts.push(status_text::UNTRACKED().to_string());
         }
         if entry.is_dirty() && parts.is_empty() {
             parts.push(self.symbols.submodule.dirty.clone());
@@ -54,8 +54,8 @@ impl App {
                 .branch
                 .as_ref()
                 .map(|branch| format!("{} {branch}", self.symbols.branch.local_visible))
-                .or_else(|| entry.workdir.map(|oid| format!("{} #{:.6}", status_text::DETACHED, oid)))
-                .unwrap_or_else(|| common::NOT_INITIALIZED.to_string());
+                .or_else(|| entry.workdir.map(|oid| format!("{} #{:.6}", status_text::DETACHED(), oid)))
+                .unwrap_or_else(|| common::NOT_INITIALIZED().to_string());
             let suffix = self.submodule_status_suffix(entry);
             let label = truncate_with_ellipsis(format!("{}, {}{}", entry.path.display(), target, suffix).as_str(), max_text_width.saturating_sub(1));
 
@@ -81,7 +81,7 @@ impl App {
             for _ in 0..blank_lines_before {
                 lines.push(Line::default());
             }
-            let empty_text = format!("{} {}", self.symbols.submodule.empty, empty::NO_SUBMODULES);
+            let empty_text = format!("{} {}", self.symbols.submodule.empty, empty::NO_SUBMODULES());
             lines.push(Line::from(Span::styled(center_line(&truncate_with_ellipsis(&empty_text, max_text_width), max_text_width + 3), Style::default().fg(self.theme.COLOR_GREY_800))));
         }
 

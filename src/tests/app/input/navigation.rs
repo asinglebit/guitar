@@ -14,6 +14,7 @@ use crate::{
     helpers::{
         keymap::{Command, InputMode, KeyBinding, KeymapSelection, Keymaps, load_keymaps_from_path},
         layout::LayoutConfig,
+        localisation::Language,
         symbols::SymbolTheme,
     },
 };
@@ -45,6 +46,11 @@ fn temp_keymap_path(name: &str) -> std::path::PathBuf {
 fn temp_recent_path(name: &str) -> std::path::PathBuf {
     let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
     std::env::temp_dir().join(format!("guitar-input-navigation-{name}-{id}")).join("recent.json")
+}
+
+fn temp_language_path(name: &str) -> std::path::PathBuf {
+    let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+    std::env::temp_dir().join(format!("guitar-input-navigation-{name}-{id}")).join("language.json")
 }
 
 fn minimal_keymaps() -> Keymaps {
@@ -1091,6 +1097,31 @@ fn settings_symbol_theme_selection_updates_persists_and_stays_in_settings() {
     let saved = fs::read_to_string(path).unwrap();
     assert!(saved.contains("\"label\": \"ascii\""));
     assert!(saved.contains("\"rounded_top_left\": \"+\""));
+}
+
+#[test]
+fn settings_language_selection_updates_persists_and_stays_in_settings() {
+    let path = temp_language_path("select");
+    let mut app = App {
+        viewport: Viewport::Settings,
+        focus: Focus::Viewport,
+        settings_selected: 12,
+        settings_selections: vec![SettingsSelection { line: 12, kind: SettingsSelectionKind::Language(1) }],
+        language_save_path: Some(path.clone()),
+        ..Default::default()
+    };
+    app.settings_scroll.set(4);
+
+    app.on_select();
+
+    assert_eq!(app.language, Language::Spanish);
+    assert_eq!(app.viewport, Viewport::Settings);
+    assert_eq!(app.focus, Focus::Viewport);
+    assert_eq!(app.settings_selected, 12);
+    assert_eq!(app.settings_scroll.get(), 4);
+    assert_eq!(fs::read_to_string(path).unwrap(), "\"spanish\"");
+
+    crate::helpers::localisation::set_active_language(Language::English);
 }
 
 #[test]

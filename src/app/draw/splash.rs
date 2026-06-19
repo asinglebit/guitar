@@ -17,9 +17,9 @@ impl App {
     }
 
     pub(crate) fn recent_repository_actions_detail_text(&self) -> String {
-        let remove = self.recent_repository_command_key(&Command::RemoveRecentRepository, splash_text::KEY_REMOVE_FALLBACK);
-        let move_up = self.recent_repository_command_key(&Command::MoveRecentRepositoryUp, splash_text::KEY_MOVE_UP_FALLBACK);
-        let move_down = self.recent_repository_command_key(&Command::MoveRecentRepositoryDown, splash_text::KEY_MOVE_DOWN_FALLBACK);
+        let remove = self.recent_repository_command_key(&Command::RemoveRecentRepository, splash_text::KEY_REMOVE_FALLBACK());
+        let move_up = self.recent_repository_command_key(&Command::MoveRecentRepositoryUp, splash_text::KEY_MOVE_UP_FALLBACK());
+        let move_down = self.recent_repository_command_key(&Command::MoveRecentRepositoryDown, splash_text::KEY_MOVE_DOWN_FALLBACK());
 
         splash_text::recent_actions(&remove, &move_up, &move_down)
     }
@@ -106,17 +106,17 @@ impl App {
         lines.push(Line::default());
         if self.spinner.is_running() {
             let icon_spinner = format!("{} ", self.spinner.get_char());
-            lines.push(Line::from(vec![Span::styled(format!("{} {}", icon_spinner, splash_text::LOADING), Style::default().fg(self.theme.COLOR_TEXT))]).centered());
+            lines.push(Line::from(vec![Span::styled(format!("{} {}", icon_spinner, splash_text::LOADING()), Style::default().fg(self.theme.COLOR_TEXT))]).centered());
         } else if self.recent.is_empty() {
-            lines.push(Line::from(vec![Span::styled(splash_text::MADE_WITH.to_string(), Style::default().fg(self.theme.COLOR_TEXT))]).centered());
+            lines.push(Line::from(vec![Span::styled(splash_text::MADE_WITH().to_string(), Style::default().fg(self.theme.COLOR_TEXT))]).centered());
             lines.push(Line::default());
-            lines.push(Line::from(vec![Span::styled(splash_text::REPOSITORY_URL.to_string(), Style::default().fg(self.theme.COLOR_TEXT))]).centered());
+            lines.push(Line::from(vec![Span::styled(splash_text::REPOSITORY_URL().to_string(), Style::default().fg(self.theme.COLOR_TEXT))]).centered());
             if self.repo.is_none() {
                 lines.push(Line::default());
-                lines.push(Line::from(vec![Span::styled(splash_text::NOT_A_VALID_GIT_REPOSITORY.to_string(), Style::default().fg(self.theme.COLOR_ORANGE))]).centered());
+                lines.push(Line::from(vec![Span::styled(splash_text::NOT_A_VALID_GIT_REPOSITORY().to_string(), Style::default().fg(self.theme.COLOR_ORANGE))]).centered());
             }
         } else {
-            lines.push(Line::from(vec![Span::styled(splash_text::RECENT_REPOSITORIES.to_string(), Style::default().fg(self.theme.COLOR_TEXT))]).centered());
+            lines.push(Line::from(vec![Span::styled(splash_text::RECENT_REPOSITORIES().to_string(), Style::default().fg(self.theme.COLOR_TEXT))]).centered());
             lines.push(Line::default());
             lines.push(Line::from(vec![Span::styled(self.recent_repository_actions_text(), Style::default().fg(self.theme.COLOR_TEXT))]).centered());
             lines.push(Line::default());

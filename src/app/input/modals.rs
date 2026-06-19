@@ -78,7 +78,7 @@ impl App {
                     self.keymaps = updated;
                     self.close_key_capture();
                 },
-                Err(error) => self.show_error(errors::with_error(errors::SAVE_KEYMAP, error)),
+                Err(error) => self.show_error(errors::with_error(errors::SAVE_KEYMAP(), error)),
             },
             Err(error) => {
                 self.modal_key_capture_error = Some(error);
@@ -284,7 +284,7 @@ impl App {
                                     self.reload(None);
                                     self.focus = Focus::Viewport;
                                 },
-                                Err(error) => self.show_error(errors::with_error(errors::COMMIT, error)),
+                                Err(error) => self.show_error(errors::with_error(errors::COMMIT(), error)),
                             }
                         }
                     },
@@ -306,7 +306,7 @@ impl App {
                             return true;
                         };
                         let Some(oid) = self.pending_cherrypick_oid else {
-                            self.show_error(errors::CHERRYPICK_NO_PENDING);
+                            self.show_error(errors::CHERRYPICK_NO_PENDING());
                             return true;
                         };
                         let message = self.modal_input.value().trim().to_string();
@@ -324,10 +324,10 @@ impl App {
                             Ok(CherrypickOutcome::Conflict) => {
                                 self.modal_input.clear();
                                 self.pending_cherrypick_oid = None;
-                                self.show_operation_conflict(crate::app::app::OperationKind::Cherrypick, operations::CHERRYPICK_CONFLICT);
+                                self.show_operation_conflict(crate::app::app::OperationKind::Cherrypick, operations::CHERRYPICK_CONFLICT());
                             },
                             Ok(CherrypickOutcome::Aborted) => {},
-                            Err(error) => self.show_error(errors::with_error(errors::CHERRYPICK, error)),
+                            Err(error) => self.show_error(errors::with_error(errors::CHERRYPICK(), error)),
                         }
                     },
                     _ => {
@@ -348,7 +348,7 @@ impl App {
                             return true;
                         };
                         let Some(oid) = self.pending_revert_oid else {
-                            self.show_error(errors::REVERT_NO_PENDING);
+                            self.show_error(errors::REVERT_NO_PENDING());
                             return true;
                         };
                         let message = self.modal_input.value().trim().to_string();
@@ -366,10 +366,10 @@ impl App {
                             Ok(RevertOutcome::Conflict) => {
                                 self.modal_input.clear();
                                 self.pending_revert_oid = None;
-                                self.show_operation_conflict(OperationKind::Revert, operations::REVERT_CONFLICT);
+                                self.show_operation_conflict(OperationKind::Revert, operations::REVERT_CONFLICT());
                             },
                             Ok(RevertOutcome::Aborted) => {},
-                            Err(error) => self.show_error(errors::with_error(errors::REVERT, error)),
+                            Err(error) => self.show_error(errors::with_error(errors::REVERT(), error)),
                         }
                     },
                     _ => {
@@ -388,7 +388,7 @@ impl App {
                     KeyCode::Enter => {
                         if let Some(repo) = &self.repo {
                             let Some(oid) = self.selected_branch_target_oid() else {
-                                self.show_error(errors::CREATE_BRANCH_NO_COMMIT);
+                                self.show_error(errors::CREATE_BRANCH_NO_COMMIT());
                                 return true;
                             };
                             match create_branch(repo, self.modal_input.value(), oid) {
@@ -398,7 +398,7 @@ impl App {
                                     self.reload(None);
                                     self.focus = Focus::Viewport;
                                 },
-                                Err(error) => self.show_error(errors::with_error(errors::CREATE_BRANCH, error)),
+                                Err(error) => self.show_error(errors::with_error(errors::CREATE_BRANCH(), error)),
                             }
                         }
                     },
@@ -418,7 +418,7 @@ impl App {
                     KeyCode::Enter => {
                         if let Some(repo) = self.repo.clone() {
                             let Some(source) = self.modal_rename_branch_source.clone() else {
-                                self.show_error(errors::RENAME_BRANCH_NO_PENDING);
+                                self.show_error(errors::RENAME_BRANCH_NO_PENDING());
                                 return true;
                             };
                             let new_name = self.modal_input.value().trim().to_string();
@@ -436,7 +436,7 @@ impl App {
                                     self.reload(None);
                                     self.focus = Focus::Viewport;
                                 },
-                                Err(error) => self.show_error(errors::with_error(errors::RENAME_BRANCH, error)),
+                                Err(error) => self.show_error(errors::with_error(errors::RENAME_BRANCH(), error)),
                             }
                         }
                     },
@@ -456,7 +456,7 @@ impl App {
                     KeyCode::Enter => {
                         let name = self.modal_input.value().trim().to_string();
                         if !is_valid_worktree_name(&name) {
-                            self.show_error(errors::CREATE_WORKTREE_INVALID_NAME);
+                            self.show_error(errors::CREATE_WORKTREE_INVALID_NAME());
                             return true;
                         }
 
@@ -485,12 +485,12 @@ impl App {
                         let name = self.modal_worktree_name.clone();
                         let path = PathBuf::from(self.modal_input.value().trim());
                         if path.as_os_str().is_empty() {
-                            self.show_error(errors::CREATE_WORKTREE_EMPTY_PATH);
+                            self.show_error(errors::CREATE_WORKTREE_EMPTY_PATH());
                             return true;
                         }
 
                         let Some(oid) = self.graph_oid_at(self.graph_selected) else {
-                            self.show_error(errors::CREATE_WORKTREE_NO_COMMIT);
+                            self.show_error(errors::CREATE_WORKTREE_NO_COMMIT());
                             return true;
                         };
                         match create_worktree(&repo, &name, &path, oid) {
@@ -500,7 +500,7 @@ impl App {
                                 self.focus = Focus::Viewport;
                                 self.reload(None);
                             },
-                            Err(error) => self.show_error(errors::with_error(errors::CREATE_WORKTREE, error)),
+                            Err(error) => self.show_error(errors::with_error(errors::CREATE_WORKTREE(), error)),
                         }
                     },
                     _ => {
@@ -529,7 +529,7 @@ impl App {
                                 self.focus = Focus::Worktrees;
                                 self.reload(None);
                             },
-                            Err(error) => self.show_error(errors::with_error(errors::LOCK_WORKTREE, error)),
+                            Err(error) => self.show_error(errors::with_error(errors::LOCK_WORKTREE(), error)),
                         }
                     },
                     _ => {
@@ -624,7 +624,7 @@ impl App {
                             }
 
                             let Some(oid) = self.graph_oid_at(if self.graph_selected == 0 { 1 } else { self.graph_selected }) else {
-                                self.show_error(errors::CREATE_TAG_NO_COMMIT);
+                                self.show_error(errors::CREATE_TAG_NO_COMMIT());
                                 return true;
                             };
 
@@ -634,7 +634,7 @@ impl App {
                                     self.modal_input.clear();
                                     self.focus = Focus::Viewport;
                                 },
-                                Err(error) => self.show_error(errors::with_error(errors::CREATE_TAG, error)),
+                                Err(error) => self.show_error(errors::with_error(errors::CREATE_TAG(), error)),
                             }
                         }
                     },

@@ -22,11 +22,11 @@ impl App {
 
         let mut lines = Vec::new();
         lines.push(Line::default());
-        lines.push(Line::from(Span::styled(modal::ERROR_TITLE, Style::default().fg(self.theme.COLOR_RED))));
+        lines.push(Line::from(Span::styled(modal::ERROR_TITLE(), Style::default().fg(self.theme.COLOR_RED))));
         lines.push(Line::default());
         lines.extend(wrapped_message.into_iter().map(|line| Line::from(Span::styled(line, Style::default().fg(self.theme.COLOR_RED)))));
         lines.push(Line::default());
-        lines.push(action_row(&[(modal::ACTION_OK, modal::KEY_ENTER)], Style::default().fg(self.theme.COLOR_RED)));
+        lines.push(action_row(&[(modal::ACTION_OK(), modal::KEY_ENTER())], Style::default().fg(self.theme.COLOR_RED)));
 
         let content_width = lines.iter().map(|line| line.width()).max().unwrap_or(30);
         let modal_width = (content_width + 10).max(30).min(max_modal_width) as u16;

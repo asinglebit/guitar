@@ -2,7 +2,7 @@ use crate::git::queries::remotes::{effective_default_remote, list_remotes};
 use crate::helpers::heatmap::heat_cell;
 use crate::helpers::keymap::{Command, InputMode, KeymapSelection, action_keymap_visible_entries, keybinding_to_visual_string};
 use crate::helpers::layout::scrollbar_content_length;
-use crate::helpers::localisation::{common, empty, settings as settings_text};
+use crate::helpers::localisation::{Language, common, empty, settings as settings_text};
 use crate::helpers::palette::*;
 use crate::helpers::symbols::{SymbolTheme, SymbolThemeName};
 use crate::helpers::version::VERSION;
@@ -20,7 +20,7 @@ use ratatui::{
     widgets::{Block, List, ListItem, Scrollbar, ScrollbarOrientation, ScrollbarState},
 };
 
-const SETTINGS_PANE_COMMANDS: &[(&str, Command, &str)] = &[
+const SETTINGS_PANE_COMMANDS: &[(&str, Command, fn() -> &'static str)] = &[
     ("1", Command::ToggleBranches, settings_text::BRANCHES),
     ("2", Command::ToggleTags, settings_text::TAGS),
     ("3", Command::ToggleStashes, settings_text::STASHES),
@@ -33,7 +33,7 @@ const SETTINGS_PANE_COMMANDS: &[(&str, Command, &str)] = &[
     ("0", Command::ResetLayout, settings_text::RESET_LAYOUT),
 ];
 
-const SETTINGS_GRAPH_COMMANDS: &[(&str, Command, &str)] = &[
+const SETTINGS_GRAPH_COMMANDS: &[(&str, Command, fn() -> &'static str)] = &[
     (")", Command::ToggleGraphReflogs, settings_text::GRAPH_REFLOG_COMMITS),
     ("!", Command::ToggleShas, settings_text::SHAS),
     ("@", Command::ToggleGraphDates, settings_text::COMMITTER_DATE_TIME),
@@ -153,7 +153,7 @@ impl App {
                     self.symbols.form.checkbox_off.clone()
                 }
             },
-            Command::ResetLayout => settings_text::ENTER_ACTION.to_string(),
+            Command::ResetLayout => settings_text::ENTER_ACTION().to_string(),
             _ => String::new(),
         }
     }
@@ -238,7 +238,7 @@ impl App {
     fn append_settings_paths(&mut self, lines: &mut Vec<Line<'static>>, width: usize) {
         // Config paths are informational, but still selectable for consistent navigation.
         lines.push(Line::default());
-        lines.push(self.settings_section_line(settings_text::PATHS_SECTION, width));
+        lines.push(self.settings_section_line(settings_text::PATHS_SECTION(), width));
         lines.push(Line::default());
         let mut pathbuf = dirs::config_dir().unwrap();
         pathbuf.push("guitar");
@@ -247,25 +247,27 @@ impl App {
         let shaded = Style::default().fg(self.theme.COLOR_TEXT).bg(self.theme.background_or_default(self.theme.COLOR_GREY_900));
         let plain = Style::default().fg(self.theme.COLOR_TEXT);
 
-        lines.push(self.settings_filled_line(settings_text::KEYMAP, format!(" {}/keymap.json ", path).as_str(), width, shaded));
+        lines.push(self.settings_filled_line(settings_text::KEYMAP(), format!(" {}/keymap.json ", path).as_str(), width, shaded));
         self.add_settings_selection(lines, SettingsSelectionKind::Info);
-        lines.push(self.settings_filled_line(settings_text::LAYOUT, format!(" {}/layout.json ", path).as_str(), width, plain));
+        lines.push(self.settings_filled_line(settings_text::LANGUAGE(), format!(" {}/language.json ", path).as_str(), width, plain));
         self.add_settings_selection(lines, SettingsSelectionKind::Info);
-        lines.push(self.settings_filled_line(settings_text::THEME, format!(" {}/theme.json ", path).as_str(), width, shaded));
+        lines.push(self.settings_filled_line(settings_text::LAYOUT(), format!(" {}/layout.json ", path).as_str(), width, shaded));
         self.add_settings_selection(lines, SettingsSelectionKind::Info);
-        lines.push(self.settings_filled_line(settings_text::SYMBOLS, format!(" {}/symbols.json ", path).as_str(), width, plain));
+        lines.push(self.settings_filled_line(settings_text::THEME(), format!(" {}/theme.json ", path).as_str(), width, plain));
         self.add_settings_selection(lines, SettingsSelectionKind::Info);
-        lines.push(self.settings_filled_line(settings_text::RECENT_FILE, format!(" {}/recent.json ", path).as_str(), width, shaded));
+        lines.push(self.settings_filled_line(settings_text::SYMBOLS(), format!(" {}/symbols.json ", path).as_str(), width, shaded));
+        self.add_settings_selection(lines, SettingsSelectionKind::Info);
+        lines.push(self.settings_filled_line(settings_text::RECENT_FILE(), format!(" {}/recent.json ", path).as_str(), width, plain));
         self.add_settings_selection(lines, SettingsSelectionKind::Info);
 
         lines.push(Line::default());
-        lines.push(self.settings_section_line(settings_text::RECENT_REPOSITORIES, width));
+        lines.push(self.settings_section_line(settings_text::RECENT_REPOSITORIES(), width));
         lines.push(Line::default());
-        lines.push(self.settings_filled_line(settings_text::ACTIONS, format!("{} ", self.recent_repository_actions_detail_text()).as_str(), width, plain));
+        lines.push(self.settings_filled_line(settings_text::ACTIONS(), format!("{} ", self.recent_repository_actions_detail_text()).as_str(), width, plain));
         lines.push(Line::default());
 
         if self.recent.is_empty() {
-            lines.push(self.settings_filled_line(&format!(" {}", empty::NO_RECENT_REPOSITORIES), "", width, plain));
+            lines.push(self.settings_filled_line(&format!(" {}", empty::NO_RECENT_REPOSITORIES()), "", width, plain));
         } else {
             let recent = self.recent.clone();
             for (idx, path) in recent.iter().enumerate() {
@@ -281,32 +283,32 @@ impl App {
 
     fn append_settings_repo(&mut self, lines: &mut Vec<Line<'static>>, repo: &git2::Repository, width: usize) {
         lines.push(Line::default());
-        lines.push(self.settings_section_line(settings_text::REMOTES, width));
+        lines.push(self.settings_section_line(settings_text::REMOTES(), width));
         lines.push(Line::default());
-        lines.push(self.settings_filled_line(settings_text::ACTIONS, settings_text::REMOTES_ACTIONS_DETAIL, width, Style::default().fg(self.theme.COLOR_TEXT)));
+        lines.push(self.settings_filled_line(settings_text::ACTIONS(), settings_text::REMOTES_ACTIONS_DETAIL(), width, Style::default().fg(self.theme.COLOR_TEXT)));
         lines.push(Line::default());
 
         match list_remotes(repo) {
             Ok(remotes) if remotes.is_empty() => {
-                lines.push(self.settings_filled_line(settings_text::DEFAULT_REMOTE, format!(" {} ", common::NONE).as_str(), width, Style::default().fg(self.theme.COLOR_TEXT)));
+                lines.push(self.settings_filled_line(settings_text::DEFAULT_REMOTE(), format!(" {} ", common::NONE()).as_str(), width, Style::default().fg(self.theme.COLOR_TEXT)));
                 lines.push(Line::default());
                 lines.push(self.settings_filled_line(
-                    settings_text::ADD_REMOTE,
-                    format!("{} ", settings_text::ENTER_ACTION).as_str(),
+                    settings_text::ADD_REMOTE(),
+                    format!("{} ", settings_text::ENTER_ACTION()).as_str(),
                     width,
                     Style::default().fg(self.theme.COLOR_GRASS).bg(self.theme.background_or_default(self.theme.COLOR_GREY_900)),
                 ));
                 self.add_settings_selection(lines, SettingsSelectionKind::RemoteAdd);
-                lines.push(self.settings_filled_line(&format!(" {}", empty::NO_REMOTES), "", width, Style::default().fg(self.theme.COLOR_TEXT)));
+                lines.push(self.settings_filled_line(&format!(" {}", empty::NO_REMOTES()), "", width, Style::default().fg(self.theme.COLOR_TEXT)));
             },
             Ok(remotes) => {
                 let default_remote = effective_default_remote(repo);
-                let default_label = default_remote.as_deref().unwrap_or(common::NONE);
-                lines.push(self.settings_filled_line(settings_text::DEFAULT_REMOTE, format!(" {default_label} ").as_str(), width, Style::default().fg(self.theme.COLOR_GRASS)));
+                let default_label = default_remote.as_deref().unwrap_or(common::NONE());
+                lines.push(self.settings_filled_line(settings_text::DEFAULT_REMOTE(), format!(" {default_label} ").as_str(), width, Style::default().fg(self.theme.COLOR_GRASS)));
                 lines.push(Line::default());
                 lines.push(self.settings_filled_line(
-                    settings_text::ADD_REMOTE,
-                    format!("{} ", settings_text::ENTER_ACTION).as_str(),
+                    settings_text::ADD_REMOTE(),
+                    format!("{} ", settings_text::ENTER_ACTION()).as_str(),
                     width,
                     Style::default().fg(self.theme.COLOR_GRASS).bg(self.theme.background_or_default(self.theme.COLOR_GREY_900)),
                 ));
@@ -315,24 +317,24 @@ impl App {
                 for (idx, remote) in remotes.iter().enumerate() {
                     let effective_push_url = remote.push_url.as_deref().filter(|url| !url.is_empty()).unwrap_or(remote.url.as_str());
                     let is_default = default_remote.as_deref() == Some(remote.name.as_str());
-                    let marker = if is_default { format!(" {}", common::DEFAULT_REMOTE) } else { String::new() };
+                    let marker = if is_default { format!(" {}", common::DEFAULT_REMOTE()) } else { String::new() };
 
                     let mut style = Style::default().fg(if is_default { self.theme.COLOR_GRASS } else { self.theme.COLOR_TEXT });
                     if (idx + 1).is_multiple_of(2) {
                         style = style.bg(self.theme.background_or_default(self.theme.COLOR_GREY_900));
                     }
 
-                    lines.push(self.settings_filled_line(format!(" {} {}", remote.name, settings_text::FETCH_SUFFIX).as_str(), format!(" {}{marker} ", remote.url).as_str(), width, style));
+                    lines.push(self.settings_filled_line(format!(" {} {}", remote.name, settings_text::FETCH_SUFFIX()).as_str(), format!(" {}{marker} ", remote.url).as_str(), width, style));
                     self.add_settings_selection(lines, SettingsSelectionKind::Remote(remote.name.clone()));
 
                     if !effective_push_url.is_empty() {
-                        lines.push(self.settings_filled_line(format!(" {} {}", remote.name, settings_text::PUSH_SUFFIX).as_str(), format!(" {effective_push_url}{marker} ").as_str(), width, style));
+                        lines.push(self.settings_filled_line(format!(" {} {}", remote.name, settings_text::PUSH_SUFFIX()).as_str(), format!(" {effective_push_url}{marker} ").as_str(), width, style));
                         self.add_settings_selection(lines, SettingsSelectionKind::Remote(remote.name.clone()));
                     }
                 }
             },
             Err(error) => {
-                lines.push(self.settings_filled_line(settings_text::REMOTE_ERROR, format!(" {error} ").as_str(), width, Style::default().fg(self.theme.COLOR_ORANGE)));
+                lines.push(self.settings_filled_line(settings_text::REMOTE_ERROR(), format!(" {error} ").as_str(), width, Style::default().fg(self.theme.COLOR_ORANGE)));
             },
         }
     }
@@ -344,31 +346,31 @@ impl App {
         let plain = Style::default().fg(self.theme.COLOR_TEXT);
 
         lines.push(Line::default());
-        lines.push(self.settings_section_line(settings_text::CREDENTIALS, width));
+        lines.push(self.settings_section_line(settings_text::CREDENTIALS(), width));
         lines.push(Line::default());
 
-        lines.push(self.settings_filled_line(settings_text::NAME, format!("{} ", name.unwrap()).as_str(), width, shaded));
+        lines.push(self.settings_filled_line(settings_text::NAME(), format!("{} ", name.unwrap()).as_str(), width, shaded));
         self.add_settings_selection(lines, SettingsSelectionKind::Info);
-        lines.push(self.settings_filled_line(settings_text::EMAIL, format!("{} ", email.unwrap()).as_str(), width, plain));
+        lines.push(self.settings_filled_line(settings_text::EMAIL(), format!("{} ", email.unwrap()).as_str(), width, plain));
         self.add_settings_selection(lines, SettingsSelectionKind::Info);
-        lines.push(self.settings_filled_line(settings_text::AUTHORIZATION, settings_text::SSH_AGENT_DETAIL, width, shaded));
+        lines.push(self.settings_filled_line(settings_text::AUTHORIZATION(), settings_text::SSH_AGENT_DETAIL(), width, shaded));
         self.add_settings_selection(lines, SettingsSelectionKind::Info);
-        lines.push(self.settings_filled_line(settings_text::SSH_FALLBACK, settings_text::SSH_FALLBACK_DETAIL, width, plain));
+        lines.push(self.settings_filled_line(settings_text::SSH_FALLBACK(), settings_text::SSH_FALLBACK_DETAIL(), width, plain));
         self.add_settings_selection(lines, SettingsSelectionKind::Info);
-        lines.push(self.settings_filled_line(settings_text::HTTPS, settings_text::HTTPS_DETAIL, width, shaded));
+        lines.push(self.settings_filled_line(settings_text::HTTPS(), settings_text::HTTPS_DETAIL(), width, shaded));
         self.add_settings_selection(lines, SettingsSelectionKind::Info);
-        lines.push(self.settings_filled_line(settings_text::SECRETS, settings_text::SECRETS_DETAIL, width, plain));
+        lines.push(self.settings_filled_line(settings_text::SECRETS(), settings_text::SECRETS_DETAIL(), width, plain));
         self.add_settings_selection(lines, SettingsSelectionKind::Info);
     }
 
     fn append_settings_themes(&mut self, lines: &mut Vec<Line<'static>>, width: usize) {
         lines.push(Line::default());
-        lines.push(self.settings_section_line(settings_text::THEMES, width));
+        lines.push(self.settings_section_line(settings_text::THEMES(), width));
         lines.push(Line::default());
 
         if self.theme.name == ThemeNames::Custom {
             lines.push(self.settings_filled_line(
-                settings_text::ACTIVE_CUSTOM,
+                settings_text::ACTIVE_CUSTOM(),
                 format!(" {} ", self.theme.label()).as_str(),
                 width,
                 Style::default().fg(self.theme.COLOR_TEXT).bg(self.theme.background_or_default(self.theme.COLOR_GREY_900)),
@@ -388,14 +390,31 @@ impl App {
         }
     }
 
+    fn append_settings_languages(&mut self, lines: &mut Vec<Line<'static>>, width: usize) {
+        lines.push(Line::default());
+        lines.push(self.settings_section_line(settings_text::LANGUAGE(), width));
+        lines.push(Line::default());
+
+        for (idx, language) in Language::ALL.iter().enumerate() {
+            let label = format!(" {}", language.native_label());
+            let marker = format!("{} ", if self.language == *language { &self.symbols.form.radio_on } else { &self.symbols.form.radio_off });
+            let mut style = Style::default().fg(self.theme.COLOR_TEXT);
+            if idx.is_multiple_of(2) {
+                style = style.bg(self.theme.background_or_default(self.theme.COLOR_GREY_900));
+            }
+            lines.push(self.settings_filled_line(&label, &marker, width, style));
+            self.add_settings_selection(lines, SettingsSelectionKind::Language(idx));
+        }
+    }
+
     fn append_settings_symbol_themes(&mut self, lines: &mut Vec<Line<'static>>, width: usize) {
         lines.push(Line::default());
-        lines.push(self.settings_section_line(settings_text::SYMBOL_THEMES, width));
+        lines.push(self.settings_section_line(settings_text::SYMBOL_THEMES(), width));
         lines.push(Line::default());
 
         if self.symbols.name == SymbolThemeName::Custom {
             lines.push(self.settings_filled_line(
-                settings_text::ACTIVE_CUSTOM_SYMBOLS,
+                settings_text::ACTIVE_CUSTOM_SYMBOLS(),
                 format!(" {} ", self.symbols.label()).as_str(),
                 width,
                 Style::default().fg(self.theme.COLOR_TEXT).bg(self.theme.background_or_default(self.theme.COLOR_GREY_900)),
@@ -418,11 +437,11 @@ impl App {
 
     fn append_settings_layout(&mut self, lines: &mut Vec<Line<'static>>, width: usize) {
         lines.push(Line::default());
-        lines.push(self.settings_section_line(settings_text::PANE_VISIBILITY, width));
+        lines.push(self.settings_section_line(settings_text::PANE_VISIBILITY(), width));
         lines.push(Line::default());
         for (idx, (fallback, command, label)) in SETTINGS_PANE_COMMANDS.iter().enumerate() {
             let key = self.settings_layout_command_key(command, fallback);
-            let label = format!(" {} {}:", key, label);
+            let label = format!(" {} {}:", key, label());
             let state = format!(" {} ", self.settings_layout_command_state(command));
             let mut style = Style::default().fg(self.theme.COLOR_TEXT);
             if idx.is_multiple_of(2) {
@@ -433,11 +452,11 @@ impl App {
         }
 
         lines.push(Line::default());
-        lines.push(self.settings_section_line(settings_text::GRAPH_METADATA, width));
+        lines.push(self.settings_section_line(settings_text::GRAPH_METADATA(), width));
         lines.push(Line::default());
         for (idx, (fallback, command, label)) in SETTINGS_GRAPH_COMMANDS.iter().enumerate() {
             let key = self.settings_layout_command_key(command, fallback);
-            let label = format!(" {} {}:", key, label);
+            let label = format!(" {} {}:", key, label());
             let state = format!(" {} ", self.settings_layout_command_state(command));
             let mut style = Style::default().fg(self.theme.COLOR_TEXT);
             if idx.is_multiple_of(2) {
@@ -451,7 +470,7 @@ impl App {
     fn append_settings_shortcuts(&mut self, lines: &mut Vec<Line<'static>>, width: usize) {
         // Keymap sections are generated from the active keymap data, not duplicated text.
         lines.push(Line::default());
-        lines.push(self.settings_section_line(settings_text::SHORTCUTS_NORMAL_MODE, width));
+        lines.push(self.settings_section_line(settings_text::SHORTCUTS_NORMAL_MODE(), width));
         lines.push(Line::default());
         if let Some(mode_keymap) = self.keymaps.get(&InputMode::Normal).cloned() {
             let rendered = render_keybindings(&self.theme, &mode_keymap, width);
@@ -473,7 +492,7 @@ impl App {
         }
 
         lines.push(Line::default());
-        lines.push(self.settings_section_line(settings_text::SHORTCUTS_ACTION_MODE, width));
+        lines.push(self.settings_section_line(settings_text::SHORTCUTS_ACTION_MODE(), width));
         lines.push(Line::default());
         if let Some(action_keymap) = self.keymaps.get(&InputMode::Action).cloned() {
             let normal_keymap = self.keymaps.get(&InputMode::Normal).cloned();
@@ -501,7 +520,7 @@ impl App {
     fn append_settings_header(&mut self, lines: &mut Vec<Line<'static>>, width: usize, week_start: usize) {
         lines.push(Line::default());
         lines.push(self.settings_filled_line(
-            settings_text::VERSION,
+            settings_text::VERSION(),
             format!("{} ", VERSION).as_str(),
             width,
             Style::default().fg(self.theme.COLOR_TEXT).bg(self.theme.background_or_default(self.theme.COLOR_GREY_900)),
@@ -558,6 +577,7 @@ impl App {
         match self.settings_tab {
             SettingsTab::Paths => self.append_settings_paths(&mut lines, heatmap_width),
             SettingsTab::Display => {
+                self.append_settings_languages(&mut lines, heatmap_width);
                 self.append_settings_layout(&mut lines, heatmap_width);
                 self.append_settings_symbol_themes(&mut lines, heatmap_width);
                 self.append_settings_themes(&mut lines, heatmap_width);
