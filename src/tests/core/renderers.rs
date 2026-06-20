@@ -187,6 +187,7 @@ fn graph_projection_bridges_left_dummy_lane_to_current_row() {
 
     assert!(text.contains("╰──── ○"), "{text:?}");
     assert_eq!(connector, format!("{}{}{}{}{}", graph::HORIZONTAL, graph::HORIZONTAL, graph::HORIZONTAL, graph::HORIZONTAL, graph::EMPTY), "{text:?}");
+    assert!(!text.contains(graph::HORIZONTAL_DOTTED), "{text:?}");
     assert!(!connector.contains(graph::VERTICAL), "{text:?}");
     assert!(!text.contains(graph::BRANCH_UP), "{text:?}");
 }
@@ -324,7 +325,8 @@ fn graph_projection_uses_flattened_color_for_pipe_merge_and_connector_spans() {
     let pipe_history =
         GraphHistory::from(Vector::from(vec![Vector::from(vec![Chunk::commit(1, NONE, NONE), Chunk::dummy(), Chunk::dummy(), Chunk::dummy(), Chunk::commit(9, 99, NONE).with_flattened(true)])]));
     let pipe_lines = render_graph_projection(&theme, &symbols, &[graph_row_with_alias(0, 1)], &pipe_history, NONE, 0, 1, true);
-    assert_eq!(span_color(&pipe_lines[0], graph::VERTICAL), Some(theme.COLOR_GREY_500));
+    assert_eq!(span_color(&pipe_lines[0], graph::VERTICAL_DOTTED), Some(theme.COLOR_GREY_500));
+    assert_eq!(span_color(&pipe_lines[0], graph::VERTICAL), None);
 
     let merge_history = capped_flattened_history(Chunk::commit(9, 1, 2));
     let merge_lines = render_graph_projection(&theme, &symbols, &[graph_row_with_alias(0, 9)], &merge_history, NONE, 0, 1, true);
@@ -336,7 +338,20 @@ fn graph_projection_uses_flattened_color_for_pipe_merge_and_connector_spans() {
     ]));
     let connector_rows = vec![graph_row_with_alias(0, 30), graph_row_with_alias(1, 4)];
     let connector_lines = render_graph_projection(&theme, &symbols, &connector_rows, &connector_history, NONE, 0, 2, true);
-    assert_eq!(span_color(&connector_lines[1], graph::HORIZONTAL), Some(theme.COLOR_GREY_500));
+    assert_eq!(span_color(&connector_lines[1], graph::HORIZONTAL_DOTTED), Some(theme.COLOR_GREY_500));
+    assert_eq!(span_color(&connector_lines[1], graph::HORIZONTAL), None);
+}
+
+#[test]
+fn graph_projection_keeps_nonflattened_pipe_symbols_solid() {
+    let theme = Theme::classic();
+    let symbols = SymbolTheme::main();
+    let pipe_history = GraphHistory::from(Vector::from(vec![Vector::from(vec![Chunk::commit(1, NONE, NONE), Chunk::dummy(), Chunk::dummy(), Chunk::dummy(), Chunk::commit(9, 99, NONE)])]));
+
+    let pipe_lines = render_graph_projection(&theme, &symbols, &[graph_row_with_alias(0, 1)], &pipe_history, NONE, 0, 1, true);
+
+    assert_eq!(span_color(&pipe_lines[0], graph::VERTICAL), Some(ColorPicker::from_theme(&theme).get_lane(4)));
+    assert_eq!(span_color(&pipe_lines[0], graph::VERTICAL_DOTTED), None);
 }
 
 #[test]

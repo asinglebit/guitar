@@ -25,6 +25,7 @@ fn main_matches_representative_current_symbols() {
     assert_eq!(theme.border.rounded_bottom_left, "╰");
     assert_eq!(theme.entity.folder, "");
     assert_eq!(theme.graph.branch_up_right, "╰");
+    assert_eq!(theme.graph.horizontal_dotted, "┄");
     assert_eq!(theme.graph.merge, "•");
     assert_eq!(theme.graph.uncommitted, "◌");
     assert_eq!(theme.heatmap.many, "⣿");
@@ -42,6 +43,7 @@ fn ascii_theme_uses_ascii_for_every_symbol_value() {
     assert_eq!(theme.border.vertical, "|");
     assert_eq!(theme.border.rounded_top_left, "+");
     assert_eq!(theme.branch.local_visible, "*");
+    assert_eq!(theme.graph.horizontal_dotted, ".");
     assert_eq!(theme.graph.vertical_dotted, ":");
     assert_eq!(theme.graph.branch_up_right, "+");
     assert_eq!(theme.heatmap.many, "@");
@@ -64,6 +66,7 @@ fn missing_symbols_config_loads_main_and_rewrites_full_file() {
     assert!(contents.contains("\"label\": \"main\""));
     assert!(contents.contains("\"rounded_bottom_left\""));
     assert!(contents.contains("\"branch_up_right\""));
+    assert!(contents.contains("\"horizontal_dotted\""));
     assert!(contents.contains("\"symbols\""));
 }
 
@@ -131,7 +134,9 @@ fn partial_overrides_preserve_unspecified_preset_values_and_become_custom() {
     assert_eq!(theme.branch.local_visible, "@");
     assert_eq!(theme.branch.local_hidden, "o");
     assert_eq!(theme.border.horizontal, "-");
+    assert_eq!(theme.graph.horizontal_dotted, ".");
     assert!(contents.contains("\"local_hidden\": \"o\""));
+    assert!(contents.contains("\"horizontal_dotted\": \".\""));
 }
 
 #[test]

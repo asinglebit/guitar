@@ -78,6 +78,7 @@ impl SymbolTheme {
             commit_stash: s("◎"),
             empty: s(" "),
             horizontal: border.horizontal.clone(),
+            horizontal_dotted: s("┄"),
             vertical: border.vertical.clone(),
             vertical_dotted: s("┊"),
             merge_left_from: border.t_right.clone(),
@@ -181,6 +182,7 @@ impl SymbolTheme {
             commit_stash: s("@"),
             empty: s(" "),
             horizontal: border.horizontal.clone(),
+            horizontal_dotted: s("."),
             vertical: border.vertical.clone(),
             vertical_dotted: s(":"),
             merge_left_from: border.t_right.clone(),
@@ -405,6 +407,7 @@ pub struct GraphSymbols {
     pub commit_stash: String,
     pub empty: String,
     pub horizontal: String,
+    pub horizontal_dotted: String,
     pub vertical: String,
     pub vertical_dotted: String,
     pub merge_left_from: String,
@@ -424,6 +427,7 @@ impl GraphSymbols {
             self.commit_stash.as_str(),
             self.empty.as_str(),
             self.horizontal.as_str(),
+            self.horizontal_dotted.as_str(),
             self.vertical.as_str(),
             self.vertical_dotted.as_str(),
             self.merge_left_from.as_str(),
@@ -689,6 +693,7 @@ optional_symbol_config!(GraphSymbolConfig {
     commit_stash,
     empty,
     horizontal,
+    horizontal_dotted,
     vertical,
     vertical_dotted,
     merge_left_from,
@@ -785,6 +790,7 @@ fn apply_symbols(theme: &mut SymbolTheme, config: &SymbolConfig) {
         apply_symbol(&mut theme.graph.commit_stash, &graph.commit_stash);
         apply_symbol(&mut theme.graph.empty, &graph.empty);
         apply_symbol(&mut theme.graph.horizontal, &graph.horizontal);
+        apply_symbol(&mut theme.graph.horizontal_dotted, &graph.horizontal_dotted);
         apply_symbol(&mut theme.graph.vertical, &graph.vertical);
         apply_symbol(&mut theme.graph.vertical_dotted, &graph.vertical_dotted);
         apply_symbol(&mut theme.graph.merge_left_from, &graph.merge_left_from);
@@ -913,6 +919,7 @@ fn symbol_config(theme: &SymbolTheme) -> SymbolConfig {
             commit_stash: Some(theme.graph.commit_stash.clone()),
             empty: Some(theme.graph.empty.clone()),
             horizontal: Some(theme.graph.horizontal.clone()),
+            horizontal_dotted: Some(theme.graph.horizontal_dotted.clone()),
             vertical: Some(theme.graph.vertical.clone()),
             vertical_dotted: Some(theme.graph.vertical_dotted.clone()),
             merge_left_from: Some(theme.graph.merge_left_from.clone()),
@@ -1107,6 +1114,7 @@ pub mod graph {
     pub const COMMIT_STASH: &str = "◎";
     pub const EMPTY: &str = " ";
     pub const HORIZONTAL: &str = super::border::HORIZONTAL;
+    pub const HORIZONTAL_DOTTED: &str = "┄";
     pub const VERTICAL: &str = super::border::VERTICAL;
     pub const VERTICAL_DOTTED: &str = "┊";
     pub const MERGE_LEFT_FROM: &str = super::border::T_RIGHT;
