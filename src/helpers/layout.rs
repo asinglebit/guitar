@@ -11,7 +11,7 @@ pub const LAYOUT_WIDTH_MIN_CENTER: u16 = 20;
 pub const LAYOUT_WIDTH_MIN_SIDE_PANE: u16 = 16;
 pub const LAYOUT_HEIGHT_MIN_STACKED_PANE: u16 = 3;
 pub const LAYOUT_WEIGHT_DEFAULT: u16 = 100;
-pub const GRAPH_LANE_LIMIT_DEFAULT: usize = 20;
+pub const GRAPH_LANE_LIMIT_DEFAULT: usize = 50;
 
 pub fn inset_top(mut r: Rect, n: u16) -> Rect {
     r.y += n;

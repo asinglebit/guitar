@@ -2202,6 +2202,41 @@ impl App {
         }
     }
 
+    fn set_graph_lane_limit_from_shortcut(&mut self, limit: usize) {
+        let limit = limit.max(1);
+        if self.layout_config.graph_lane_limit == limit {
+            return;
+        }
+
+        let was_settings = self.viewport == Viewport::Settings;
+        let settings_selected = self.settings_selected;
+        let settings_scroll = self.settings_scroll.get();
+
+        self.layout_config.graph_lane_limit = limit;
+        self.save_layout();
+
+        if self.repo.is_some() {
+            self.reload(None);
+        }
+
+        if was_settings {
+            self.viewport = Viewport::Settings;
+            self.focus = Focus::Viewport;
+            self.settings_selected = settings_selected;
+            self.settings_scroll.set(settings_scroll);
+        }
+    }
+
+    pub fn on_shrink_graph_lane_limit(&mut self) {
+        let current = self.layout_config.graph_lane_limit.max(1);
+        self.set_graph_lane_limit_from_shortcut(current.saturating_sub(1).max(1));
+    }
+
+    pub fn on_grow_graph_lane_limit(&mut self) {
+        let current = self.layout_config.graph_lane_limit.max(1);
+        self.set_graph_lane_limit_from_shortcut(current.saturating_add(1));
+    }
+
     pub fn on_toggle_shas(&mut self) {
         if self.viewport != Viewport::Splash {
             self.layout_config.is_shas = !self.layout_config.is_shas;

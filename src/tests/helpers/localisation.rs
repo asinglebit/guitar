@@ -70,6 +70,25 @@ fn settings_general_performance_lane_limit_text_is_localised() {
 }
 
 #[test]
+fn graph_lane_limit_shortcut_command_labels_are_localised() {
+    use crate::helpers::keymap::{Command, command_to_visual_string};
+
+    for (language, shrink, grow) in [
+        (Language::English, "Shrink graph lane limit", "Grow graph lane limit"),
+        (Language::Spanish, "Reducir límite de carriles del grafo", "Aumentar límite de carriles del grafo"),
+        (Language::French, "Réduire la limite de voies du graphe", "Augmenter la limite de voies du graphe"),
+        (Language::Russian, "Уменьшить лимит дорожек графа", "Увеличить лимит дорожек графа"),
+        (Language::Turkish, "Grafik şerit sınırını azalt", "Grafik şerit sınırını artır"),
+    ] {
+        set_active_language(language);
+        assert_eq!(command_to_visual_string(&Command::ShrinkGraphLaneLimit), shrink);
+        assert_eq!(command_to_visual_string(&Command::GrowGraphLaneLimit), grow);
+    }
+
+    set_active_language(Language::English);
+}
+
+#[test]
 fn formatted_messages_keep_runtime_values() {
     set_active_language(Language::Turkish);
     assert!(network::pushing("main", "origin").contains("main"));

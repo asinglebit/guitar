@@ -57,6 +57,8 @@ impl App {
             Command::Back => self.on_back(),
             Command::Minimize => self.on_minimize(),
             Command::ResetLayout => self.on_reset_layout(),
+            Command::ShrinkGraphLaneLimit => self.on_shrink_graph_lane_limit(),
+            Command::GrowGraphLaneLimit => self.on_grow_graph_lane_limit(),
             Command::ResizePaneLeft => self.on_resize_pane_left(),
             Command::ResizePaneDown => self.on_resize_pane_down(),
             Command::ResizePaneUp => self.on_resize_pane_up(),

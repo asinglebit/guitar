@@ -319,7 +319,7 @@ Hidden panes are skipped. The unstaged status pane is focusable only on the unco
 - Settings add remote: open the add-remote prompts.
 - Settings keybinding: open key capture.
 - Settings layout row: toggle that layout option or reset layout.
-- Settings graph lane limit row: open a numeric prompt.
+- Settings graph lane limit row: open a numeric prompt. In normal mode, `-` and `+` shrink or grow the graph lane limit by one.
 - Graph: open a worktree badge if the selected commit has valid worktree candidates.
 - Branch/tag/stash/reflog panes: jump to the corresponding graph row and center it when possible.
 - Worktree pane: open the selected valid worktree.
@@ -413,7 +413,7 @@ There are two keymap modes:
 
 By default, `Ctrl+a` enters action mode. The next handled key runs through the action keymap and then the mode returns to normal.
 
-Action mode inherits normal-mode navigation and safe operations, but overrides or adds the dangerous bindings listed below. Notably, action-mode `r` is rebase, action-mode `Shift+R` is revert, and action-mode `m` is merge.
+Action mode inherits normal-mode navigation and safe operations, but overrides or adds the dangerous bindings listed below. Notably, action-mode `r` is rebase, action-mode `Shift+R` is revert, and action-mode `m` is merge. The graph lane limit `-` and `+` shortcuts are normal-mode only.
 
 ### Text Inputs
 
@@ -505,6 +505,8 @@ Defaults are written to `keymap.json` on first run. User-edited keymaps can diff
 | Toggle Graph Committer Date/Time | `@` |
 | Toggle Graph Committers | `#` |
 | Toggle Graph Refs | `$` |
+| Shrink Graph Lane Limit | `-` |
+| Grow Graph Lane Limit | `+` |
 | Toggle Help / Settings | `?` |
 | Return To Parent Repository | `Backspace` |
 | Action Mode | `Ctrl+a` |
@@ -936,7 +938,7 @@ Selectable rows:
 - Add remote row: `Enter` opens name and URL prompts.
 - Theme rows: `Enter` activates and saves the selected theme.
 - Display toggle rows: `Enter` toggles the row or resets layout.
-- Graph lane limit row: `Enter` opens a numeric prompt. Positive values save to `layout.json`; `0` and invalid input keep the modal open without changing the setting.
+- Graph lane limit row: `Enter` opens a numeric prompt. Positive values save to `layout.json`; `0` and invalid input keep the modal open without changing the setting. In normal mode, `-` and `+` shrink or grow the saved graph lane limit by one and reload an open repository.
 - Keybinding rows: `Enter` opens key capture.
 
 Settings reuses normal navigation. Use `Tab` / `Shift+Tab` or click a tab label to switch tabs. Use `j`/`k`, page keys, `g`, `Shift+G`, or mouse wheel to move within the active tab. Use `h`, `Esc`, or `?` to return to the graph.
@@ -1084,7 +1086,7 @@ Command
 Meta
 ```
 
-Supported commands are the command names listed in the keymap tables, without spaces, for example `ToggleSplitDiffMode`, `FocusPaneRight`, `ResizePaneRight`, `RemoveRecentRepository`, `CreateWorktree`, `ToggleSubmodules`, `ToggleGraphDates`, `ToggleGraphCommitters`, `ToggleGraphRefs`, `ReturnToParentRepository`, `UpdateSubmodule`, `SyncSubmodule`, `Revert`, `ContinueOperation`, and `AbortOperation`.
+Supported commands are the command names listed in the keymap tables, without spaces, for example `ToggleSplitDiffMode`, `FocusPaneRight`, `ResizePaneRight`, `RemoveRecentRepository`, `CreateWorktree`, `ToggleSubmodules`, `ToggleGraphDates`, `ToggleGraphCommitters`, `ToggleGraphRefs`, `ShrinkGraphLaneLimit`, `GrowGraphLaneLimit`, `ReturnToParentRepository`, `UpdateSubmodule`, `SyncSubmodule`, `Revert`, `ContinueOperation`, and `AbortOperation`.
 
 Existing `keymap.json` files are preserved. When a new default command is missing and its default key is unbound, `guitar` may add that binding automatically; otherwise, edit the keymap or reset saved config to adopt changed defaults.
 
@@ -1127,13 +1129,13 @@ Default layout:
   "weight_status_bottom": 100,
   "weight_viewer_split_left": 100,
   "weight_viewer_split_right": 100,
-  "graph_lane_limit": 20
+  "graph_lane_limit": 50
 }
 ```
 
 Width values are clamped to a minimum of 16 columns. The center pane keeps at least 20 columns when possible. Stacked pane weights are normalized to at least `1`. Split viewer weights may exist in older configs, but the split divider is always centered.
 
-`graph_lane_limit` defaults to `20` and is normalized to at least `1`.
+`graph_lane_limit` defaults to `50` and is normalized to at least `1`.
 
 The graph reflog toggle requires a reload because it changes graph roots.
 

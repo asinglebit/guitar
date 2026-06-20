@@ -14,6 +14,19 @@ fn defaults_include_recent_repository_bindings() {
 }
 
 #[test]
+fn defaults_include_normal_only_graph_lane_limit_bindings() {
+    let maps = default_keymaps();
+    let normal = maps.get(&InputMode::Normal).unwrap();
+    let action = maps.get(&InputMode::Action).unwrap();
+
+    assert_eq!(normal.get(&KeyBinding::new(Char('-'), KeyModifiers::NONE)), Some(&Command::ShrinkGraphLaneLimit));
+    assert_eq!(normal.get(&KeyBinding::new(Char('+'), KeyModifiers::NONE)), Some(&Command::GrowGraphLaneLimit));
+    assert_eq!(action.get(&KeyBinding::new(Char('-'), KeyModifiers::NONE)), None);
+    assert_eq!(action.get(&KeyBinding::new(Char('+'), KeyModifiers::NONE)), None);
+    assert!(!action.values().any(|command| matches!(command, Command::ShrinkGraphLaneLimit | Command::GrowGraphLaneLimit)));
+}
+
+#[test]
 fn defaults_include_numeric_ui_toggles() {
     let maps = default_keymaps();
     let normal = maps.get(&InputMode::Normal).unwrap();
@@ -161,6 +174,27 @@ fn existing_keymaps_gain_search_toggle_when_available() {
 }
 
 #[test]
+fn existing_keymaps_gain_graph_lane_limit_shortcuts_only_in_normal_when_available() {
+    let mut maps = IndexMap::new();
+    let mut normal = IndexMap::new();
+    normal.insert(KeyBinding::new(Char('j'), KeyModifiers::NONE), Command::ScrollDown);
+    let mut action = IndexMap::new();
+    action.insert(KeyBinding::new(Char('k'), KeyModifiers::NONE), Command::ScrollUp);
+    maps.insert(InputMode::Normal, normal);
+    maps.insert(InputMode::Action, action);
+
+    assert!(ensure_default_keymap_bindings(&mut maps));
+
+    let normal = maps.get(&InputMode::Normal).unwrap();
+    let action = maps.get(&InputMode::Action).unwrap();
+    assert_eq!(normal.get(&KeyBinding::new(Char('-'), KeyModifiers::NONE)), Some(&Command::ShrinkGraphLaneLimit));
+    assert_eq!(normal.get(&KeyBinding::new(Char('+'), KeyModifiers::NONE)), Some(&Command::GrowGraphLaneLimit));
+    assert_eq!(action.get(&KeyBinding::new(Char('-'), KeyModifiers::NONE)), None);
+    assert_eq!(action.get(&KeyBinding::new(Char('+'), KeyModifiers::NONE)), None);
+    assert!(!action.values().any(|command| matches!(command, Command::ShrinkGraphLaneLimit | Command::GrowGraphLaneLimit)));
+}
+
+#[test]
 fn existing_keymaps_do_not_override_search_conflicts() {
     let mut maps = IndexMap::new();
     let mut normal = IndexMap::new();
@@ -196,6 +230,23 @@ fn existing_keymaps_do_not_override_search_conflicts() {
     assert_eq!(normal.get(&KeyBinding::new(Char('x'), KeyModifiers::CONTROL)), Some(&Command::ToggleSubmodules));
     assert_eq!(normal.get(&KeyBinding::new(Backspace, KeyModifiers::NONE)), Some(&Command::Reload));
     assert_eq!(normal.get(&KeyBinding::new(Char('p'), KeyModifiers::CONTROL)), Some(&Command::ReturnToParentRepository));
+}
+
+#[test]
+fn existing_keymaps_do_not_override_graph_lane_limit_shortcut_conflicts() {
+    let mut maps = IndexMap::new();
+    let mut normal = IndexMap::new();
+    normal.insert(KeyBinding::new(Char('-'), KeyModifiers::NONE), Command::Reload);
+    normal.insert(KeyBinding::new(Char('+'), KeyModifiers::NONE), Command::ToggleSearch);
+    maps.insert(InputMode::Normal, normal);
+    maps.insert(InputMode::Action, IndexMap::new());
+
+    assert!(ensure_default_keymap_bindings(&mut maps));
+
+    let normal = maps.get(&InputMode::Normal).unwrap();
+    assert_eq!(normal.get(&KeyBinding::new(Char('-'), KeyModifiers::NONE)), Some(&Command::Reload));
+    assert_eq!(normal.get(&KeyBinding::new(Char('+'), KeyModifiers::NONE)), Some(&Command::ToggleSearch));
+    assert!(!normal.values().any(|command| matches!(command, Command::ShrinkGraphLaneLimit | Command::GrowGraphLaneLimit)));
 }
 
 #[test]

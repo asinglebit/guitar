@@ -1,6 +1,6 @@
 [package]
 name = "guitar"
-version = "1.0.1"
+version = "1.0.2"
 description = "Terminal based git interface"
 authors = ["rattleworks <gasimov.abdulali@gmail.com>"]
 edition = "2024"

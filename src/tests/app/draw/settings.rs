@@ -141,6 +141,26 @@ fn settings_active_tabs_render_their_grouped_sections_only() {
 }
 
 #[test]
+fn settings_shortcuts_render_graph_lane_limit_shortcuts() {
+    crate::helpers::localisation::set_active_language(Language::English);
+    let (_path, repo) = temp_repo("lane-limit-shortcuts");
+    let mut app = settings_app();
+    app.settings_tab = SettingsTab::Shortcuts;
+    app.layout.graph = Rect::new(0, 0, 160, 80);
+    app.layout.app = Rect::new(0, 0, 160, 80);
+    let normal = app.keymaps.get_mut(&InputMode::Normal).unwrap();
+    normal.insert(KeyBinding::new(KeyCode::Char('-'), KeyModifiers::NONE), Command::ShrinkGraphLaneLimit);
+    normal.insert(KeyBinding::new(KeyCode::Char('+'), KeyModifiers::NONE), Command::GrowGraphLaneLimit);
+
+    let rendered = app.settings_lines(&repo).iter().map(line_text).collect::<Vec<_>>().join("\n");
+
+    assert!(rendered.contains("Shrink Graph Lane Limit"));
+    assert!(rendered.contains("Grow Graph Lane Limit"));
+    assert!(rendered.contains("-"));
+    assert!(rendered.contains("+"));
+}
+
+#[test]
 fn settings_scroll_keeps_visible_selection_without_recentering() {
     let (_path, repo) = temp_repo("visible");
     let mut app = settings_app();

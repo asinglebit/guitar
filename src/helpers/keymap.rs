@@ -31,6 +31,8 @@ pub enum Command {
     Back,
     Minimize,
     ResetLayout,
+    ShrinkGraphLaneLimit,
+    GrowGraphLaneLimit,
     ResizePaneLeft,
     ResizePaneDown,
     ResizePaneUp,
@@ -171,6 +173,8 @@ pub fn command_to_visual_string(command: &Command) -> String {
         Command::Back => "Back",
         Command::Minimize => "Minimize",
         Command::ResetLayout => "Reset layout",
+        Command::ShrinkGraphLaneLimit => "Shrink graph lane limit",
+        Command::GrowGraphLaneLimit => "Grow graph lane limit",
         Command::ResizePaneLeft => "Resize pane left",
         Command::ResizePaneDown => "Resize pane down",
         Command::ResizePaneUp => "Resize pane up",
@@ -632,6 +636,10 @@ fn default_normal_keymap() -> IndexMap<KeyBinding, Command> {
     // Backspace returns from a submodule to its parent repository when there is a session stack.
     map.insert(KeyBinding::new(Backspace, KeyModifiers::NONE), Command::ReturnToParentRepository);
 
+    // '-' and '+' adjust the graph lane cap without entering settings.
+    map.insert(KeyBinding::new(Char('-'), KeyModifiers::NONE), Command::ShrinkGraphLaneLimit);
+    map.insert(KeyBinding::new(Char('+'), KeyModifiers::NONE), Command::GrowGraphLaneLimit);
+
     map
 }
 
@@ -639,6 +647,7 @@ fn default_action_keymap() -> IndexMap<KeyBinding, Command> {
     // Keep all basic navigation in action mode
 
     let mut map = default_normal_keymap();
+    map.retain(|_, command| !matches!(command, Command::ShrinkGraphLaneLimit | Command::GrowGraphLaneLimit));
 
     // Dangerous/destructive git operations (action mode only)
 
@@ -867,6 +876,12 @@ fn ensure_default_keymap_bindings(maps: &mut Keymaps) -> bool {
     if !normal_map.values().any(|existing| existing == &Command::ReturnToParentRepository) && !normal_map.contains_key(&return_parent_key) {
         normal_map.insert(return_parent_key, Command::ReturnToParentRepository);
         changed = true;
+    }
+    let normal_only_defaults = [(KeyBinding::new(Char('-'), KeyModifiers::NONE), Command::ShrinkGraphLaneLimit), (KeyBinding::new(Char('+'), KeyModifiers::NONE), Command::GrowGraphLaneLimit)];
+    for (key, command) in normal_only_defaults {
+        if insert_default_binding_if_available(normal_map, key, command) {
+            changed = true;
+        }
     }
     let action_map = maps.entry(InputMode::Action).or_default();
     let rename_branch_key = KeyBinding::new(Char('B'), KeyModifiers::SHIFT);

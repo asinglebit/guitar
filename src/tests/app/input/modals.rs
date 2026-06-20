@@ -3,7 +3,9 @@ use crate::app::app::{RemoteInputAction, SettingsSelection, SettingsSelectionKin
 use crate::core::graph_service::GraphCommand;
 use crate::git::actions::network::NetworkRequest;
 use crate::git::queries::remotes::{GUITAR_DEFAULT_REMOTE_CONFIG, PUSH_DEFAULT_CONFIG};
+use crate::helpers::keymap::{Command, InputMode, KeyBinding, Keymaps};
 use git2::{Repository, Signature};
+use indexmap::IndexMap;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::{
     fs,
@@ -60,6 +62,28 @@ fn modal_app(name: &str) -> App {
 
 fn key(code: KeyCode, modifiers: KeyModifiers) -> KeyEvent {
     KeyEvent::new(code, modifiers)
+}
+
+fn graph_lane_limit_shortcut_keymaps() -> Keymaps {
+    let mut maps = IndexMap::new();
+    let mut normal = IndexMap::new();
+    normal.insert(KeyBinding::new(KeyCode::Char('-'), KeyModifiers::NONE), Command::ShrinkGraphLaneLimit);
+    normal.insert(KeyBinding::new(KeyCode::Char('+'), KeyModifiers::NONE), Command::GrowGraphLaneLimit);
+    maps.insert(InputMode::Normal, normal);
+    maps.insert(InputMode::Action, IndexMap::new());
+    maps
+}
+
+fn shutdown_graph_worker(app: &mut App) {
+    if let Some(tx) = app.graph_tx.take() {
+        let _ = tx.send(GraphCommand::Shutdown);
+    }
+    if let Some(cancel) = &app.walker_cancel {
+        cancel.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+    if let Some(handle) = app.walker_handle.take() {
+        handle.join().unwrap();
+    }
 }
 
 #[test]
@@ -301,6 +325,55 @@ fn graph_lane_limit_input_updates_and_saves_value() {
 }
 
 #[test]
+fn graph_lane_limit_shortcuts_adjust_and_clamp_without_repo() {
+    let mut app = App { viewport: Viewport::Graph, focus: Focus::Viewport, keymaps: graph_lane_limit_shortcut_keymaps(), ..Default::default() };
+    app.layout_config.graph_lane_limit = 3;
+
+    app.handle_key_event(key(KeyCode::Char('-'), KeyModifiers::NONE));
+    assert_eq!(app.layout_config.graph_lane_limit, 2);
+
+    app.handle_key_event(key(KeyCode::Char('+'), KeyModifiers::NONE));
+    assert_eq!(app.layout_config.graph_lane_limit, 3);
+
+    app.layout_config.graph_lane_limit = 1;
+    app.handle_key_event(key(KeyCode::Char('-'), KeyModifiers::NONE));
+
+    assert_eq!(app.layout_config.graph_lane_limit, 1);
+    assert!(app.graph_tx.is_none());
+}
+
+#[test]
+fn graph_lane_limit_shortcut_reloads_open_repo_and_preserves_settings_position() {
+    let (path, repo) = temp_repo("lane-limit-shortcut-reload");
+    commit_files(&repo, &["file.txt"], "initial");
+    let repo_path = path.display().to_string();
+    let mut app = App {
+        path: Some(repo_path.clone()),
+        recent: vec![repo_path],
+        repo: Some(Rc::new(repo)),
+        viewport: Viewport::Settings,
+        focus: Focus::Viewport,
+        settings_selected: 12,
+        keymaps: graph_lane_limit_shortcut_keymaps(),
+        ..Default::default()
+    };
+    app.settings_scroll.set(4);
+    app.layout_config.graph_lane_limit = 20;
+
+    app.handle_key_event(key(KeyCode::Char('-'), KeyModifiers::NONE));
+
+    assert_eq!(app.layout_config.graph_lane_limit, 19);
+    assert_eq!(app.viewport, Viewport::Settings);
+    assert_eq!(app.focus, Focus::Viewport);
+    assert_eq!(app.settings_selected, 12);
+    assert_eq!(app.settings_scroll.get(), 4);
+    assert!(app.graph_tx.is_some());
+    assert!(app.walker_handle.is_some());
+
+    shutdown_graph_worker(&mut app);
+}
+
+#[test]
 fn graph_lane_limit_input_reloads_open_repo_and_preserves_settings_position() {
     let (path, repo) = temp_repo("lane-limit-reload");
     commit_files(&repo, &["file.txt"], "initial");
@@ -328,15 +401,7 @@ fn graph_lane_limit_input_reloads_open_repo_and_preserves_settings_position() {
     assert!(app.graph_tx.is_some());
     assert!(app.walker_handle.is_some());
 
-    if let Some(tx) = app.graph_tx.take() {
-        let _ = tx.send(GraphCommand::Shutdown);
-    }
-    if let Some(cancel) = &app.walker_cancel {
-        cancel.store(true, std::sync::atomic::Ordering::SeqCst);
-    }
-    if let Some(handle) = app.walker_handle.take() {
-        handle.join().unwrap();
-    }
+    shutdown_graph_worker(&mut app);
 }
 
 #[test]
