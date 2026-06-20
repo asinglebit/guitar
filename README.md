@@ -56,7 +56,7 @@ Use it carefully on important repositories. Keep backups, understand what the se
 
 the complete rundown of features of the `v1.0.0`:
 
-[https://m.youtube.com/watch?v=0oyqviuKFXI](https://m.youtube.com/watch?v=0oyqviuKFXI)
+[<img width="1280" height="720" alt="17819318384655666056679035192890" src="https://github.com/user-attachments/assets/f49e4414-a4b7-408e-83e7-74a7c4b229b3" />](https://m.youtube.com/watch?v=0oyqviuKFXI)
 
 Older recording of the `v0.1.12` feature set and some technical breakdown of the core walker:
 
