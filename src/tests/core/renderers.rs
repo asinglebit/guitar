@@ -85,6 +85,33 @@ fn capped_flattened_history(chunk: Chunk) -> GraphHistory {
     GraphHistory::from(Vector::from(vec![Vector::from(vec![Chunk::dummy(), Chunk::dummy(), Chunk::dummy(), Chunk::dummy(), chunk.with_flattened(true)])]))
 }
 
+fn capped_merge_closeout_to_flattened_lane_history() -> GraphHistory {
+    GraphHistory::from(Vector::from(vec![Vector::from(vec![Chunk::commit(9, 1, 2), Chunk::dummy(), Chunk::dummy(), Chunk::dummy(), Chunk::commit(50, 99, NONE).with_flattened(true)])]))
+}
+
+fn capped_merge_closeout_with_dummy_after_flattened_lane_history() -> GraphHistory {
+    GraphHistory::from(Vector::from(vec![
+        Vector::from(vec![Chunk::commit(40, NONE, NONE), Chunk::dummy(), Chunk::dummy(), Chunk::commit(50, 99, NONE).with_flattened(true), Chunk::commit(60, 100, NONE)]),
+        Vector::from(vec![Chunk::commit(9, 1, 2), Chunk::dummy(), Chunk::dummy(), Chunk::commit(50, 99, NONE).with_flattened(true), Chunk::dummy()]),
+    ]))
+}
+
+fn capped_merge_closeout_before_flattened_lane_history() -> GraphHistory {
+    GraphHistory::from(Vector::from(vec![
+        Vector::from(vec![Chunk::commit(40, NONE, NONE), Chunk::dummy(), Chunk::dummy(), Chunk::commit(50, 99, NONE), Chunk::commit(60, 100, NONE)]),
+        Vector::from(vec![Chunk::commit(9, 1, 2), Chunk::dummy(), Chunk::dummy(), Chunk::commit(50, 99, NONE), Chunk::commit(60, 100, NONE)]),
+        Vector::from(vec![Chunk::dummy(), Chunk::dummy(), Chunk::dummy(), Chunk::commit(50, 99, NONE).with_flattened(true), Chunk::commit(60, 100, NONE)]),
+    ]))
+}
+
+fn capped_merge_on_last_lane_before_flattening_history() -> GraphHistory {
+    GraphHistory::from(Vector::from(vec![
+        Vector::from(vec![Chunk::commit(40, NONE, NONE), Chunk::dummy(), Chunk::dummy(), Chunk::commit(50, 99, NONE), Chunk::commit(60, 100, NONE)]),
+        Vector::from(vec![Chunk::dummy(), Chunk::dummy(), Chunk::dummy(), Chunk::dummy(), Chunk::commit(9, 1, 2)]),
+        Vector::from(vec![Chunk::dummy(), Chunk::dummy(), Chunk::dummy(), Chunk::dummy(), Chunk::commit(60, 100, NONE).with_flattened(true)]),
+    ]))
+}
+
 #[test]
 fn sha_projection_uses_text_and_highlighted_text_colors() {
     let theme = Theme::classic();
@@ -343,6 +370,68 @@ fn graph_projection_uses_flattened_color_for_pipe_merge_and_connector_spans() {
 }
 
 #[test]
+fn graph_projection_draws_branch_down_on_flattened_closeout_lane() {
+    let theme = Theme::classic();
+    let symbols = SymbolTheme::main();
+    let row = graph_row_with_alias(0, 9);
+    let history = capped_merge_closeout_to_flattened_lane_history();
+
+    let lines = render_graph_projection(&theme, &symbols, &[row], &history, NONE, 0, 1, true);
+    let text = line_text(&lines[0]);
+
+    assert!(text.contains(graph::BRANCH_DOWN), "{text:?}");
+    assert_eq!(span_color(&lines[0], graph::BRANCH_DOWN), Some(theme.COLOR_GREY_500));
+    assert_eq!(span_color(&lines[0], graph::HORIZONTAL_DOTTED), Some(theme.COLOR_GREY_500));
+    assert!(lines[0].spans.len() <= 5 * 2, "{text:?}");
+}
+
+#[test]
+fn graph_projection_redirects_inside_snapshot_closeout_to_flattened_lane() {
+    let theme = Theme::classic();
+    let symbols = SymbolTheme::main();
+    let rows = vec![graph_row_with_alias(0, 40), graph_row_with_alias(1, 9)];
+    let history = capped_merge_closeout_with_dummy_after_flattened_lane_history();
+
+    let lines = render_graph_projection(&theme, &symbols, &rows, &history, NONE, 0, 2, true);
+    let text = line_text(&lines[1]);
+    let expected_closeout = format!("{}{}{}{}{}", graph::HORIZONTAL_DOTTED, graph::HORIZONTAL_DOTTED, graph::HORIZONTAL_DOTTED, graph::HORIZONTAL_DOTTED, graph::BRANCH_DOWN);
+
+    assert!(text.contains(&expected_closeout), "{text:?}");
+    assert_eq!(text.matches(graph::HORIZONTAL_DOTTED).count(), 4, "{text:?}");
+    assert!(!text.contains(graph::HORIZONTAL), "{text:?}");
+    assert_eq!(span_color(&lines[1], graph::BRANCH_DOWN), Some(theme.COLOR_GREY_500));
+}
+
+#[test]
+fn graph_projection_looks_ahead_for_flattened_closeout_lane() {
+    let theme = Theme::classic();
+    let symbols = SymbolTheme::main();
+    let rows = vec![graph_row_with_alias(0, 40), graph_row_with_alias(1, 9), graph_row_with_alias(2, 50)];
+    let history = capped_merge_closeout_before_flattened_lane_history();
+
+    let lines = render_graph_projection(&theme, &symbols, &rows, &history, NONE, 0, 3, true);
+    let text = line_text(&lines[1]);
+    let expected_closeout = format!("{}{}{}{}{}", graph::HORIZONTAL_DOTTED, graph::HORIZONTAL_DOTTED, graph::HORIZONTAL_DOTTED, graph::HORIZONTAL_DOTTED, graph::BRANCH_DOWN);
+
+    assert!(text.contains(&expected_closeout), "{text:?}");
+    assert!(!text.contains(graph::HORIZONTAL), "{text:?}");
+    assert_eq!(span_color(&lines[1], graph::BRANCH_DOWN), Some(theme.COLOR_GREY_500));
+}
+
+#[test]
+fn graph_projection_skips_branch_down_when_merge_is_on_lookahead_flattened_lane() {
+    let theme = Theme::classic();
+    let symbols = SymbolTheme::main();
+    let rows = vec![graph_row_with_alias(0, 40), graph_row_with_alias(1, 9), graph_row_with_alias(2, 60)];
+    let history = capped_merge_on_last_lane_before_flattening_history();
+
+    let lines = render_graph_projection(&theme, &symbols, &rows, &history, NONE, 0, 3, true);
+    let text = line_text(&lines[1]);
+
+    assert!(!text.contains(graph::BRANCH_DOWN), "{text:?}");
+}
+
+#[test]
 fn graph_projection_keeps_nonflattened_pipe_symbols_solid() {
     let theme = Theme::classic();
     let symbols = SymbolTheme::main();
@@ -364,6 +453,7 @@ fn graph_projection_does_not_draw_flattened_merge_past_snapshot_width() {
     let lines = render_graph_projection(&theme, &symbols, &[row], &history, NONE, 0, 1, true);
 
     assert!(lines[0].spans.len() <= 1 + 5 * 2, "{:?}", line_text(&lines[0]));
+    assert!(!line_text(&lines[0]).contains(graph::BRANCH_DOWN), "{:?}", line_text(&lines[0]));
 }
 
 #[test]
