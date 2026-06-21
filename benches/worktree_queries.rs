@@ -99,3 +99,9 @@ fn list_worktrees_clean_many_tracked_files(bencher: Bencher) {
     let fixture = worktree_fixture(16, 0, 128);
     bencher.counter(ItemsCount::new(fixture.expected_entries)).bench_local(|| black_box(list_worktrees(&fixture)));
 }
+
+#[divan::bench(sample_count = 10, sample_size = 3)]
+fn list_worktrees_single_large_clean_index(bencher: Bencher) {
+    let fixture = worktree_fixture(0, 0, 2_048);
+    bencher.counter(ItemsCount::new(fixture.expected_entries)).bench_local(|| black_box(list_worktrees(&fixture)));
+}
