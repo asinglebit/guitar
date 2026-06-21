@@ -53,12 +53,14 @@ fn renames_local_branch_and_preserves_target() {
 fn renames_current_branch() {
     let (_path, repo) = temp_repo("rename-current");
     commit(&repo, "file.txt", "initial");
+    let current_branch = get_current_branch(&repo).unwrap();
+    let renamed = if current_branch == "main" { "topic" } else { "main" };
 
-    rename_branch(&repo, "master", "main").unwrap();
+    rename_branch(&repo, &current_branch, renamed).unwrap();
 
-    assert_eq!(get_current_branch(&repo).as_deref(), Some("main"));
-    assert!(repo.find_branch("master", BranchType::Local).is_err());
-    assert!(repo.find_branch("main", BranchType::Local).is_ok());
+    assert_eq!(get_current_branch(&repo).as_deref(), Some(renamed));
+    assert!(repo.find_branch(&current_branch, BranchType::Local).is_err());
+    assert!(repo.find_branch(renamed, BranchType::Local).is_ok());
 }
 
 #[test]

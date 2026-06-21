@@ -17,6 +17,7 @@ pub mod core {
 }
 pub mod git {
     pub mod auth;
+    pub mod repository;
     pub mod actions {
         pub mod branching;
         pub mod checkout;

@@ -99,7 +99,7 @@ fn settings_default_tab_is_general_and_renders_general_sections() {
     assert!(rendered.contains("performance:"));
     assert!(rendered.contains("graph lane limit:"));
     let lane_limit_line = app.settings_lines(&repo).iter().map(line_text).find(|line| line.contains("graph lane limit:")).unwrap();
-    assert!(lane_limit_line.contains("20"));
+    assert!(lane_limit_line.contains(&GRAPH_LANE_LIMIT_DEFAULT.to_string()));
     assert!(lane_limit_line.contains("(enter)"));
     assert!(rendered.contains("recent repositories:"));
     assert!(app.settings_selections.iter().any(|selection| selection.kind == SettingsSelectionKind::GraphLaneLimit));

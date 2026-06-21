@@ -1,9 +1,10 @@
 use crate::{
     git::auth::{AuthAttempt, AuthSession, NetworkResult, network_result},
+    git::repository::open,
     helpers::localisation::network,
 };
 use git2::FetchPrune;
-use git2::{FetchOptions, RemoteCallbacks, Repository};
+use git2::{FetchOptions, RemoteCallbacks};
 use std::thread;
 
 // Run fetch on a worker thread so auth prompts and network latency stay outside the draw loop.
@@ -15,7 +16,7 @@ pub fn fetch_remote(repo_path: &str, remote_name: &str, auth_session: AuthSessio
     thread::spawn(move || {
         let attempt = AuthAttempt::new(auth_session, network::FETCH());
         let result = (|| -> Result<(), git2::Error> {
-            let repo = Repository::open(repo_path)?;
+            let repo = open(&repo_path)?;
             let mut remote = repo.find_remote(&remote_name)?;
             let config = repo.config()?;
 

@@ -366,10 +366,11 @@ fn graph_toggle_multiple_branch_commit_opens_toggle_modal() {
 fn branch_toggle_uses_git_branch_universe_when_pane_window_is_partial() {
     let (path, repo) = temp_repo("branch-window-toggle");
     let oid = commit_file(&repo, "main.txt", "main");
+    let base_branch = repo.head().unwrap().shorthand().unwrap().to_string();
     {
         let commit = repo.find_commit(oid).unwrap();
         repo.branch("feature", &commit, false).unwrap();
-        repo.branch("main", &commit, false).unwrap();
+        repo.branch("release", &commit, false).unwrap();
     }
 
     let mut app = App {
@@ -382,11 +383,11 @@ fn branch_toggle_uses_git_branch_universe_when_pane_window_is_partial() {
         ..Default::default()
     };
     app.graph.branches_window =
-        Some(PaneWindowCache { version: 1, start: 1, end: 2, total: 3, rows: vec![GraphPaneRow::Branch { alias: 1, name: "main".to_string(), is_local: true, lane: None, graph_index: Some(1) }] });
+        Some(PaneWindowCache { version: 1, start: 1, end: 2, total: 3, rows: vec![GraphPaneRow::Branch { alias: 1, name: base_branch.clone(), is_local: true, lane: None, graph_index: Some(1) }] });
 
     app.on_toggle_branch();
 
-    assert_eq!(hidden_branches(&app), vec!["main"]);
+    assert_eq!(hidden_branches(&app), vec![base_branch]);
 }
 
 #[test]

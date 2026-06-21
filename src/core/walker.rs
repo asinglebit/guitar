@@ -8,6 +8,7 @@ use crate::{
     },
     git::queries::commits::{get_sorted_oids, get_tag_oids, get_tip_oids},
     git::queries::reflogs::get_head_reflog_entries,
+    git::repository::open,
 };
 use git2::Repository;
 use im::{HashSet, Vector};
@@ -54,7 +55,7 @@ pub struct Walker {
 impl Walker {
     // Open the repository and seed all metadata that does not depend on walking commits.
     pub fn new(path: String, amount: usize, hidden_branch_names: HashSet<String>, include_head_reflog_roots: bool, graph_lane_limit: usize) -> Result<Self, git2::Error> {
-        let repo = Rc::new(RefCell::new(Repository::open(path)?));
+        let repo = Rc::new(RefCell::new(open(path)?));
 
         let buffer = RefCell::new(Buffer::with_lane_limit(graph_lane_limit));
 

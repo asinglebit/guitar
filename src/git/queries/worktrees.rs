@@ -1,4 +1,7 @@
-use crate::core::worktrees::{WorktreeEntry, WorktreeKind};
+use crate::{
+    core::worktrees::{WorktreeEntry, WorktreeKind},
+    git::repository::open_worktree_owner,
+};
 use git2::{Diff, DiffOptions, Oid, Repository, Worktree, WorktreeLockStatus, WorktreePruneOptions};
 use std::{
     env, fs,
@@ -128,10 +131,9 @@ fn is_prunable(worktree: &Worktree) -> bool {
 }
 
 pub fn list_worktrees(repo: &Repository, current_path: Option<&Path>) -> Result<Vec<WorktreeEntry>, git2::Error> {
-    let owner = Repository::open(repo.commondir()).ok();
+    let owner = open_worktree_owner(repo).ok();
     let worktree_repo = owner.as_ref().unwrap_or(repo);
-    let current =
-        current_path.map(canonical_path).or_else(|| repo.workdir().map(canonical_path)).or_else(|| main_worktree_path(repo).map(|path| canonical_path(&path))).unwrap_or_else(|| PathBuf::from("."));
+    let current = current_path.map(canonical_path).or_else(|| repo.workdir().map(canonical_path)).or_else(|| main_worktree_path(repo).map(|path| canonical_path(&path))).unwrap_or_else(|| PathBuf::from("."));
 
     let mut entries = Vec::new();
 

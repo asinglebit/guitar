@@ -1,5 +1,6 @@
 use crate::{
     git::auth::{AuthAttempt, AuthSession, NetworkResult, network_result},
+    git::repository::open,
     helpers::localisation::network,
 };
 use git2::{FetchOptions, RemoteCallbacks, Repository, SubmoduleUpdateOptions};
@@ -39,7 +40,7 @@ pub fn update_submodule(repo_path: &str, name: &str, auth_session: AuthSession) 
     thread::spawn(move || {
         let attempt = AuthAttempt::new(auth_session, network::UPDATE_SUBMODULE());
         let result = (|| -> Result<(), git2::Error> {
-            let repo = Repository::open(&repo_path)?;
+            let repo = open(&repo_path)?;
             let config = repo.config()?;
             let mut submodule = repo.find_submodule(&name)?;
 
