@@ -78,3 +78,15 @@ fn rejects_empty_invalid_unchanged_and_existing_names() {
     assert!(repo.find_branch("feature", BranchType::Local).is_ok());
     assert!(repo.find_branch("existing", BranchType::Local).is_ok());
 }
+
+#[test]
+fn delete_branch_removes_local_branch() {
+    let (_path, repo) = temp_repo("delete");
+    let oid = commit(&repo, "file.txt", "initial");
+    let target = repo.find_commit(oid).unwrap();
+    repo.branch("feature", &target, false).unwrap();
+
+    delete_branch(&repo, "feature").unwrap();
+
+    assert!(repo.find_branch("feature", BranchType::Local).is_err());
+}

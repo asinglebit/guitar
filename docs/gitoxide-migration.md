@@ -52,6 +52,7 @@ gitoxide's public feature list covers worktree checkout and worktree stream supp
 Checkout and reset details are tracked in [docs/gitoxide-checkout-reset.md](gitoxide-checkout-reset.md).
 Sequencer details are tracked in [docs/gitoxide-sequencer.md](gitoxide-sequencer.md).
 Status and diff details are tracked in [docs/gitoxide-status-diff.md](gitoxide-status-diff.md).
+Refs, remotes, and tag details are tracked in [docs/gitoxide-refs-remotes-tags.md](gitoxide-refs-remotes-tags.md).
 Network and auth details are tracked in [docs/gitoxide-network.md](gitoxide-network.md).
 
 ## Test Gate
