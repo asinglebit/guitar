@@ -2,6 +2,7 @@ use crate::core::chunk::{Chunk, LaneRef, NONE};
 use im::{OrdMap, Vector};
 
 const DELTA_CHUNK_SIZE: usize = 8_192;
+const CHECKPOINT_INTERVAL: usize = 512;
 
 #[derive(Default, Clone)]
 pub struct Delta {
@@ -312,7 +313,7 @@ impl Buffer {
         let old = std::mem::take(&mut self.delta);
         self.deltas.push(old);
         let idx = self.deltas.len().saturating_sub(1);
-        if idx.is_multiple_of(100) {
+        if idx.is_multiple_of(CHECKPOINT_INTERVAL) {
             self.checkpoints.insert(idx, self.curr.clone());
         }
     }
@@ -336,7 +337,7 @@ impl Buffer {
         let begin = checkpoint_idx.map_or(0, |idx| idx + 1);
         let end = end.min(self.deltas.len());
 
-        for delta in self.deltas.iter_range(begin, end) {
+        for (idx, delta) in (begin..end).zip(self.deltas.iter_range(begin, end)) {
             for op in delta.ops.iter() {
                 match op {
                     DeltaOp::Insert { index, item } => {
@@ -355,7 +356,9 @@ impl Buffer {
                     },
                 }
             }
-            history.push_back(curr.clone());
+            if idx >= start {
+                history.push_back(curr.clone());
+            }
         }
 
         history
