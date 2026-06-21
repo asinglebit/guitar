@@ -1,4 +1,7 @@
-use crate::core::worktrees::{WorktreeEntry, WorktreeKind};
+use crate::{
+    core::oids::gix_to_git2_oid,
+    core::worktrees::{WorktreeEntry, WorktreeKind},
+};
 use git2::{Error, Oid, Repository};
 use std::{
     fs,
@@ -30,14 +33,25 @@ fn head_branch(repo: &gix::Repository) -> Option<String> {
 }
 
 fn head_oid(repo: &gix::Repository) -> Option<Oid> {
-    let oid = repo.head_id().ok()?.detach();
-    Oid::from_str(&oid.to_string()).ok()
+    Some(gix_to_git2_oid(repo.head_id().ok()?.detach()))
 }
 
 fn repo_dirty(repo: &gix::Repository) -> bool {
     repo.status(gix::progress::Discard)
         .ok()
-        .and_then(|status| status.untracked_files(gix::status::UntrackedFiles::Files).into_index_worktree_iter(Vec::new()).ok().map(|mut iter| iter.next().is_some()))
+        .and_then(|status| {
+            status
+                .untracked_files(gix::status::UntrackedFiles::Files)
+                .tree_index_track_renames(gix::status::tree_index::TrackRenames::Disabled)
+                .index_worktree_rewrites(None)
+                .index_worktree_submodules(gix::status::Submodule::AsConfigured { check_dirty: true })
+                .index_worktree_options_mut(|opts| {
+                    opts.dirwalk_options = None;
+                })
+                .into_iter(Vec::new())
+                .ok()
+                .map(|mut iter| iter.any(|item| item.is_ok()))
+        })
         .unwrap_or(false)
 }
 

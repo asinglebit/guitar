@@ -104,6 +104,30 @@ fn marks_current_linked_worktree() {
 }
 
 #[test]
+fn marks_dirty_worktrees_when_staged_files_exist() {
+    let dir = TestDir::new("worktree-staged");
+    let repo_path = dir.path.join("repo");
+    let worktree_path = dir.path.join("repo-feature");
+    fs::create_dir_all(&repo_path).unwrap();
+    let repo = init_repo(&repo_path);
+    let oid = repo.head().unwrap().target().unwrap();
+
+    create_worktree(&repo, "feature", &worktree_path, oid).unwrap();
+    let linked_repo = Repository::open(&worktree_path).unwrap();
+
+    fs::write(worktree_path.join("staged.txt"), "staged\n").unwrap();
+    let mut index = linked_repo.index().unwrap();
+    index.add_path(Path::new("staged.txt")).unwrap();
+    index.write().unwrap();
+
+    let entries = list_worktrees(&repo, Some(&repo_path)).unwrap();
+    let linked = entries.iter().find(|entry| entry.name == "feature").unwrap();
+
+    assert!(linked.is_dirty);
+    assert!(linked.is_linked());
+}
+
+#[test]
 fn marks_dirty_worktrees_when_untracked_files_exist() {
     let dir = TestDir::new("worktree-dirty");
     let repo_path = dir.path.join("repo");
