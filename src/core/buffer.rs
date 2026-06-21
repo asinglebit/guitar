@@ -75,8 +75,8 @@ pub struct UpdateOutcome {
 #[derive(Default, Clone)]
 pub struct Buffer {
     pub curr: Vector<Chunk>,
-    // Deltas keep memory bounded while still allowing visible ranges to be reconstructed.
-    pub deltas: Vector<Delta>,
+    // Deltas are append-only; a plain Vec avoids persistent-vector node overhead.
+    pub deltas: Vec<Delta>,
     pub checkpoints: OrdMap<usize, Vector<Chunk>>,
     pub delta: Delta,
     mergers: Vec<u32>,
@@ -240,7 +240,7 @@ impl Buffer {
 
     pub fn backup(&mut self) {
         let old = std::mem::take(&mut self.delta);
-        self.deltas.push_back(old);
+        self.deltas.push(old);
         let idx = self.deltas.len().saturating_sub(1);
         if idx.is_multiple_of(100) {
             self.checkpoints.insert(idx, self.curr.clone());
