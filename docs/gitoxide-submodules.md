@@ -40,6 +40,7 @@ Those docs cover configuration and inspection, but I did not find a documented w
 - `submodule.update(true, ...)`
 
 That means the read-only inspection layer looks feasible to map, but the mutating action layer is still a blocker until a prototype proves the needed write path or a composition path.
+The mutation blocker is tracked in `guitar-gitoxide-port-readiness-2xl.15`.
 
 ## Behavioral Notes
 
