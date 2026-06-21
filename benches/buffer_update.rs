@@ -33,6 +33,13 @@ fn buffer_update_checkpoint_stress(bencher: Bencher) {
     bencher.counter(divan::counter::ItemsCount::new(fixture.ops.len())).bench(|| black_box(update_buffer(&fixture.ops)));
 }
 
+#[divan::bench(sample_count = 30, sample_size = 10)]
+fn buffer_update_checkpoint_large(bencher: Bencher) {
+    let fixture = buffer_checkpoint_fixture(10_000);
+
+    bencher.counter(divan::counter::ItemsCount::new(fixture.ops.len())).bench(|| black_box(update_buffer(&fixture.ops)));
+}
+
 #[divan::bench(sample_count = 100, sample_size = 100)]
 fn buffer_update_capped_overflow_stress(bencher: Bencher) {
     let fixture = buffer_capped_overflow_fixture(256, 20);
@@ -57,6 +64,13 @@ fn buffer_window_replay_medium(bencher: Bencher) {
 #[divan::bench(sample_count = 100, sample_size = 100)]
 fn buffer_window_replay_stress(bencher: Bencher) {
     let fixture = buffer_checkpoint_fixture(180);
+
+    bencher.counter(divan::counter::ItemsCount::new(fixture.buffer.deltas.len())).bench(|| black_box(fixture.buffer.window(fixture.window_start, fixture.window_end)));
+}
+
+#[divan::bench(sample_count = 30, sample_size = 10)]
+fn buffer_window_replay_large(bencher: Bencher) {
+    let fixture = buffer_checkpoint_fixture(10_000);
 
     bencher.counter(divan::counter::ItemsCount::new(fixture.buffer.deltas.len())).bench(|| black_box(fixture.buffer.window(fixture.window_start, fixture.window_end)));
 }
