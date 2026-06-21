@@ -55,7 +55,13 @@ fn main_worktree_path(repo: &Repository) -> Option<PathBuf> {
     repo.commondir().parent().map(Path::to_path_buf)
 }
 
-fn entry_from_gix_repo(repo: &gix::Repository, name: String, path: PathBuf, kind: WorktreeKind, current_path: &Path) -> WorktreeEntry {
+#[derive(Clone, Copy)]
+enum DirtyCheck {
+    Skip,
+    Compute,
+}
+
+fn entry_from_gix_repo(repo: &gix::Repository, name: String, path: PathBuf, kind: WorktreeKind, current_path: &Path, dirty_check: DirtyCheck) -> WorktreeEntry {
     let canonical_entry_path = canonical_path(&path);
     WorktreeEntry {
         name,
@@ -68,11 +74,11 @@ fn entry_from_gix_repo(repo: &gix::Repository, name: String, path: PathBuf, kind
         is_valid: true,
         is_prunable: false,
         locked_reason: None,
-        is_dirty: repo_dirty(repo),
+        is_dirty: matches!(dirty_check, DirtyCheck::Compute) && repo_dirty(repo),
     }
 }
 
-fn linked_entry(proxy: gix::worktree::Proxy<'_>, current_path: &Path) -> Option<WorktreeEntry> {
+fn linked_entry(proxy: gix::worktree::Proxy<'_>, current_path: &Path, dirty_check: DirtyCheck) -> Option<WorktreeEntry> {
     let path = proxy.base().ok()?;
     let canonical_entry_path = canonical_path(&path);
     let name = proxy.id().to_string();
@@ -91,7 +97,7 @@ fn linked_entry(proxy: gix::worktree::Proxy<'_>, current_path: &Path) -> Option<
         is_valid: repo.is_some(),
         is_prunable: !is_locked && repo.is_none(),
         locked_reason,
-        is_dirty: repo.as_ref().is_some_and(repo_dirty),
+        is_dirty: matches!(dirty_check, DirtyCheck::Compute) && repo.as_ref().is_some_and(repo_dirty),
     };
 
     if entry.is_valid {
@@ -101,7 +107,7 @@ fn linked_entry(proxy: gix::worktree::Proxy<'_>, current_path: &Path) -> Option<
     Some(entry)
 }
 
-pub fn list_worktrees(repo: &Repository, current_path: Option<&Path>) -> Result<Vec<WorktreeEntry>, Error> {
+fn list_worktrees_with_dirty_check(repo: &Repository, current_path: Option<&Path>, dirty_check: DirtyCheck) -> Result<Vec<WorktreeEntry>, Error> {
     let current = current_path.map(Path::to_path_buf).or_else(|| repo.workdir().map(Path::to_path_buf)).or_else(|| main_worktree_path(repo)).unwrap_or_else(|| PathBuf::from("."));
     let current = canonical_path(&current);
 
@@ -112,14 +118,22 @@ pub fn list_worktrees(repo: &Repository, current_path: Option<&Path>) -> Result<
 
     if let Some(main_path) = owner_repo.worktree().map(|worktree| worktree.base().to_path_buf()) {
         let main_name = main_path.file_name().and_then(|name| name.to_str()).unwrap_or("main").to_string();
-        entries.push(entry_from_gix_repo(&owner_repo, main_name, main_path, WorktreeKind::Main, &current));
+        entries.push(entry_from_gix_repo(&owner_repo, main_name, main_path, WorktreeKind::Main, &current, dirty_check));
     }
 
-    let mut linked: Vec<WorktreeEntry> = owner_repo.worktrees().map_err(|err| Error::from_str(&err.to_string()))?.into_iter().filter_map(|proxy| linked_entry(proxy, &current)).collect();
+    let mut linked: Vec<WorktreeEntry> = owner_repo.worktrees().map_err(|err| Error::from_str(&err.to_string()))?.into_iter().filter_map(|proxy| linked_entry(proxy, &current, dirty_check)).collect();
     linked.sort_by(|a, b| a.name.cmp(&b.name));
     entries.extend(linked);
 
     Ok(entries)
+}
+
+pub fn list_worktrees(repo: &Repository, current_path: Option<&Path>) -> Result<Vec<WorktreeEntry>, Error> {
+    list_worktrees_with_dirty_check(repo, current_path, DirtyCheck::Compute)
+}
+
+pub fn list_worktrees_metadata(repo: &Repository, current_path: Option<&Path>) -> Result<Vec<WorktreeEntry>, Error> {
+    list_worktrees_with_dirty_check(repo, current_path, DirtyCheck::Skip)
 }
 
 #[cfg(test)]

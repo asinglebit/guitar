@@ -9,7 +9,12 @@ use crate::{
     git::{
         auth::{AuthChallenge, AuthSession, NetworkResult},
         os::path::try_into_git_repo_root,
-        queries::{diffs::get_filenames_diff_at_oid, files::FileSearchResult, submodules::list_submodules, worktrees::list_worktrees},
+        queries::{
+            diffs::get_filenames_diff_at_oid,
+            files::FileSearchResult,
+            submodules::list_submodules,
+            worktrees::{list_worktrees, list_worktrees_metadata},
+        },
         repository::open,
     },
     helpers::{
@@ -935,7 +940,7 @@ impl App {
         // Repository-specific state starts only after Repository::open succeeds.
         if let Some(repo) = &self.repo {
             let current_path = PathBuf::from(&absolute_path);
-            self.worktrees = Worktrees::from_entries(list_worktrees(repo, Some(current_path.as_path())).unwrap_or_default());
+            self.worktrees = Worktrees::from_entries(list_worktrees_metadata(repo, Some(current_path.as_path())).unwrap_or_default());
             self.submodules = Submodules::from_entries(list_submodules(repo).unwrap_or_default());
 
             let same_repo_reload = !has_override_path && previous_path.as_deref() == Some(absolute_path.as_str());
@@ -987,6 +992,7 @@ impl App {
 
             let (command_tx, command_rx) = channel();
             let (event_tx, event_rx) = channel();
+            let worktree_refresh_tx = command_tx.clone();
             self.graph_tx = Some(command_tx);
             self.graph_rx = Some(event_rx);
 
@@ -1003,6 +1009,17 @@ impl App {
                 event_tx,
                 cancel_clone,
             );
+
+            let worktree_refresh_path = current_path;
+            std::thread::spawn(move || {
+                let Ok(repo) = open(&worktree_refresh_path) else {
+                    return;
+                };
+                let Ok(worktrees) = list_worktrees(&repo, Some(worktree_refresh_path.as_path())) else {
+                    return;
+                };
+                let _ = worktree_refresh_tx.send(GraphCommand::UpdateWorktrees { generation, worktrees });
+            });
 
             self.walker_handle = Some(handle);
         }
@@ -1160,6 +1177,12 @@ impl App {
             GraphEvent::Heatmap { generation, heatmap } => {
                 if generation == self.graph.generation {
                     self.heatmap = heatmap;
+                }
+            },
+            GraphEvent::Worktrees { generation, version, worktrees } => {
+                if generation == self.graph.generation {
+                    self.graph.version = self.graph.version.max(version);
+                    self.worktrees = Worktrees::from_entries(worktrees);
                 }
             },
             GraphEvent::Error { generation, message } => {

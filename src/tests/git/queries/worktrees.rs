@@ -144,6 +144,25 @@ fn marks_dirty_worktrees_when_untracked_files_exist() {
 }
 
 #[test]
+fn metadata_listing_skips_dirty_scan_but_keeps_identity() {
+    let dir = TestDir::new("worktree-metadata");
+    let repo_path = dir.path.join("repo");
+    fs::create_dir_all(&repo_path).unwrap();
+    let repo = init_repo(&repo_path);
+    let oid = repo.head().unwrap().target().unwrap();
+
+    fs::write(repo_path.join("untracked.txt"), "extra\n").unwrap();
+
+    let entries = list_worktrees_metadata(&repo, Some(&repo_path)).unwrap();
+    let main = entries.iter().find(|entry| entry.is_main()).unwrap();
+
+    assert!(main.is_current);
+    assert_eq!(main.head, Some(oid));
+    assert_eq!(main.branch.as_deref(), get_current_branch(&repo).as_deref());
+    assert!(!main.is_dirty);
+}
+
+#[test]
 fn reports_lock_reason_and_prunability_for_stale_worktrees() {
     let dir = TestDir::new("worktree-stale");
     let repo_path = dir.path.join("repo");

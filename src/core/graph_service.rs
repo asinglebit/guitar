@@ -63,6 +63,7 @@ pub enum GraphCommand {
     QueryPaneWindow { generation: Generation, pane: GraphPane, start: usize, end: usize },
     QueryFileHistory { generation: Generation, request_id: RequestId, path: String },
     Lookup { generation: Generation, request_id: RequestId, kind: GraphLookupKind },
+    UpdateWorktrees { generation: Generation, worktrees: Vec<WorktreeEntry> },
     Shutdown,
 }
 
@@ -170,6 +171,7 @@ pub enum GraphEvent {
     PaneWindow { generation: Generation, version: GraphVersion, pane: GraphPane, start: usize, end: usize, total: usize, rows: Vec<GraphPaneRow> },
     FileHistory { generation: Generation, request_id: RequestId, path: String, rows: Vec<GraphFileHistoryRow>, error: Option<String> },
     LookupResult { generation: Generation, request_id: RequestId, result: GraphLookupResult },
+    Worktrees { generation: Generation, version: GraphVersion, worktrees: Vec<WorktreeEntry> },
     Heatmap { generation: Generation, heatmap: [[usize; WEEKS]; DAYS] },
     Error { generation: Generation, message: String },
 }
@@ -212,8 +214,19 @@ fn run_graph_service(config: GraphServiceConfig, rx: Receiver<GraphCommand>, tx:
             break;
         }
 
-        if !drain_commands(generation, version, &rx, &tx, &walk_ctx, &mut worktrees, &mut pending_graph, &mut pending_file_history, &mut commit_metadata, &config.hidden_branch_names, &config.symbols)
-        {
+        if !drain_commands(
+            generation,
+            &mut version,
+            &rx,
+            &tx,
+            &walk_ctx,
+            &mut worktrees,
+            &mut pending_graph,
+            &mut pending_file_history,
+            &mut commit_metadata,
+            &config.hidden_branch_names,
+            &config.symbols,
+        ) {
             break;
         }
 
@@ -231,7 +244,7 @@ fn run_graph_service(config: GraphServiceConfig, rx: Receiver<GraphCommand>, tx:
                 Ok(command) => {
                     if !handle_command(
                         generation,
-                        version,
+                        &mut version,
                         command,
                         &tx,
                         &walk_ctx,
@@ -273,7 +286,7 @@ fn run_graph_service(config: GraphServiceConfig, rx: Receiver<GraphCommand>, tx:
 }
 
 fn drain_commands(
-    generation: Generation, version: GraphVersion, rx: &Receiver<GraphCommand>, tx: &Sender<GraphEvent>, walk_ctx: &Walker, worktrees: &mut Worktrees,
+    generation: Generation, version: &mut GraphVersion, rx: &Receiver<GraphCommand>, tx: &Sender<GraphEvent>, walk_ctx: &Walker, worktrees: &mut Worktrees,
     pending_graph: &mut Option<(RequestId, usize, usize)>, pending_file_history: &mut Option<(RequestId, String)>, commit_metadata: &mut CommitMetadataCache, hidden_branch_names: &HashSet<String>,
     symbols: &SymbolTheme,
 ) -> bool {
@@ -286,8 +299,9 @@ fn drain_commands(
 }
 
 fn handle_command(
-    generation: Generation, version: GraphVersion, command: GraphCommand, tx: &Sender<GraphEvent>, walk_ctx: &Walker, worktrees: &mut Worktrees, pending_graph: &mut Option<(RequestId, usize, usize)>,
-    pending_file_history: &mut Option<(RequestId, String)>, commit_metadata: &mut CommitMetadataCache, hidden_branch_names: &HashSet<String>, symbols: &SymbolTheme,
+    generation: Generation, version: &mut GraphVersion, command: GraphCommand, tx: &Sender<GraphEvent>, walk_ctx: &Walker, worktrees: &mut Worktrees,
+    pending_graph: &mut Option<(RequestId, usize, usize)>, pending_file_history: &mut Option<(RequestId, String)>, commit_metadata: &mut CommitMetadataCache, hidden_branch_names: &HashSet<String>,
+    symbols: &SymbolTheme,
 ) -> bool {
     match command {
         GraphCommand::Shutdown => false,
@@ -299,7 +313,7 @@ fn handle_command(
         },
         GraphCommand::QueryPaneWindow { generation: cmd_generation, pane, start, end } => {
             if cmd_generation == generation {
-                send_pane_window(generation, version, pane, start, end, tx, walk_ctx);
+                send_pane_window(generation, *version, pane, start, end, tx, walk_ctx);
             }
             true
         },
@@ -313,6 +327,14 @@ fn handle_command(
             if cmd_generation == generation {
                 let result = lookup(kind, walk_ctx, worktrees, commit_metadata, hidden_branch_names, symbols);
                 let _ = tx.send(GraphEvent::LookupResult { generation, request_id, result });
+            }
+            true
+        },
+        GraphCommand::UpdateWorktrees { generation: cmd_generation, worktrees: updated_worktrees } => {
+            if cmd_generation == generation {
+                worktrees.entries = updated_worktrees.clone();
+                *version = (*version).saturating_add(1);
+                let _ = tx.send(GraphEvent::Worktrees { generation, version: *version, worktrees: updated_worktrees });
             }
             true
         },

@@ -64,6 +64,10 @@ fn list_worktrees(fixture: &WorktreeFixture) -> usize {
     guitar::git::queries::worktrees::list_worktrees(&fixture.repo, Some(&fixture.current_path)).unwrap().len()
 }
 
+fn list_worktrees_metadata(fixture: &WorktreeFixture) -> usize {
+    guitar::git::queries::worktrees::list_worktrees_metadata(&fixture.repo, Some(&fixture.current_path)).unwrap().len()
+}
+
 #[divan::bench(sample_count = 40, sample_size = 10)]
 fn list_worktrees_small(bencher: Bencher) {
     let fixture = worktree_fixture(4, 2, 1);
@@ -104,4 +108,10 @@ fn list_worktrees_clean_many_tracked_files(bencher: Bencher) {
 fn list_worktrees_single_large_clean_index(bencher: Bencher) {
     let fixture = worktree_fixture(0, 0, 2_048);
     bencher.counter(ItemsCount::new(fixture.expected_entries)).bench_local(|| black_box(list_worktrees(&fixture)));
+}
+
+#[divan::bench(sample_count = 10, sample_size = 3)]
+fn list_worktrees_metadata_single_large_clean_index(bencher: Bencher) {
+    let fixture = worktree_fixture(0, 0, 2_048);
+    bencher.counter(ItemsCount::new(fixture.expected_entries)).bench_local(|| black_box(list_worktrees_metadata(&fixture)));
 }

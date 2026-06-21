@@ -129,6 +129,65 @@ fn graph_service_reports_progress_and_answers_visible_window() {
 }
 
 #[test]
+fn graph_service_updates_worktrees_from_command() {
+    let (path, repo) = temp_repo("worktree-update");
+    let head = commit(&repo, "one.txt", "one");
+
+    let generation = 43;
+    let (cmd_tx, cmd_rx) = channel();
+    let (event_tx, event_rx) = channel();
+    let cancel = Arc::new(AtomicBool::new(false));
+    let handle = spawn_graph_service(
+        GraphServiceConfig {
+            generation,
+            path: path.display().to_string(),
+            amount: 1,
+            hidden_branch_names: HashSet::new(),
+            include_head_reflog_roots: false,
+            graph_lane_limit: 20,
+            worktrees: Vec::new(),
+            symbols: SymbolTheme::main(),
+        },
+        cmd_rx,
+        event_tx,
+        cancel.clone(),
+    );
+
+    let updated = vec![WorktreeEntry {
+        name: "repo".to_string(),
+        path: path.clone(),
+        branch: Some("master".to_string()),
+        head: Some(head),
+        alias: None,
+        kind: crate::core::worktrees::WorktreeKind::Main,
+        is_current: true,
+        is_valid: true,
+        is_prunable: false,
+        locked_reason: None,
+        is_dirty: true,
+    }];
+    cmd_tx.send(GraphCommand::UpdateWorktrees { generation, worktrees: updated.clone() }).unwrap();
+
+    let mut saw_worktrees = false;
+    for _ in 0..20 {
+        match event_rx.recv_timeout(Duration::from_millis(250)).unwrap() {
+            GraphEvent::Worktrees { generation: event_generation, version, worktrees } if event_generation == generation => {
+                saw_worktrees = true;
+                assert_eq!(version, 1);
+                assert_eq!(worktrees, updated);
+                break;
+            },
+            _ => {},
+        }
+    }
+    assert!(saw_worktrees);
+
+    let _ = cmd_tx.send(GraphCommand::Shutdown);
+    cancel.store(true, std::sync::atomic::Ordering::SeqCst);
+    handle.join().unwrap();
+}
+
+#[test]
 fn graph_rows_reuse_commit_metadata_cache_for_repeated_windows() {
     let (path, repo) = temp_repo("metadata-cache");
     let first = commit(&repo, "one.txt", "one");
