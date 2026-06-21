@@ -1,11 +1,62 @@
-use crate::{core::submodules::SubmoduleEntry, git::queries::commits::get_current_branch};
-use git2::{Repository, Submodule, SubmoduleIgnore, SubmoduleStatus};
+use crate::core::{oids::gix_to_git2_oid, submodules::SubmoduleEntry};
+use git2::Repository;
+use gix::bstr::ByteSlice;
 use std::path::{Path, PathBuf};
 
-fn status_for(repo: &Repository, name: &str, path: &Path) -> SubmoduleStatus {
-    repo.submodule_status(name, SubmoduleIgnore::None)
-        .or_else(|_| path.to_str().map(|path| repo.submodule_status(path, SubmoduleIgnore::None)).unwrap_or_else(|| Err(git2::Error::from_str("invalid submodule path"))))
-        .unwrap_or_else(|_| SubmoduleStatus::empty())
+fn open_gix_repo(repo: &Repository) -> Result<gix::Repository, git2::Error> {
+    let path = repo.workdir().unwrap_or(repo.path());
+    gix::open(path).map_err(|error| git2::Error::from_str(&error.to_string()))
+}
+
+fn current_branch(repo: &gix::Repository) -> Option<String> {
+    let head = repo.head_name().ok().flatten()?;
+    head.shorten().to_str().ok().map(str::to_string)
+}
+
+fn configured_branch(branch: Option<gix::submodule::config::Branch>) -> Option<String> {
+    match branch? {
+        gix::submodule::config::Branch::CurrentInSuperproject => Some(".".to_string()),
+        gix::submodule::config::Branch::Name(name) => name.to_str().ok().map(str::to_string),
+    }
+}
+
+fn changed_content_flags(changes: &[gix::status::Item]) -> (bool, bool) {
+    let mut has_modified_content = false;
+    let mut has_untracked_content = false;
+
+    for change in changes {
+        match change {
+            gix::status::Item::IndexWorktree(item) => match item {
+                gix::status::index_worktree::Item::DirectoryContents { entry, .. } if matches!(entry.status, gix::dir::entry::Status::Untracked) => {
+                    has_untracked_content = true;
+                },
+                gix::status::index_worktree::Item::DirectoryContents { .. } => {
+                    has_modified_content = true;
+                },
+                gix::status::index_worktree::Item::Rewrite { .. } => {
+                    has_modified_content = true;
+                },
+                gix::status::index_worktree::Item::Modification { status, .. } => match status {
+                    gix::status::plumbing::index_as_worktree::EntryStatus::Change(
+                        gix::status::plumbing::index_as_worktree::Change::Removed
+                        | gix::status::plumbing::index_as_worktree::Change::Type { .. }
+                        | gix::status::plumbing::index_as_worktree::Change::Modification { .. }
+                        | gix::status::plumbing::index_as_worktree::Change::SubmoduleModification(_),
+                    )
+                    | gix::status::plumbing::index_as_worktree::EntryStatus::Conflict { .. }
+                    | gix::status::plumbing::index_as_worktree::EntryStatus::IntentToAdd => {
+                        has_modified_content = true;
+                    },
+                    gix::status::plumbing::index_as_worktree::EntryStatus::NeedsUpdate(_) => {},
+                },
+            },
+            gix::status::Item::TreeIndex(_) => {
+                has_modified_content = true;
+            },
+        }
+    }
+
+    (has_modified_content, has_untracked_content)
 }
 
 pub fn has_submodule_metadata(repo: &Repository) -> bool {
@@ -15,7 +66,7 @@ pub fn has_submodule_metadata(repo: &Repository) -> bool {
         || repo.index().ok().is_some_and(|index| index.get_path(gitmodules, 0).is_some())
 }
 
-pub fn submodules_if_present(repo: &Repository) -> Result<Vec<Submodule<'_>>, git2::Error> {
+pub fn submodules_if_present(repo: &Repository) -> Result<Vec<git2::Submodule<'_>>, git2::Error> {
     if !has_submodule_metadata(repo) {
         return Ok(Vec::new());
     }
@@ -24,40 +75,49 @@ pub fn submodules_if_present(repo: &Repository) -> Result<Vec<Submodule<'_>>, gi
 }
 
 pub fn list_submodules(repo: &Repository) -> Result<Vec<SubmoduleEntry>, git2::Error> {
+    let gix_repo = open_gix_repo(repo)?;
     let workdir = repo.workdir().map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from("."));
     let mut entries = Vec::new();
 
-    for submodule in submodules_if_present(repo)? {
-        let path = submodule.path().to_path_buf();
-        let name = submodule.name().map(str::to_string).unwrap_or_else(|| path.display().to_string());
-        let status = status_for(repo, &name, &path);
-        let is_initialized_in_workdir = status.is_in_wd() && !status.is_wd_uninitialized();
-        let sub_repo = is_initialized_in_workdir.then(|| submodule.open().ok()).flatten();
-        let branch = sub_repo.as_ref().and_then(get_current_branch).or_else(|| submodule.branch().map(str::to_string));
+    let Some(submodules) = gix_repo.submodules().map_err(|error| git2::Error::from_str(&error.to_string()))? else {
+        return Ok(entries);
+    };
+
+    for submodule in submodules {
+        let Ok(path) = submodule.path() else {
+            continue;
+        };
+        let path = gix::path::from_bstring(path.into_owned());
+        let name = submodule.name().to_str().ok().map(str::to_string).unwrap_or_else(|| path.display().to_string());
+        let opened = submodule.open().ok().flatten();
+        let status = submodule.status(gix::submodule::config::Ignore::None, false).ok();
+        let state = status.as_ref().map(|status| status.state).unwrap_or_else(|| submodule.state().unwrap_or_default());
+        let branch = opened.as_ref().and_then(current_branch).or_else(|| configured_branch(submodule.branch().ok().flatten()));
+        let head = submodule.head_id().ok().flatten().map(gix_to_git2_oid);
+        let index = submodule.index_id().ok().flatten().map(gix_to_git2_oid);
+        let workdir_id = opened.as_ref().and_then(|repo| repo.head_id().ok().map(|id| gix_to_git2_oid(id.detach())));
         let absolute_path = workdir.join(&path);
 
-        let is_index_modified = status.is_index_added() || status.is_index_deleted() || status.is_index_modified();
-        let has_new_commits = status.is_wd_modified() || submodule.workdir_id().zip(submodule.index_id()).is_some_and(|(workdir, index)| workdir != index);
-        let has_modified_content = status.contains(SubmoduleStatus::WD_INDEX_MODIFIED) || status.is_wd_wd_modified();
-        let has_untracked_content = status.is_wd_untracked();
-        let is_workdir_modified =
-            status.is_wd_added() || status.is_wd_deleted() || status.is_wd_modified() || status.contains(SubmoduleStatus::WD_INDEX_MODIFIED) || status.is_wd_wd_modified() || status.is_wd_untracked();
+        let (has_modified_content, has_untracked_content) = status.as_ref().and_then(|status| status.changes.as_ref().map(|changes| changed_content_flags(changes))).unwrap_or((false, false));
+        let is_index_modified = head != index;
+        let has_new_commits = workdir_id.zip(index).is_some_and(|(workdir, index)| workdir != index);
+        let is_workdir_modified = has_new_commits || has_modified_content || has_untracked_content;
 
         entries.push(SubmoduleEntry {
             name,
             path,
             absolute_path,
-            url: submodule.url().map(str::to_string),
+            url: submodule.url().ok().map(|url| url.to_string()),
             branch,
-            head: submodule.head_id(),
-            index: submodule.index_id(),
-            workdir: submodule.workdir_id(),
-            is_open: sub_repo.is_some(),
-            is_uninitialized: status.is_wd_uninitialized(),
-            is_in_head: status.is_in_head(),
-            is_in_index: status.is_in_index(),
-            is_in_config: status.is_in_config(),
-            is_in_workdir: status.is_in_wd(),
+            head,
+            index,
+            workdir: workdir_id,
+            is_open: opened.is_some(),
+            is_uninitialized: !state.repository_exists,
+            is_in_head: head.is_some(),
+            is_in_index: index.is_some(),
+            is_in_config: state.superproject_configuration,
+            is_in_workdir: state.worktree_checkout,
             is_index_modified,
             is_workdir_modified,
             has_new_commits,
