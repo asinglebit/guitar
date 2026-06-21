@@ -78,6 +78,16 @@ fn only_entry(repo: &Repository) -> crate::core::submodules::SubmoduleEntry {
     entries.into_iter().next().unwrap()
 }
 
+#[test]
+fn returns_empty_when_repo_has_no_submodule_metadata() {
+    let dir = TestDir::new("no-submodule-metadata");
+    let repo = init_repo(&dir.path.join("repo"));
+
+    let entries = list_submodules(&repo).unwrap();
+
+    assert!(entries.is_empty());
+}
+
 fn assert_clean_submodule(entry: &crate::core::submodules::SubmoduleEntry) {
     assert!(entry.is_open);
     assert!(!entry.is_uninitialized);

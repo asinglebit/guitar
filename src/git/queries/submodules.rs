@@ -75,6 +75,10 @@ pub fn submodules_if_present(repo: &Repository) -> Result<Vec<git2::Submodule<'_
 }
 
 pub fn list_submodules(repo: &Repository) -> Result<Vec<SubmoduleEntry>, git2::Error> {
+    if !has_submodule_metadata(repo) {
+        return Ok(Vec::new());
+    }
+
     let gix_repo = open_gix_repo(repo)?;
     let workdir = repo.workdir().map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from("."));
     let mut entries = Vec::new();
