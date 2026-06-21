@@ -32,6 +32,11 @@ impl Default for Oids {
 }
 
 impl Oids {
+    pub fn reserve_aliases(&mut self, additional: usize) {
+        self.oids.reserve(additional);
+        self.aliases.reserve(additional);
+    }
+
     pub fn get_alias_by_oid(&mut self, oid: Oid) -> u32 {
         // Assign aliases lazily so refs, commits, tags, and stashes share one namespace.
         *self.aliases.entry(oid).or_insert_with(|| {

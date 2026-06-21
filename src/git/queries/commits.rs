@@ -57,6 +57,12 @@ pub fn get_tag_oids(repo: &Repository, oids: &mut Oids) -> HashMap<u32, Vec<Stri
 
 // Pull the next revwalk page into the global alias order.
 pub fn get_sorted_oids(batcher: &mut Batcher, oids: &mut Oids, sorted: &mut Vec<u32>, amount: usize, scratch: &mut Vec<Oid>) {
+    if sorted.is_empty() {
+        let expected = batcher.remaining();
+        oids.reserve_aliases(expected);
+        sorted.reserve(expected);
+    }
+
     scratch.clear();
     if batcher.next_into(amount, scratch) == 0 {
         return;

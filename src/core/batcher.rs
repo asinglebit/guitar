@@ -3,14 +3,14 @@ use im::HashSet;
 use std::cell::RefCell;
 use std::collections::{HashSet as StdHashSet, VecDeque};
 use std::path::PathBuf;
-use std::{rc::Rc, sync::Mutex};
+use std::rc::Rc;
 
 use gix::traverse::commit::topo::{Builder as TopoBuilder, Sorting as TopoSorting};
 
 // Own the history queue so commit pages can be loaded without libgit2 revwalk state.
 pub struct Batcher {
     repo_path: PathBuf,
-    commits: Mutex<VecDeque<Oid>>,
+    commits: VecDeque<Oid>,
 }
 
 impl Batcher {
@@ -18,33 +18,37 @@ impl Batcher {
     pub fn new(repo: Rc<RefCell<Repository>>, repo_path: impl Into<PathBuf>, hidden_branch_names: &HashSet<String>, extra_roots: &[Oid]) -> Result<Self, git2::Error> {
         let repo_path = repo_path.into();
         let commits = Self::build(&repo.borrow(), &repo_path, hidden_branch_names, extra_roots)?;
-        Ok(Self { repo_path, commits: Mutex::new(commits) })
+        Ok(Self { repo_path, commits })
     }
 
     // Recreate the cursor after branch filters, fetches, or repository state changes.
-    pub fn reset(&self, repo: Rc<RefCell<Repository>>, hidden_branch_names: &HashSet<String>, extra_roots: &[Oid]) -> Result<(), git2::Error> {
-        let commits = Self::build(&repo.borrow(), &self.repo_path, hidden_branch_names, extra_roots)?;
-        let mut guard = self.commits.lock().unwrap();
-        *guard = commits;
+    pub fn reset(&mut self, repo: Rc<RefCell<Repository>>, hidden_branch_names: &HashSet<String>, extra_roots: &[Oid]) -> Result<(), git2::Error> {
+        self.commits = Self::build(&repo.borrow(), &self.repo_path, hidden_branch_names, extra_roots)?;
         Ok(())
     }
 
     // Pull the next page, dropping commits gitoxide cannot resolve.
-    pub fn next(&self, count: usize) -> Vec<Oid> {
-        let mut commits = self.commits.lock().unwrap();
+    pub fn next(&mut self, count: usize) -> Vec<Oid> {
         let mut page = Vec::with_capacity(count);
         for _ in 0..count {
-            let Some(oid) = commits.pop_front() else { break };
+            let Some(oid) = self.commits.pop_front() else { break };
             page.push(oid);
         }
         page
     }
 
     // Pull the next page into an existing output buffer to avoid a temporary page allocation.
-    pub fn next_into(&self, count: usize, out: &mut Vec<Oid>) -> usize {
+    pub fn next_into(&mut self, count: usize, out: &mut Vec<Oid>) -> usize {
         let before = out.len();
-        out.extend(self.next(count));
+        for _ in 0..count {
+            let Some(oid) = self.commits.pop_front() else { break };
+            out.push(oid);
+        }
         out.len() - before
+    }
+
+    pub fn remaining(&self) -> usize {
+        self.commits.len()
     }
 
     fn build(repo: &Repository, repo_path: &PathBuf, hidden_branch_names: &HashSet<String>, extra_roots: &[Oid]) -> Result<VecDeque<Oid>, git2::Error> {
@@ -128,7 +132,7 @@ mod tests {
         let second = commit(&repo.borrow(), "second.txt", "second");
         let third = commit(&repo.borrow(), "third.txt", "third");
         let sentinel = Oid::zero();
-        let batcher = Batcher::new(repo.clone(), path.clone(), &HashSet::new(), &[third]).unwrap();
+        let mut batcher = Batcher::new(repo.clone(), path.clone(), &HashSet::new(), &[third]).unwrap();
         let mut out = vec![sentinel];
 
         assert_eq!(batcher.next_into(2, &mut out), 2);
