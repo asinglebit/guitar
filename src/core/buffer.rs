@@ -1,10 +1,9 @@
 use crate::core::chunk::{Chunk, LaneRef, NONE};
 use im::{OrdMap, Vector};
-use smallvec::SmallVec;
 
 #[derive(Default, Clone)]
 pub struct Delta {
-    pub ops: SmallVec<[DeltaOp; 2]>,
+    pub ops: DeltaOps,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -12,6 +11,58 @@ pub enum DeltaOp {
     Insert { index: usize, item: Chunk },
     Remove { index: usize },
     Replace { index: usize, new: Chunk },
+}
+
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
+pub enum DeltaOps {
+    #[default]
+    Empty,
+    One(DeltaOp),
+    Two(DeltaOp, DeltaOp),
+    Many(Vec<DeltaOp>),
+}
+
+impl DeltaOps {
+    fn push(&mut self, op: DeltaOp) {
+        match std::mem::take(self) {
+            DeltaOps::Empty => *self = DeltaOps::One(op),
+            DeltaOps::One(first) => *self = DeltaOps::Two(first, op),
+            DeltaOps::Two(first, second) => *self = DeltaOps::Many(vec![first, second, op]),
+            DeltaOps::Many(mut ops) => {
+                ops.push(op);
+                *self = DeltaOps::Many(ops);
+            },
+        }
+    }
+
+    pub fn iter(&self) -> DeltaOpsIter<'_> {
+        match self {
+            DeltaOps::Empty => DeltaOpsIter::Empty,
+            DeltaOps::One(op) => DeltaOpsIter::One(Some(op)),
+            DeltaOps::Two(first, second) => DeltaOpsIter::Two([first, second].into_iter()),
+            DeltaOps::Many(ops) => DeltaOpsIter::Many(ops.iter()),
+        }
+    }
+}
+
+pub enum DeltaOpsIter<'a> {
+    Empty,
+    One(Option<&'a DeltaOp>),
+    Two(std::array::IntoIter<&'a DeltaOp, 2>),
+    Many(std::slice::Iter<'a, DeltaOp>),
+}
+
+impl<'a> Iterator for DeltaOpsIter<'a> {
+    type Item = &'a DeltaOp;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            DeltaOpsIter::Empty => None,
+            DeltaOpsIter::One(op) => op.take(),
+            DeltaOpsIter::Two(iter) => iter.next(),
+            DeltaOpsIter::Many(iter) => iter.next(),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
