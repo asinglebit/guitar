@@ -6,6 +6,10 @@ pub fn git2_to_gix_oid(oid: Oid) -> gix::ObjectId {
     gix::ObjectId::from_bytes_or_panic(oid.as_bytes())
 }
 
+#[cfg(test)]
+#[path = "../tests/core/oids.rs"]
+mod tests;
+
 pub fn gix_to_git2_oid(oid: gix::ObjectId) -> Oid {
     Oid::from_bytes(oid.as_bytes()).unwrap()
 }
@@ -43,6 +47,10 @@ impl Oids {
             self.oids.push(oid);
             self.oids.len() as u32 - 1
         })
+    }
+
+    pub fn get_existing_alias(&self, oid: Oid) -> Option<u32> {
+        self.aliases.get(&oid).copied()
     }
 
     pub fn get_alias_by_idx(&self, idx: usize) -> u32 {

@@ -14,8 +14,20 @@ fn oid_for(index: usize) -> Oid {
     Oid::from_bytes(&bytes).unwrap()
 }
 
+fn colliding_oid_for(index: usize) -> Oid {
+    let mut bytes = [0u8; 20];
+    bytes[..8].copy_from_slice(&1u64.to_be_bytes());
+    bytes[8..16].copy_from_slice(&(index as u64).to_be_bytes());
+    bytes[16..20].copy_from_slice(&(index as u32).wrapping_mul(2_654_435_761).to_be_bytes());
+    Oid::from_bytes(&bytes).unwrap()
+}
+
 fn oids(count: usize) -> Vec<Oid> {
     (0..count).map(oid_for).collect()
+}
+
+fn colliding_oids(count: usize) -> Vec<Oid> {
+    (0..count).map(colliding_oid_for).collect()
 }
 
 fn insert_aliases(input: &[Oid]) -> usize {
@@ -53,4 +65,14 @@ fn oid_alias_insert_large(bencher: Bencher) {
 #[divan::bench(sample_count = 50, sample_size = 10)]
 fn oid_alias_lookup_existing_large(bencher: Bencher) {
     bencher.counter(divan::counter::ItemsCount::new(100_000usize)).with_inputs(|| oids(100_000)).bench_local_values(|input| black_box(lookup_existing_aliases(&input)));
+}
+
+#[divan::bench(sample_count = 50, sample_size = 10)]
+fn oid_alias_insert_colliding_medium(bencher: Bencher) {
+    bencher.counter(divan::counter::ItemsCount::new(10_000usize)).with_inputs(|| colliding_oids(10_000)).bench_local_values(|input| black_box(insert_aliases(&input)));
+}
+
+#[divan::bench(sample_count = 50, sample_size = 10)]
+fn oid_alias_lookup_existing_colliding_medium(bencher: Bencher) {
+    bencher.counter(divan::counter::ItemsCount::new(10_000usize)).with_inputs(|| colliding_oids(10_000)).bench_local_values(|input| black_box(lookup_existing_aliases(&input)));
 }
