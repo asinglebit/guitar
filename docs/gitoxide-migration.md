@@ -53,6 +53,7 @@ Checkout and reset details are tracked in [docs/gitoxide-checkout-reset.md](gito
 Sequencer details are tracked in [docs/gitoxide-sequencer.md](gitoxide-sequencer.md).
 Status and diff details are tracked in [docs/gitoxide-status-diff.md](gitoxide-status-diff.md).
 Refs, remotes, and tag details are tracked in [docs/gitoxide-refs-remotes-tags.md](gitoxide-refs-remotes-tags.md).
+Stash details are tracked in [docs/gitoxide-stash.md](gitoxide-stash.md).
 Network and auth details are tracked in [docs/gitoxide-network.md](gitoxide-network.md).
 
 ## Test Gate
