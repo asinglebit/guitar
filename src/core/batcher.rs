@@ -1,58 +1,64 @@
 use git2::{BranchType, Oid, Repository};
 use im::HashSet;
 use std::cell::RefCell;
-use std::collections::{HashSet as StdHashSet, VecDeque};
+use std::collections::HashSet as StdHashSet;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use gix::traverse::commit::topo::{Builder as TopoBuilder, Sorting as TopoSorting};
+type CommitWalk = Box<dyn Iterator<Item = Result<gix::traverse::commit::Info, gix::traverse::commit::simple::Error>>>;
 
-// Own the history queue so commit pages can be loaded without libgit2 revwalk state.
+// Own a lazy gitoxide commit cursor so history pages don't precompute the entire graph.
 pub struct Batcher {
     repo_path: PathBuf,
-    commits: VecDeque<Oid>,
+    walk: Option<CommitWalk>,
 }
 
 impl Batcher {
-    // Build the initial history queue from all visible local and remote branch tips.
+    // Build the initial commit cursor from all visible local and remote branch tips.
     pub fn new(repo: Rc<RefCell<Repository>>, repo_path: impl Into<PathBuf>, hidden_branch_names: &HashSet<String>, extra_roots: &[Oid]) -> Result<Self, git2::Error> {
         let repo_path = repo_path.into();
-        let commits = Self::build(&repo.borrow(), &repo_path, hidden_branch_names, extra_roots)?;
-        Ok(Self { repo_path, commits })
+        let walk = Self::build(&repo.borrow(), &repo_path, hidden_branch_names, extra_roots)?;
+        Ok(Self { repo_path, walk: Some(walk) })
     }
 
     // Recreate the cursor after branch filters, fetches, or repository state changes.
     pub fn reset(&mut self, repo: Rc<RefCell<Repository>>, hidden_branch_names: &HashSet<String>, extra_roots: &[Oid]) -> Result<(), git2::Error> {
-        self.commits = Self::build(&repo.borrow(), &self.repo_path, hidden_branch_names, extra_roots)?;
+        self.walk = Some(Self::build(&repo.borrow(), &self.repo_path, hidden_branch_names, extra_roots)?);
         Ok(())
     }
 
     // Pull the next page, dropping commits gitoxide cannot resolve.
     pub fn next(&mut self, count: usize) -> Vec<Oid> {
         let mut page = Vec::with_capacity(count);
-        for _ in 0..count {
-            let Some(oid) = self.commits.pop_front() else { break };
-            page.push(oid);
-        }
+        self.next_into(count, &mut page);
         page
     }
 
     // Pull the next page into an existing output buffer to avoid a temporary page allocation.
     pub fn next_into(&mut self, count: usize, out: &mut Vec<Oid>) -> usize {
         let before = out.len();
-        for _ in 0..count {
-            let Some(oid) = self.commits.pop_front() else { break };
-            out.push(oid);
+        let Some(walk) = self.walk.as_mut() else {
+            return 0;
+        };
+
+        while out.len() - before < count {
+            let Some(result) = walk.next() else {
+                self.walk = None;
+                break;
+            };
+
+            let Ok(info) = result else { continue };
+            out.push(Oid::from_bytes(info.id.as_slice()).unwrap());
         }
         out.len() - before
     }
 
     pub fn remaining(&self) -> usize {
-        self.commits.len()
+        0
     }
 
-    fn build(repo: &Repository, repo_path: &PathBuf, hidden_branch_names: &HashSet<String>, extra_roots: &[Oid]) -> Result<VecDeque<Oid>, git2::Error> {
-        let gix_repo = gix::open(repo_path.clone()).map_err(|error| git2::Error::from_str(&error.to_string()))?;
+    fn build(repo: &Repository, repo_path: &PathBuf, hidden_branch_names: &HashSet<String>, extra_roots: &[Oid]) -> Result<CommitWalk, git2::Error> {
+        let gix_repo = gix::open(repo_path).map_err(|error| git2::Error::from_str(&error.to_string()))?;
         let mut pushed = StdHashSet::new();
         let mut tips = Vec::new();
 
@@ -78,12 +84,10 @@ impl Batcher {
             }
         }
 
-        if tips.is_empty() {
-            return Ok(VecDeque::new());
-        }
-
-        let topo = TopoBuilder::new(&gix_repo.objects).with_tips(tips).sorting(TopoSorting::TopoOrder).build().map_err(|error| git2::Error::from_str(&error.to_string()))?;
-        topo.map(|result| result.map_err(|error| git2::Error::from_str(&error.to_string())).map(|info| Oid::from_bytes(info.id.as_slice()).unwrap())).collect()
+        let walk = gix::traverse::commit::Simple::new(tips, gix_repo.objects.clone())
+            .sorting(gix::traverse::commit::simple::Sorting::ByCommitTime(gix::traverse::commit::simple::CommitTimeOrder::NewestFirst))
+            .map_err(|error| git2::Error::from_str(&error.to_string()))?;
+        Ok(Box::new(walk))
     }
 }
 
@@ -140,5 +144,22 @@ mod tests {
         assert_eq!(batcher.next_into(2, &mut out), 0);
 
         assert_eq!(out, vec![sentinel, third, second, first]);
+    }
+
+    #[test]
+    fn exhausted_batcher_stays_empty_until_reset() {
+        let (path, repo) = temp_repo("exhausted");
+        let first = commit(&repo.borrow(), "first.txt", "first");
+        let second = commit(&repo.borrow(), "second.txt", "second");
+        let mut batcher = Batcher::new(repo.clone(), path.clone(), &HashSet::new(), &[second]).unwrap();
+
+        assert_eq!(batcher.next(10), vec![second, first]);
+        assert!(batcher.next(10).is_empty());
+        assert!(batcher.next(10).is_empty());
+
+        let third = commit(&repo.borrow(), "third.txt", "third");
+        batcher.reset(repo, &HashSet::new(), &[third]).unwrap();
+
+        assert_eq!(batcher.next(10), vec![third, second, first]);
     }
 }

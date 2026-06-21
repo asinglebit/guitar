@@ -19,6 +19,17 @@ struct CommitBatchFixture {
     amount: usize,
 }
 
+struct BatcherInitFixture {
+    path: std::path::PathBuf,
+    hidden_branch_names: im::HashSet<String>,
+    _fixture: fixtures::GraphServiceFixture,
+}
+
+fn batcher_init_fixture(rounds: usize) -> BatcherInitFixture {
+    let fixture = graph_service_fixture(rounds);
+    BatcherInitFixture { path: fixture.path.clone(), hidden_branch_names: fixture.hidden_branch_names.clone(), _fixture: fixture }
+}
+
 fn commit_batch_fixture(rounds: usize, amount: usize) -> CommitBatchFixture {
     let fixture = graph_service_fixture(rounds);
     let repo = Rc::new(RefCell::new(git2::Repository::open(&fixture.path).unwrap()));
@@ -40,6 +51,19 @@ fn sorted_oid_pages(mut fixture: CommitBatchFixture) -> usize {
     }
 
     black_box(sorted.len())
+}
+
+fn initialize_batcher(fixture: BatcherInitFixture) -> usize {
+    let repo = Rc::new(RefCell::new(git2::Repository::open(&fixture.path).unwrap()));
+    let batcher = Batcher::new(repo, fixture.path, &fixture.hidden_branch_names, &[]).unwrap();
+    black_box(batcher.remaining())
+}
+
+#[divan::bench(sample_count = 50, sample_size = 10)]
+fn batcher_new_medium(bencher: Bencher) {
+    let rounds = 24usize;
+
+    bencher.counter(divan::counter::ItemsCount::new(rounds.saturating_mul(4))).with_inputs(|| batcher_init_fixture(rounds)).bench_local_values(|fixture| black_box(initialize_batcher(fixture)));
 }
 
 #[divan::bench(sample_count = 50, sample_size = 10)]
