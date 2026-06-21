@@ -5,7 +5,7 @@ use crate::{
 };
 use git2::{FetchOptions, RemoteCallbacks, Repository, SubmoduleUpdateOptions};
 use gix::bstr::ByteSlice;
-use std::thread;
+use std::{fs::OpenOptions, io::Write, thread};
 
 fn open_gix_repo(repo: &Repository) -> Result<gix::Repository, git2::Error> {
     let path = repo.workdir().unwrap_or(repo.path());
@@ -39,9 +39,54 @@ fn stage_commit_pointer(index: &mut gix::index::File, path: &gix::bstr::BStr, oi
     index.dangerously_push_entry(Default::default(), oid, gix::index::entry::Flags::empty(), gix::index::entry::Mode::COMMIT, path);
 }
 
+fn load_local_config(path: std::path::PathBuf) -> Result<gix::config::File<'static>, git2::Error> {
+    gix::config::File::from_path_no_includes(path, gix::config::Source::Local).map_err(|error| git2::Error::from_str(&error.to_string()))
+}
+
+fn write_local_config(config: &gix::config::File<'static>) -> Result<(), git2::Error> {
+    let path = config.meta().path.as_deref().ok_or_else(|| git2::Error::from_str("Configuration path is missing"))?;
+    let mut file = OpenOptions::new().create(false).write(true).truncate(true).open(path).map_err(|error| git2::Error::from_str(&error.to_string()))?;
+
+    file.write_all(config.detect_newline_style()).map_err(|error| git2::Error::from_str(&error.to_string()))?;
+    config.write_to_filter(&mut file, |section| section.meta().source == gix::config::Source::Local).map_err(|error| git2::Error::from_str(&error.to_string()))
+}
+
+fn submodule_url_from_modules(repo: &gix::Repository, submodule: &gix::Submodule<'_>) -> Result<gix::Url, git2::Error> {
+    let workdir = repo.workdir().ok_or_else(|| git2::Error::from_str("Repository has no working directory"))?;
+    let modules = load_local_config(workdir.join(".gitmodules"))?;
+    let submodule_name = submodule.name().to_str().map_err(|_| git2::Error::from_str("Submodule name is not valid UTF-8"))?;
+    let key = format!("submodule.{submodule_name}.url");
+    let url = modules.string(key).ok_or_else(|| git2::Error::from_str("Submodule URL is missing"))?;
+    gix::Url::from_bytes(url.as_ref()).map_err(|error| git2::Error::from_str(&error.to_string()))
+}
+
+fn sync_superproject_submodule_url(repo: &gix::Repository, submodule: &gix::Submodule<'_>, url: &gix::bstr::BStr) -> Result<(), git2::Error> {
+    let config_path = repo.config_snapshot().plumbing().meta().path.clone().ok_or_else(|| git2::Error::from_str("Repository configuration path is missing"))?;
+    let mut config = load_local_config(config_path)?;
+    config.set_raw_value_by("submodule", Some(submodule.name()), "url", url).map_err(|error| git2::Error::from_str(&error.to_string()))?;
+    write_local_config(&config)
+}
+
+fn sync_checked_out_submodule_url(submodule: &gix::Repository, url: &gix::Url) -> Result<(), git2::Error> {
+    let remote = submodule.find_fetch_remote(None).map_err(|error| git2::Error::from_str(&error.to_string()))?;
+    let config_path = submodule.config_snapshot().plumbing().meta().path.clone().ok_or_else(|| git2::Error::from_str("Submodule configuration path is missing"))?;
+    let mut config = load_local_config(config_path)?;
+    remote.with_url(url.clone()).map_err(|error| git2::Error::from_str(&error.to_string()))?.save_to(&mut config).map_err(|error| git2::Error::from_str(&error.to_string()))?;
+    write_local_config(&config)
+}
+
 pub fn sync_submodule(repo: &Repository, name: &str) -> Result<(), git2::Error> {
-    let mut submodule = repo.find_submodule(name)?;
-    submodule.sync()
+    let gix_repo = open_gix_repo(repo)?;
+    let Some(submodule) = find_submodule(&gix_repo, name)? else {
+        return Err(git2::Error::from_str("Submodule not found"));
+    };
+    let url = submodule_url_from_modules(&gix_repo, &submodule)?;
+    let url_bstring = url.to_bstring();
+    sync_superproject_submodule_url(&gix_repo, &submodule, url_bstring.as_ref())?;
+    if let Some(submodule_repo) = submodule.open().map_err(|error| git2::Error::from_str(&error.to_string()))? {
+        sync_checked_out_submodule_url(&submodule_repo, &url)?;
+    }
+    Ok(())
 }
 
 pub fn stage_submodule_head(repo: &Repository, name: &str) -> Result<(), git2::Error> {

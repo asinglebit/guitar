@@ -72,6 +72,19 @@ fn parent_with_submodule(dir: &TestDir) -> (Repository, PathBuf) {
     (parent, child_path)
 }
 
+fn rewrite_submodule_url(repo: &Repository, new_url: &str) {
+    let gitmodules = repo.workdir().unwrap().join(".gitmodules");
+    let contents = fs::read_to_string(&gitmodules).unwrap();
+    let old_url = repo.config().unwrap().get_string("submodule.deps/child.url").unwrap();
+    let updated = contents.replace(&old_url, new_url);
+    fs::write(gitmodules, updated).unwrap();
+}
+
+fn submodule_remote_url(repo: &Repository, submodule_path: &str) -> String {
+    let sub_repo = Repository::open(repo.workdir().unwrap().join(submodule_path)).unwrap();
+    sub_repo.find_remote("origin").unwrap().url().unwrap().to_string()
+}
+
 #[test]
 fn stages_and_unstages_submodule_pointer() {
     let dir = TestDir::new("stage-pointer");
@@ -125,11 +138,36 @@ fn stage_all_stages_regular_changes_without_submodule_metadata() {
 }
 
 #[test]
-fn sync_submodule_succeeds_for_existing_submodule() {
+fn sync_submodule_updates_both_superproject_and_checked_out_remote_urls() {
     let dir = TestDir::new("sync");
-    let (parent, _child_path) = parent_with_submodule(&dir);
+    let (parent, child_path) = parent_with_submodule(&dir);
+    let replacement_child = init_repo(&dir.path.join("replacement-child"));
+    let replacement_url = replacement_child.workdir().unwrap().to_str().unwrap().to_string();
+
+    let before_superproject_url = parent.config().unwrap().get_string("submodule.deps/child.url").unwrap();
+    let before_submodule_url = submodule_remote_url(&parent, "deps/child");
+    rewrite_submodule_url(&parent, &replacement_url);
+    drop(replacement_child);
+    drop(parent);
+
+    let parent = Repository::open(dir.path.join("parent")).unwrap();
+    assert_eq!(before_superproject_url, child_path.to_str().unwrap());
+    assert_eq!(before_submodule_url, child_path.to_str().unwrap());
 
     sync_submodule(&parent, "deps/child").unwrap();
+
+    let parent = Repository::open(dir.path.join("parent")).unwrap();
+    assert_eq!(parent.config().unwrap().get_string("submodule.deps/child.url").unwrap(), replacement_url);
+    assert_eq!(submodule_remote_url(&parent, "deps/child"), replacement_url);
+}
+
+#[test]
+fn sync_submodule_errors_for_unknown_submodule() {
+    let dir = TestDir::new("sync-missing");
+    let (parent, _child_path) = parent_with_submodule(&dir);
+
+    let error = sync_submodule(&parent, "deps/missing").unwrap_err();
+    assert!(error.to_string().contains("Submodule not found"));
 }
 
 #[test]
@@ -149,4 +187,16 @@ fn update_submodule_initializes_plain_clone() {
 
     let clone = Repository::open(&clone_path).unwrap();
     assert!(list_submodules(&clone).unwrap()[0].is_open);
+}
+
+#[test]
+fn update_submodule_errors_for_unknown_submodule() {
+    let dir = TestDir::new("update-missing");
+    let parent = init_repo(&dir.path.join("parent"));
+
+    let handle = update_submodule(parent.workdir().unwrap().to_str().unwrap(), "deps/missing", Default::default());
+    match handle.join().unwrap() {
+        NetworkResult::Failure(_) => {},
+        other => panic!("unexpected update result: {other:?}"),
+    }
 }
