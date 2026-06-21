@@ -6,7 +6,7 @@ use crate::{
         walker::Walker,
         worktrees::{WorktreeEntry, Worktrees},
     },
-    git::queries::{file_history::changed_file_status_at_commit, helpers::FileStatus, reflogs::HeadReflogEntry},
+    git::queries::{file_history::changed_file_status_at_commit_gix, helpers::FileStatus, reflogs::HeadReflogEntry},
     helpers::{
         heatmap::{DAYS, WEEKS, build_heatmap},
         localisation::{empty, errors, status as status_text},
@@ -355,7 +355,6 @@ fn send_file_history(generation: Generation, request_id: RequestId, path: String
 }
 
 fn file_history_rows(walk_ctx: &Walker, path: &str, symbols: &SymbolTheme) -> Result<Vec<GraphFileHistoryRow>, git2::Error> {
-    let repo = walk_ctx.repo.borrow();
     let mut rows = Vec::new();
 
     for (graph_index, &alias) in walk_ctx.oids.get_sorted_aliases().iter().enumerate() {
@@ -364,7 +363,7 @@ fn file_history_rows(walk_ctx: &Walker, path: &str, symbols: &SymbolTheme) -> Re
             continue;
         }
 
-        let Some(status) = changed_file_status_at_commit(&repo, oid, path)? else {
+        let Some(status) = changed_file_status_at_commit_gix(&walk_ctx.gix_repo, git2_to_gix_oid(oid), path)? else {
             continue;
         };
 

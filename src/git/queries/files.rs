@@ -29,6 +29,45 @@ pub fn search_tracked_files(repo: &Repository, query: &str, limit: usize) -> Res
         return Ok(Vec::new());
     }
 
+    let gix_repo = gix::open(workdir).map_err(|error| git2::Error::from_str(&error.to_string()))?;
+    let paths = tracked_file_paths_gix(&gix_repo)?;
+
+    Ok(rank_file_paths(&paths, query, limit))
+}
+
+fn tracked_file_paths_gix(repo: &gix::Repository) -> Result<Vec<String>, git2::Error> {
+    let Some(workdir) = repo.workdir() else {
+        return Ok(Vec::new());
+    };
+
+    let index = repo.index().map_err(|error| git2::Error::from_str(&error.to_string()))?;
+    let mut seen = HashSet::new();
+    let mut paths = Vec::new();
+
+    for entry in index.entries() {
+        let Ok(path) = std::str::from_utf8(entry.path(&index)) else {
+            continue;
+        };
+
+        let path = normalize_path(path);
+        if path.is_empty() || is_git_internal_path(&path) || !seen.insert(path.clone()) {
+            continue;
+        }
+
+        if workdir.join(Path::new(&path)).is_file() {
+            paths.push(path);
+        }
+    }
+
+    Ok(paths)
+}
+
+#[cfg(test)]
+fn tracked_file_paths_git2(repo: &Repository) -> Result<Vec<String>, git2::Error> {
+    let Some(workdir) = repo.workdir() else {
+        return Ok(Vec::new());
+    };
+
     let index = repo.index()?;
     let mut seen = HashSet::new();
     let mut paths = Vec::new();
@@ -52,7 +91,7 @@ pub fn search_tracked_files(repo: &Repository, query: &str, limit: usize) -> Res
         }
     }
 
-    Ok(rank_file_paths(&paths, query, limit))
+    Ok(paths)
 }
 
 pub fn rank_file_paths(paths: &[String], query: &str, limit: usize) -> Vec<FileSearchResult> {
