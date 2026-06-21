@@ -174,6 +174,26 @@ fn graph_rows_do_not_cache_uncommitted_pseudo_row_metadata() {
 }
 
 #[test]
+fn alias_indices_for_only_returns_requested_aliases() {
+    let (path, repo) = temp_repo("alias-indices");
+    let first = commit(&repo, "one.txt", "one");
+    let second = commit(&repo, "two.txt", "two");
+    drop(repo);
+
+    let mut walker = Walker::new(path.display().to_string(), 8, HashSet::new(), false, 20).unwrap();
+    while walker.walk() {}
+
+    let first_alias = walker.oids.aliases[&first];
+    let second_alias = walker.oids.aliases[&second];
+    let indices = alias_indices_for(&walker, [first_alias, first_alias, second_alias]);
+
+    assert_eq!(indices.len(), 2);
+    assert_eq!(indices.get(&second_alias), Some(&1));
+    assert_eq!(indices.get(&first_alias), Some(&2));
+    assert!(!indices.contains_key(&crate::core::chunk::NONE));
+}
+
+#[test]
 fn graph_service_file_history_returns_visible_graph_indices() {
     let (path, repo) = temp_repo("file-history");
     let first = commit(&repo, "target.txt", "first");

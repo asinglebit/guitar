@@ -17,7 +17,7 @@ use crate::{
 use git2::Oid;
 use im::{HashSet, Vector};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet as StdHashSet},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -472,13 +472,13 @@ fn graph_row_at(walk_ctx: &Walker, worktrees: &Worktrees, commit_metadata: &mut 
 }
 
 fn pane_rows(pane: GraphPane, walk_ctx: &Walker) -> Vec<GraphPaneRow> {
-    let index_map = alias_index_map(walk_ctx);
     match pane {
         GraphPane::Branches => {
             let mut local: Vec<_> = walk_ctx.branches_local.iter().flat_map(|(&alias, branches)| branches.iter().map(move |branch| (alias, branch.clone(), true))).collect();
             let mut remote: Vec<_> = walk_ctx.branches_remote.iter().flat_map(|(&alias, branches)| branches.iter().map(move |branch| (alias, branch.clone(), false))).collect();
             local.sort_by(|a, b| a.1.cmp(&b.1));
             remote.sort_by(|a, b| a.1.cmp(&b.1));
+            let index_map = alias_indices_for(walk_ctx, local.iter().chain(remote.iter()).map(|(alias, _, _)| *alias));
             local
                 .into_iter()
                 .chain(remote)
@@ -488,37 +488,47 @@ fn pane_rows(pane: GraphPane, walk_ctx: &Walker) -> Vec<GraphPaneRow> {
         GraphPane::Tags => {
             let mut rows: Vec<_> = walk_ctx.tags_local.iter().flat_map(|(&alias, tags)| tags.iter().map(move |tag| (alias, tag.clone()))).collect();
             rows.sort_by(|a, b| a.1.cmp(&b.1));
+            let index_map = alias_indices_for(walk_ctx, rows.iter().map(|(alias, _)| *alias));
             rows.into_iter().map(|(alias, name)| GraphPaneRow::Tag { alias, name, lane: walk_ctx.tags_lanes.get(&alias).copied(), graph_index: index_map.get(&alias).copied() }).collect()
         },
-        GraphPane::Stashes => walk_ctx
-            .oids
-            .stashes
-            .iter()
-            .map(|&alias| {
-                let oid = *walk_ctx.oids.get_oid_by_alias(alias);
-                let summary = walk_ctx
-                    .gix_repo
-                    .find_commit(git2_to_gix_oid(oid))
-                    .ok()
-                    .and_then(|commit| commit.message().ok().map(|message| String::from_utf8_lossy(message.summary().as_ref()).into_owned()))
-                    .unwrap_or_else(|| status_text::STASH().to_string());
-                GraphPaneRow::Stash { alias, summary, lane: walk_ctx.stashes_lanes.get(&alias).copied(), graph_index: index_map.get(&alias).copied() }
-            })
-            .collect(),
-        GraphPane::Reflogs => walk_ctx
-            .head_reflog_entries
-            .iter()
-            .filter_map(|entry| {
-                let alias = walk_ctx.oids.aliases.get(&entry.new_oid).copied()?;
-                Some(GraphPaneRow::Reflog {
+        GraphPane::Stashes => {
+            let index_map = alias_indices_for(walk_ctx, walk_ctx.oids.stashes.iter().copied());
+            walk_ctx
+                .oids
+                .stashes
+                .iter()
+                .map(|&alias| {
+                    let oid = *walk_ctx.oids.get_oid_by_alias(alias);
+                    let summary = walk_ctx
+                        .gix_repo
+                        .find_commit(git2_to_gix_oid(oid))
+                        .ok()
+                        .and_then(|commit| commit.message().ok().map(|message| String::from_utf8_lossy(message.summary().as_ref()).into_owned()))
+                        .unwrap_or_else(|| status_text::STASH().to_string());
+                    GraphPaneRow::Stash { alias, summary, lane: walk_ctx.stashes_lanes.get(&alias).copied(), graph_index: index_map.get(&alias).copied() }
+                })
+                .collect()
+        },
+        GraphPane::Reflogs => {
+            let rows: Vec<_> = walk_ctx
+                .head_reflog_entries
+                .iter()
+                .filter_map(|entry| {
+                    let alias = walk_ctx.oids.aliases.get(&entry.new_oid).copied()?;
+                    Some((alias, entry))
+                })
+                .collect();
+            let index_map = alias_indices_for(walk_ctx, rows.iter().map(|(alias, _)| *alias));
+            rows.into_iter()
+                .map(|(alias, entry)| GraphPaneRow::Reflog {
                     alias,
                     selector: entry.selector.clone(),
                     message: entry.message.clone(),
                     lane: walk_ctx.reflogs_lanes.get(&alias).copied(),
                     graph_index: index_map.get(&alias).copied(),
                 })
-            })
-            .collect(),
+                .collect()
+        },
     }
 }
 
@@ -589,8 +599,27 @@ fn head_alias(walk_ctx: &Walker) -> u32 {
     repo.head().ok().and_then(|head| head.target()).and_then(|oid| walk_ctx.oids.aliases.get(&oid).copied()).unwrap_or(NONE)
 }
 
-fn alias_index_map(walk_ctx: &Walker) -> HashMap<u32, usize> {
-    walk_ctx.oids.get_sorted_aliases().iter().enumerate().map(|(idx, &alias)| (alias, idx)).collect()
+fn alias_indices_for<I>(walk_ctx: &Walker, aliases: I) -> HashMap<u32, usize>
+where
+    I: IntoIterator<Item = u32>,
+{
+    let mut wanted: StdHashSet<u32> = aliases.into_iter().collect();
+    let mut indices = HashMap::with_capacity(wanted.len());
+
+    if wanted.is_empty() {
+        return indices;
+    }
+
+    for (idx, &alias) in walk_ctx.oids.get_sorted_aliases().iter().enumerate() {
+        if wanted.remove(&alias) {
+            indices.insert(alias, idx);
+            if wanted.is_empty() {
+                break;
+            }
+        }
+    }
+
+    indices
 }
 
 fn latest_reflogs_by_alias(walk_ctx: &Walker) -> HashMap<u32, HeadReflogAliasEntry> {
