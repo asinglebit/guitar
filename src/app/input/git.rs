@@ -17,7 +17,8 @@ use crate::{
             tagging::untag,
         },
         auth::{AuthRequired, AuthSecret, NetworkResult},
-        queries::{commits::get_current_branch, remotes::effective_default_remote},
+        queries::{commits::get_current_branch, remotes::effective_default_remote, submodules::submodules_if_present},
+        repository::open,
     },
     helpers::{
         branch_visibility::save_branch_visibility,
@@ -32,7 +33,7 @@ impl App {
 
     fn submodule_name_for_status_path(repo: &Repository, path: &str) -> Option<String> {
         let target = Path::new(path);
-        repo.submodules().ok()?.into_iter().find(|submodule| submodule.path() == target).map(|submodule| submodule.name().map(str::to_string).unwrap_or_else(|| path.to_string()))
+        submodules_if_present(repo).ok()?.into_iter().find(|submodule| submodule.path() == target).map(|submodule| submodule.name().map(str::to_string).unwrap_or_else(|| path.to_string()))
     }
 
     pub(crate) fn start_network_request(&mut self, request: NetworkRequest) {
@@ -181,7 +182,7 @@ impl App {
             return;
         };
 
-        let repo = match Repository::open(path) {
+        let repo = match open(path) {
             Ok(repo) => repo,
             Err(error) => {
                 self.focus = Focus::Viewport;
@@ -386,7 +387,7 @@ impl App {
         let Some(path) = self.repo.as_ref().map(|repo| repo.path().to_path_buf()) else {
             return;
         };
-        let mut repo = match Repository::open(path) {
+        let mut repo = match open(path) {
             Ok(repo) => repo,
             Err(error) => {
                 self.show_error(errors::with_error(errors::OPEN_REPOSITORY(), error));
@@ -426,7 +427,7 @@ impl App {
         let Some(path) = self.repo.as_ref().map(|repo| repo.path().to_path_buf()) else {
             return;
         };
-        let mut repo = match Repository::open(path) {
+        let mut repo = match open(path) {
             Ok(repo) => repo,
             Err(error) => {
                 self.show_error(errors::with_error(errors::OPEN_REPOSITORY(), error));
@@ -444,7 +445,7 @@ impl App {
             let Some(path) = self.repo.as_ref().map(|repo| repo.path().to_path_buf()) else {
                 return;
             };
-            let mut repo = match Repository::open(path) {
+            let mut repo = match open(path) {
                 Ok(repo) => repo,
                 Err(error) => {
                     self.show_error(errors::with_error(errors::OPEN_REPOSITORY(), error));

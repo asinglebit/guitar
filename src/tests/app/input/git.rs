@@ -1,7 +1,9 @@
 use super::*;
 use crate::core::chunk::NONE;
 use crate::core::reflogs::HeadReflogAliasEntry;
+use crate::git::actions::cherrypicking::{CherrypickOutcome, start_cherrypick};
 use crate::git::actions::merging::{MergeOutcome, start_merge};
+use crate::git::actions::rebasing::{RebaseOutcome, start_rebase};
 use crate::git::actions::remotes::set_default_remote;
 use crate::git::actions::reverting::{RevertOutcome, start_revert};
 use crate::git::auth::{AuthChallenge, AuthProtocol};
@@ -112,6 +114,10 @@ fn checkout_branch(repo: &Repository, name: &str) {
     repo.checkout_head(Some(CheckoutBuilder::default().force())).unwrap();
 }
 
+fn current_branch_name(repo: &Repository) -> String {
+    repo.head().unwrap().shorthand().unwrap().to_string()
+}
+
 fn file_search_keymaps() -> crate::helpers::keymap::Keymaps {
     let mut maps = IndexMap::new();
     let mut normal = IndexMap::new();
@@ -204,12 +210,13 @@ fn force_push_uses_configured_default_remote() {
     commit(&repo, "file.txt", "initial");
     let _remote_path = add_local_bare_remote(&repo, "upstream");
     set_default_remote(&repo, "upstream").unwrap();
+    let branch = current_branch_name(&repo);
     let path_string = path.display().to_string();
     let mut app = App { path: Some(path_string.clone()), repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
 
     app.on_force_push();
 
-    assert_eq!(app.pending_network_request, Some(NetworkRequest::PushBranch { repo_path: path_string, remote_name: "upstream".to_string(), branch: "master".to_string(), force: true }));
+    assert_eq!(app.pending_network_request, Some(NetworkRequest::PushBranch { repo_path: path_string, remote_name: "upstream".to_string(), branch, force: true }));
     join_network_worker(&mut app);
 }
 
@@ -226,6 +233,48 @@ fn push_tags_uses_configured_default_remote() {
 
     assert_eq!(app.pending_network_request, Some(NetworkRequest::PushTags { repo_path: path_string, remote_name: "upstream".to_string() }));
     join_network_worker(&mut app);
+}
+
+#[test]
+fn tag_shortcut_opens_modal_and_creates_lightweight_tag() {
+    let (path, repo) = temp_repo("tag-create");
+    let oid = commit(&repo, "file.txt", "initial");
+    let path_string = path.display().to_string();
+    let mut app = App { path: Some(path_string.clone()), repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, graph_selected: 1, ..Default::default() };
+    let alias = app.oids.get_alias_by_oid(oid);
+    app.oids.sorted_aliases = vec![NONE, alias];
+
+    app.on_tag();
+
+    assert_eq!(app.focus, Focus::ModalTag);
+    assert!(app.modal_input.value().is_empty());
+
+    app.modal_input.set_value("v1.0.0");
+    app.handle_modal_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert_eq!(app.focus, Focus::Viewport);
+    assert!(app.modal_input.value().is_empty());
+
+    let repo = Repository::open(&path_string).unwrap();
+    assert_eq!(repo.find_reference("refs/tags/v1.0.0").unwrap().target(), Some(oid));
+}
+
+#[test]
+fn untag_from_tags_pane_removes_existing_lightweight_tag() {
+    let (path, repo) = temp_repo("tag-delete");
+    let oid = commit(&repo, "file.txt", "initial");
+    repo.tag_lightweight("v1.0.0", &repo.find_object(oid, None).unwrap(), false).unwrap();
+    let path_string = path.display().to_string();
+    let mut app = App { path: Some(path_string.clone()), repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Tags, tags_selected: 0, ..Default::default() };
+    let alias = app.oids.get_alias_by_oid(oid);
+    app.oids.sorted_aliases = vec![NONE, alias];
+    app.tags.sorted = vec![(alias, "v1.0.0".to_string())];
+
+    app.on_untag();
+
+    assert_eq!(app.focus, Focus::Tags);
+    let repo = Repository::open(&path_string).unwrap();
+    assert!(repo.find_reference("refs/tags/v1.0.0").is_err());
 }
 
 #[test]
@@ -264,9 +313,10 @@ fn revert_opens_message_modal_with_prefilled_summary() {
 fn revert_rejects_merge_commits_before_opening_modal() {
     let (_path, repo) = temp_repo("revert-merge-modal");
     commit_with_content(&repo, "base.txt", "base\n", "base");
+    let main_branch = current_branch_name(&repo);
     checkout_new_branch(&repo, "feature");
     let feature = commit_with_content(&repo, "feature.txt", "feature\n", "feature");
-    checkout_branch(&repo, "master");
+    checkout_branch(&repo, &main_branch);
     let main = commit_with_content(&repo, "main.txt", "main\n", "main");
 
     let merge = {
@@ -333,12 +383,69 @@ fn revert_state_routes_continue_and_abort_operations() {
 }
 
 #[test]
+fn cherrypick_state_routes_continue_and_abort_operations() {
+    let (path, repo) = temp_repo("cherrypick-active-operation");
+    commit_with_content(&repo, "file.txt", "base\n", "base");
+    let feature = commit_with_content(&repo, "file.txt", "feature\n", "feature");
+    commit_with_content(&repo, "file.txt", "main\n", "main");
+
+    assert_eq!(start_cherrypick(&repo, feature, "cherrypicked: feature").unwrap(), CherrypickOutcome::Conflict);
+
+    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+    app.on_continue_operation();
+
+    assert_eq!(app.focus, Focus::ModalOperationProgress);
+    assert_eq!(app.modal_operation_kind, OperationKind::Cherrypick);
+    assert_eq!(app.pending_operation_action, Some(PendingOperationAction::Continue));
+
+    app.focus = Focus::Viewport;
+    app.pending_operation_action = None;
+    app.on_abort_operation();
+
+    assert_eq!(app.focus, Focus::ModalOperationProgress);
+    assert_eq!(app.modal_operation_kind, OperationKind::Cherrypick);
+    assert_eq!(app.pending_operation_action, Some(PendingOperationAction::Abort));
+    let _ = fs::remove_dir_all(path);
+}
+
+#[test]
+fn rebase_state_routes_continue_and_abort_operations() {
+    let (path, repo) = temp_repo("rebase-active-operation");
+    commit_with_content(&repo, "file.txt", "base\n", "base");
+    let base_branch = repo.head().unwrap().shorthand().unwrap().to_string();
+    checkout_new_branch(&repo, "feature");
+    commit_with_content(&repo, "file.txt", "feature\n", "feature");
+    checkout_branch(&repo, &base_branch);
+    let main = commit_with_content(&repo, "file.txt", "main\n", "main");
+    checkout_branch(&repo, "feature");
+
+    assert_eq!(start_rebase(&repo, main).unwrap(), RebaseOutcome::Conflict);
+
+    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+    app.on_rebase();
+
+    assert_eq!(app.focus, Focus::ModalOperationProgress);
+    assert_eq!(app.modal_operation_kind, OperationKind::Rebase);
+    assert_eq!(app.pending_operation_action, Some(PendingOperationAction::Continue));
+
+    app.focus = Focus::Viewport;
+    app.pending_operation_action = None;
+    app.on_abort_operation();
+
+    assert_eq!(app.focus, Focus::ModalOperationProgress);
+    assert_eq!(app.modal_operation_kind, OperationKind::Rebase);
+    assert_eq!(app.pending_operation_action, Some(PendingOperationAction::Abort));
+    let _ = fs::remove_dir_all(path);
+}
+
+#[test]
 fn merge_state_routes_continue_and_abort_operations() {
     let (path, repo) = temp_repo("merge-active-operation");
     commit_with_content(&repo, "file.txt", "base\n", "base");
+    let main_branch = current_branch_name(&repo);
     checkout_new_branch(&repo, "feature");
     let feature = commit_with_content(&repo, "file.txt", "feature\n", "feature");
-    checkout_branch(&repo, "master");
+    checkout_branch(&repo, &main_branch);
     commit_with_content(&repo, "file.txt", "main\n", "main");
 
     assert_eq!(start_merge(&repo, feature).unwrap(), MergeOutcome::Conflict);
@@ -383,6 +490,35 @@ fn create_branch_from_reflog_uses_reflog_commit_target() {
 
     assert_eq!(app.focus, Focus::ModalCreateBranch);
     assert_eq!(app.selected_branch_target_oid(), Some(reflog_oid));
+}
+
+#[test]
+fn create_worktree_from_graph_uses_the_name_for_branch_and_default_path() {
+    let (path, repo) = temp_repo("create-worktree-modal");
+    let oid = commit(&repo, "file.txt", "initial");
+    let path_string = path.display().to_string();
+    let expected_path = path.parent().unwrap().join(format!("{}-feature", path.file_name().unwrap().to_string_lossy())).display().to_string();
+
+    let mut app = App { path: Some(path_string.clone()), repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, graph_selected: 1, ..Default::default() };
+    let alias = app.oids.get_alias_by_oid(oid);
+    app.oids.sorted_aliases = vec![NONE, alias];
+
+    app.on_create_worktree();
+
+    assert_eq!(app.focus, Focus::ModalCreateWorktreeName);
+
+    app.modal_input.set_value("feature");
+    app.handle_modal_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert_eq!(app.focus, Focus::ModalCreateWorktreePath);
+    assert_eq!(app.modal_worktree_name, "feature");
+    assert_eq!(app.modal_input.value(), expected_path);
+
+    app.handle_modal_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert_eq!(app.focus, Focus::Viewport);
+    assert!(app.modal_input.value().is_empty());
+    assert!(Repository::open(&path_string).unwrap().find_worktree("feature").is_ok());
 }
 
 #[test]
@@ -504,6 +640,53 @@ fn auth_required_network_result_opens_auth_modal() {
 }
 
 #[test]
+fn auth_required_ssh_network_result_opens_auth_modal_on_secret_field() {
+    let challenge = AuthChallenge {
+        url: "ssh://git@github.com/asinglebit/guitar.git".to_string(),
+        username: Some("git".to_string()),
+        protocol: AuthProtocol::Ssh,
+        operation: "Fetch".to_string(),
+        key_path: Some(PathBuf::from("/tmp/id_ed25519")),
+    };
+    let mut app = App {
+        pending_network_request: Some(NetworkRequest::Fetch { repo_path: ".".to_string(), remote_name: "origin".to_string() }),
+        viewport: Viewport::Graph,
+        focus: Focus::ModalNetworkProgress,
+        ..Default::default()
+    };
+
+    app.handle_network_result(NetworkResult::AuthRequired(AuthRequired { challenge: challenge.clone(), rejected: Vec::new() }));
+
+    assert_eq!(app.focus, Focus::ModalAuth);
+    assert_eq!(app.pending_auth_prompt, Some(challenge));
+    assert_eq!(app.auth_username_input.value(), "git");
+    assert_eq!(app.auth_input_field, AuthInputField::Secret);
+}
+
+#[test]
+fn ssh_auth_prompt_keeps_secret_field_when_toggled() {
+    let challenge = AuthChallenge {
+        url: "ssh://git@github.com/asinglebit/guitar.git".to_string(),
+        username: Some("git".to_string()),
+        protocol: AuthProtocol::Ssh,
+        operation: "Fetch".to_string(),
+        key_path: Some(PathBuf::from("/tmp/id_ed25519")),
+    };
+    let mut app = App {
+        pending_network_request: Some(NetworkRequest::Fetch { repo_path: ".".to_string(), remote_name: "origin".to_string() }),
+        viewport: Viewport::Graph,
+        focus: Focus::ModalNetworkProgress,
+        ..Default::default()
+    };
+
+    app.handle_network_result(NetworkResult::AuthRequired(AuthRequired { challenge, rejected: Vec::new() }));
+    app.auth_input_field = AuthInputField::Username;
+    app.handle_key_event(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+
+    assert_eq!(app.auth_input_field, AuthInputField::Secret);
+}
+
+#[test]
 fn submitting_https_auth_stores_session_secret_and_retries_request() {
     let challenge = AuthChallenge { url: "https://github.com/asinglebit/guitar.git".to_string(), username: None, protocol: AuthProtocol::Https, operation: "Fetch".to_string(), key_path: None };
     let mut app = App {
@@ -523,6 +706,33 @@ fn submitting_https_auth_stores_session_secret_and_retries_request() {
     let handle = app.network_handle.take().expect("retry should start a worker");
     let _ = handle.join();
     assert!(app.auth_session.has_secret_for(&challenge, Some("octo")));
+}
+
+#[test]
+fn submitting_ssh_auth_stores_session_secret_and_retries_request() {
+    let challenge = AuthChallenge {
+        url: "ssh://git@github.com/asinglebit/guitar.git".to_string(),
+        username: Some("git".to_string()),
+        protocol: AuthProtocol::Ssh,
+        operation: "Fetch".to_string(),
+        key_path: Some(PathBuf::from("/tmp/id_ed25519")),
+    };
+    let mut app = App {
+        pending_network_request: Some(NetworkRequest::Fetch { repo_path: "/tmp/missing".to_string(), remote_name: "origin".to_string() }),
+        pending_auth_prompt: Some(challenge.clone()),
+        focus: Focus::ModalAuth,
+        ..Default::default()
+    };
+    app.auth_secret_input.set_value("passphrase");
+
+    app.submit_auth_prompt();
+
+    assert_eq!(app.pending_auth_prompt, None);
+    assert_eq!(app.network_auth_attempts, 1);
+    assert_eq!(app.focus, Focus::ModalNetworkProgress);
+    let handle = app.network_handle.take().expect("retry should start a worker");
+    let _ = handle.join();
+    assert!(app.auth_session.has_secret_for(&challenge, Some("git")));
 }
 
 #[test]

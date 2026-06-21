@@ -77,3 +77,48 @@ fn rename_matches_old_and_new_selected_path() {
     assert_eq!(changed_file_status_at_commit(&repo, renamed, "old.txt").unwrap(), Some(FileStatus::Renamed));
     assert_eq!(changed_file_status_at_commit(&repo, renamed, "new.txt").unwrap(), Some(FileStatus::Renamed));
 }
+
+#[test]
+fn copied_file_stays_an_added_change_in_file_history() {
+    let (path, repo) = temp_repo("copy");
+    commit_file(&repo, &path, "source.txt", "one\n", "root");
+
+    write_file(&path, "copy.txt", "one\n");
+    let mut index = repo.index().unwrap();
+    index.add_path(Path::new("copy.txt")).unwrap();
+    index.write().unwrap();
+    let copied = commit_index(&repo, "copy");
+
+    assert_eq!(changed_file_status_at_commit(&repo, copied, "copy.txt").unwrap(), Some(FileStatus::Added));
+    assert_eq!(changed_file_status_at_commit(&repo, copied, "source.txt").unwrap(), None);
+}
+
+#[cfg(unix)]
+#[test]
+fn typechange_is_reported_as_deleted_in_file_history() {
+    let (path, repo) = temp_repo("typechange");
+    commit_file(&repo, &path, "link.txt", "one\n", "root");
+
+    fs::remove_file(path.join("link.txt")).unwrap();
+    std::os::unix::fs::symlink("target.txt", path.join("link.txt")).unwrap();
+    let mut index = repo.index().unwrap();
+    index.add_path(Path::new("link.txt")).unwrap();
+    index.write().unwrap();
+    let typechanged = commit_index(&repo, "typechange");
+
+    assert_eq!(changed_file_status_at_commit(&repo, typechanged, "link.txt").unwrap(), Some(FileStatus::Deleted));
+}
+
+#[test]
+fn directory_like_file_names_remain_file_history_entries() {
+    let (path, repo) = temp_repo("directory-like");
+    commit_file(&repo, &path, "docs/guide", "one\n", "root");
+
+    write_file(&path, "docs/guide", "two\n");
+    let mut index = repo.index().unwrap();
+    index.add_path(Path::new("docs/guide")).unwrap();
+    index.write().unwrap();
+    let updated = commit_index(&repo, "update");
+
+    assert_eq!(changed_file_status_at_commit(&repo, updated, "docs/guide").unwrap(), Some(FileStatus::Modified));
+}

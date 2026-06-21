@@ -394,7 +394,7 @@ fn pipe_symbol<'a>(graph: &'a GraphSymbols, flattened_lanes: &[bool], lane_idx: 
     }
 }
 
-fn draw_merge_closeout_horizontals(layers: &mut LayersContext, graph: &GraphSymbols, flattened_lanes: &[bool], from_lane_idx: usize, to_lane_idx: usize) {
+fn draw_merge_closeout_horizontals<'a>(layers: &mut LayersContext<'a>, graph: &'a GraphSymbols, flattened_lanes: &[bool], from_lane_idx: usize, to_lane_idx: usize) {
     let symbol = pipe_symbol(graph, flattened_lanes, to_lane_idx, &graph.horizontal);
     let start_token_idx = from_lane_idx.saturating_add(1).saturating_mul(2);
     let end_token_idx = to_lane_idx.saturating_mul(2);
@@ -405,7 +405,7 @@ fn draw_merge_closeout_horizontals(layers: &mut LayersContext, graph: &GraphSymb
     }
 }
 
-fn draw_merge_closeout_symbol(layers: &mut LayersContext, flattened_lanes: &[bool], symbol: &str, lane_idx: usize) {
+fn draw_merge_closeout_symbol<'a>(layers: &mut LayersContext<'a>, flattened_lanes: &[bool], symbol: &'a str, lane_idx: usize) {
     layers.merge_at_ref(lane_idx.saturating_mul(2), symbol, closeout_lane_ref(flattened_lanes, lane_idx));
 }
 
@@ -413,7 +413,7 @@ fn closeout_lane_ref(flattened_lanes: &[bool], lane_idx: usize) -> LaneRef {
     LaneRef::new(lane_idx, flattened_lanes.get(lane_idx).copied().unwrap_or(false))
 }
 
-fn draw_branch_up_bridge(layers: &mut LayersContext, graph: &GraphSymbols, flattened_lanes: &[bool], from_lane_idx: usize, to_lane_idx: usize) {
+fn draw_branch_up_bridge<'a>(layers: &mut LayersContext<'a>, graph: &'a GraphSymbols, flattened_lanes: &[bool], from_lane_idx: usize, to_lane_idx: usize) {
     if from_lane_idx >= to_lane_idx {
         return;
     }

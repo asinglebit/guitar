@@ -55,10 +55,11 @@ fn clean_cherrypick_commits_with_edited_message() {
     let (path, repo) = temp_repo("clean");
     write(&path, "base.txt", "base\n");
     commit(&repo, "base.txt", "base");
+    let base_branch = repo.head().unwrap().shorthand().unwrap().to_string();
     checkout_new_branch(&repo, "feature");
     write(&path, "feature.txt", "feature\n");
     let feature = commit(&repo, "feature.txt", "feature");
-    checkout_branch(&repo, "master");
+    checkout_branch(&repo, &base_branch);
     write(&path, "main.txt", "main\n");
     let main = commit(&repo, "main.txt", "main");
 
@@ -81,10 +82,11 @@ fn conflict_then_continue_commits_with_persisted_message() {
     let (path, repo) = temp_repo("conflict-continue");
     write(&path, "file.txt", "base\n");
     commit(&repo, "file.txt", "base");
+    let base_branch = repo.head().unwrap().shorthand().unwrap().to_string();
     checkout_new_branch(&repo, "feature");
     write(&path, "file.txt", "feature\n");
     let feature = commit(&repo, "file.txt", "feature");
-    checkout_branch(&repo, "master");
+    checkout_branch(&repo, &base_branch);
     write(&path, "file.txt", "main\n");
     commit(&repo, "file.txt", "main");
 
@@ -113,10 +115,11 @@ fn abort_restores_pre_cherrypick_state() {
     let (path, repo) = temp_repo("abort");
     write(&path, "file.txt", "base\n");
     commit(&repo, "file.txt", "base");
+    let base_branch = repo.head().unwrap().shorthand().unwrap().to_string();
     checkout_new_branch(&repo, "feature");
     write(&path, "file.txt", "feature\n");
     let feature = commit(&repo, "file.txt", "feature");
-    checkout_branch(&repo, "master");
+    checkout_branch(&repo, &base_branch);
     write(&path, "file.txt", "main\n");
     let main = commit(&repo, "file.txt", "main");
 

@@ -55,10 +55,11 @@ fn fast_forward_updates_branch_and_workdir() {
     let (path, repo) = temp_repo("fast-forward");
     write(&path, "file.txt", "base\n");
     commit(&repo, "file.txt", "base");
+    let base_branch = repo.head().unwrap().shorthand().unwrap().to_string();
     checkout_new_branch(&repo, "feature");
     write(&path, "file.txt", "feature\n");
     let feature = commit(&repo, "file.txt", "feature");
-    checkout_branch(&repo, "master");
+    checkout_branch(&repo, &base_branch);
 
     assert_eq!(start_merge(&repo, feature).unwrap(), MergeOutcome::FastForward { oid: feature });
     assert_eq!(repo.head().unwrap().target(), Some(feature));
@@ -85,10 +86,11 @@ fn divergent_clean_merge_creates_two_parent_commit() {
     let (path, repo) = temp_repo("clean-divergent");
     write(&path, "base.txt", "base\n");
     commit(&repo, "base.txt", "base");
+    let base_branch = repo.head().unwrap().shorthand().unwrap().to_string();
     checkout_new_branch(&repo, "feature");
     write(&path, "feature.txt", "feature\n");
     let feature = commit(&repo, "feature.txt", "feature");
-    checkout_branch(&repo, "master");
+    checkout_branch(&repo, &base_branch);
     write(&path, "main.txt", "main\n");
     let main = commit(&repo, "main.txt", "main");
 
@@ -112,10 +114,11 @@ fn conflict_then_continue_finishes_after_workdir_resolution() {
     let (path, repo) = temp_repo("conflict-continue");
     write(&path, "file.txt", "base\n");
     commit(&repo, "file.txt", "base");
+    let base_branch = repo.head().unwrap().shorthand().unwrap().to_string();
     checkout_new_branch(&repo, "feature");
     write(&path, "file.txt", "feature\n");
     let feature = commit(&repo, "file.txt", "feature");
-    checkout_branch(&repo, "master");
+    checkout_branch(&repo, &base_branch);
     write(&path, "file.txt", "main\n");
     let main = commit(&repo, "file.txt", "main");
 
@@ -144,10 +147,11 @@ fn abort_restores_pre_merge_state() {
     let (path, repo) = temp_repo("abort");
     write(&path, "file.txt", "base\n");
     commit(&repo, "file.txt", "base");
+    let base_branch = repo.head().unwrap().shorthand().unwrap().to_string();
     checkout_new_branch(&repo, "feature");
     write(&path, "file.txt", "feature\n");
     let feature = commit(&repo, "file.txt", "feature");
-    checkout_branch(&repo, "master");
+    checkout_branch(&repo, &base_branch);
     write(&path, "file.txt", "main\n");
     let main = commit(&repo, "file.txt", "main");
 
@@ -164,10 +168,11 @@ fn dirty_worktree_is_refused_before_start() {
     let (path, repo) = temp_repo("dirty");
     write(&path, "file.txt", "base\n");
     commit(&repo, "file.txt", "base");
+    let base_branch = repo.head().unwrap().shorthand().unwrap().to_string();
     checkout_new_branch(&repo, "feature");
     write(&path, "feature.txt", "feature\n");
     let feature = commit(&repo, "feature.txt", "feature");
-    checkout_branch(&repo, "master");
+    checkout_branch(&repo, &base_branch);
     write(&path, "file.txt", "dirty\n");
 
     let error = start_merge(&repo, feature).unwrap_err();
@@ -180,10 +185,11 @@ fn merge_ff_false_creates_merge_commit_for_fast_forward() {
     let (path, repo) = temp_repo("no-ff");
     write(&path, "file.txt", "base\n");
     let base = commit(&repo, "file.txt", "base");
+    let base_branch = repo.head().unwrap().shorthand().unwrap().to_string();
     checkout_new_branch(&repo, "feature");
     write(&path, "file.txt", "feature\n");
     let feature = commit(&repo, "file.txt", "feature");
-    checkout_branch(&repo, "master");
+    checkout_branch(&repo, &base_branch);
     repo.config().unwrap().set_str("merge.ff", "false").unwrap();
 
     let MergeOutcome::Completed { oid } = start_merge(&repo, feature).unwrap() else {
@@ -204,10 +210,11 @@ fn merge_ff_only_refuses_divergent_history() {
     let (path, repo) = temp_repo("ff-only");
     write(&path, "base.txt", "base\n");
     commit(&repo, "base.txt", "base");
+    let base_branch = repo.head().unwrap().shorthand().unwrap().to_string();
     checkout_new_branch(&repo, "feature");
     write(&path, "feature.txt", "feature\n");
     let feature = commit(&repo, "feature.txt", "feature");
-    checkout_branch(&repo, "master");
+    checkout_branch(&repo, &base_branch);
     write(&path, "main.txt", "main\n");
     let main = commit(&repo, "main.txt", "main");
     repo.config().unwrap().set_str("merge.ff", "only").unwrap();

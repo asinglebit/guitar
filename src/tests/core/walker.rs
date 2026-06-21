@@ -1,17 +1,24 @@
 use super::*;
 use crate::{
-    core::{graph_service::GraphRow, renderers::render_graph_projection},
+    core::{graph_service::GraphRow, oids::Oids, renderers::render_graph_projection},
+    git::queries::{
+        commits::{get_stashed_commits, get_tag_oids, get_tip_oids},
+        reflogs::get_head_reflog_entries,
+    },
     helpers::{
         palette::Theme,
         symbols::{SymbolTheme, graph},
     },
 };
 use git2::{Oid, ResetType, Signature, Time};
+use gix::traverse::commit::topo::{Builder as GixTopoBuilder, Sorting as GixTopoSorting};
 use ratatui::text::Line;
 use std::{
+    collections::{HashMap, HashSet as StdHashSet},
     fs,
+    hint::black_box,
     path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
 fn temp_repo(name: &str) -> (PathBuf, Repository) {
@@ -84,6 +91,134 @@ fn graph_row(index: usize, alias: u32, oid: Oid) -> GraphRow {
 
 fn line_text(line: &Line<'_>) -> String {
     line.spans.iter().map(|span| span.content.as_ref()).collect()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CommitMetadata {
+    summary: String,
+    committer_name: String,
+    committer_seconds: i64,
+}
+
+fn commit_metadata_from_git2(repo: &Repository, oid: Oid) -> CommitMetadata {
+    let commit = repo.find_commit(oid).unwrap();
+    let committer = commit.committer();
+
+    CommitMetadata { summary: commit.summary().unwrap_or_default().to_string(), committer_name: committer.name().unwrap_or_default().to_string(), committer_seconds: committer.when().seconds() }
+}
+
+fn commit_metadata_from_gix(repo: &gix::Repository, oid: gix::ObjectId) -> CommitMetadata {
+    let commit = repo.find_commit(oid).unwrap();
+    let message = commit.message().unwrap();
+    let committer = commit.committer().unwrap();
+
+    CommitMetadata {
+        summary: String::from_utf8_lossy(message.summary().as_ref()).into_owned(),
+        committer_name: String::from_utf8_lossy(committer.name.as_ref()).into_owned(),
+        committer_seconds: committer.time().unwrap().seconds,
+    }
+}
+
+fn collect_root_oids(repo: &mut Repository, include_head_reflog_roots: bool) -> Vec<Oid> {
+    let mut oids = Oids::default();
+    let (branches_local, branches_remote) = get_tip_oids(repo, &mut oids);
+    let tags_local = get_tag_oids(repo, &mut oids);
+    let stashes = get_stashed_commits(repo, &mut oids);
+    let mut aliases: StdHashSet<u32> = branches_local.keys().copied().chain(branches_remote.keys().copied()).chain(tags_local.keys().copied()).chain(stashes.into_iter()).collect();
+
+    if include_head_reflog_roots {
+        for entry in get_head_reflog_entries(repo).unwrap_or_default() {
+            aliases.insert(oids.get_alias_by_oid(entry.new_oid));
+        }
+    }
+
+    let mut roots: Vec<_> = aliases.into_iter().map(|alias| *oids.get_oid_by_alias(alias)).collect();
+    roots.sort_unstable_by(|left, right| left.as_bytes().cmp(right.as_bytes()));
+    roots
+}
+
+fn git2_stash_root_oids(repo: &mut Repository) -> StdHashSet<Oid> {
+    let mut oids = Oids::default();
+    get_stashed_commits(repo, &mut oids).into_iter().map(|alias| *oids.get_oid_by_alias(alias)).collect()
+}
+
+fn git2_head_reflog_root_oids(repo: &Repository) -> StdHashSet<Oid> {
+    get_head_reflog_entries(repo).unwrap_or_default().into_iter().map(|entry| entry.new_oid).collect()
+}
+
+fn gitoxide_stash_root_oids(repo: &gix::Repository) -> StdHashSet<Oid> {
+    repo.try_find_reference("refs/stash").ok().flatten().and_then(|reference| reference.try_id().map(|id| Oid::from_bytes(id.as_bytes()).unwrap())).into_iter().collect()
+}
+
+fn gitoxide_head_reflog_root_oids(repo: &gix::Repository) -> StdHashSet<Oid> {
+    repo.head().unwrap().log_iter().all().unwrap().into_iter().flat_map(|logs| logs.filter_map(Result::ok)).map(|line| Oid::from_bytes(line.new_oid().as_bytes()).unwrap()).collect()
+}
+
+fn special_roots_fixture(name: &str) -> (PathBuf, Repository) {
+    let (path, mut repo) = temp_repo(name);
+    let base = commit(&repo, "file.txt", "base");
+    let tip = commit(&repo, "file.txt", "tip");
+    let base_commit = repo.find_commit(base).unwrap();
+    repo.reset(base_commit.as_object(), ResetType::Hard, None).unwrap();
+    drop(base_commit);
+    let _stash = stash_tracked_change(&mut repo, "file.txt", "stashed change");
+
+    assert_ne!(base, tip);
+    (path, repo)
+}
+
+fn graph_metadata_from_walker(walker: &Walker) -> HashMap<Oid, CommitMetadata> {
+    let repo = walker.repo.borrow();
+    walker
+        .oids
+        .get_sorted_aliases()
+        .iter()
+        .filter_map(|&alias| {
+            let oid = *walker.oids.get_oid_by_alias(alias);
+            (!walker.oids.is_zero(&oid)).then(|| (oid, commit_metadata_from_git2(&repo, oid)))
+        })
+        .collect()
+}
+
+fn graph_metadata_from_current_backend(path: &Path) -> HashMap<Oid, CommitMetadata> {
+    let mut walker = Walker::new(path.display().to_string(), 10_000, HashSet::new(), true, 20).unwrap();
+    while walker.walk() {}
+    graph_metadata_from_walker(&walker)
+}
+
+fn graph_metadata_from_gitoxide(path: &Path, roots: &[Oid]) -> HashMap<Oid, CommitMetadata> {
+    let repo = gix::open(path).unwrap();
+    let tips = roots.iter().map(|oid| gix::ObjectId::from_bytes_or_panic(oid.as_bytes())).collect::<Vec<_>>();
+    let topo = GixTopoBuilder::new(&repo.objects).with_tips(tips).sorting(GixTopoSorting::TopoOrder).build().unwrap();
+
+    topo.map(|result| {
+        let info = result.unwrap();
+        let oid = Oid::from_bytes(info.id.as_slice()).unwrap();
+        (oid, commit_metadata_from_gix(&repo, info.id))
+    })
+    .collect()
+}
+
+fn representative_graph_fixture(name: &str, tail_commits: usize) -> (PathBuf, Repository) {
+    let (path, repo) = temp_repo(name);
+    let root = commit(&repo, "root.txt", "root");
+    let main_1 = commit_with_parents(&repo, "main.txt", "main-1", &[root], 1);
+    let side_1 = commit_with_parents(&repo, "side.txt", "side-1", &[root], 2);
+    let main_2 = commit_with_parents(&repo, "main.txt", "main-2", &[main_1], 3);
+    let side_2 = commit_with_parents(&repo, "side.txt", "side-2", &[side_1], 4);
+    let merge = commit_with_parents(&repo, "merge.txt", "merge", &[main_2, side_2], 5);
+
+    let mut tip = commit_with_parents(&repo, "tail.txt", "tail-0", &[merge], 6);
+    for idx in 1..tail_commits {
+        tip = commit_with_parents(&repo, "tail.txt", &format!("tail-{idx}"), &[tip], 6 + idx as i64);
+    }
+
+    repo.reference("refs/heads/main", tip, true, "test").unwrap();
+    repo.reference("refs/heads/feature", side_2, true, "test").unwrap();
+    repo.reference("refs/tags/v-main", main_1, true, "test").unwrap();
+    repo.set_head("refs/heads/main").unwrap();
+
+    (path, repo)
 }
 
 #[test]
@@ -196,4 +331,58 @@ fn walker_keeps_stash_adjacent_to_its_base_parent() {
     let stash_idx = aliases.iter().position(|alias| *alias == stash_alias).unwrap();
 
     assert_eq!(stash_idx + 1, base_idx);
+}
+
+#[test]
+fn gitoxide_reproduces_stash_and_head_reflog_roots() {
+    let (path, mut repo) = special_roots_fixture("special-root-parity");
+    let git2_stash_roots = git2_stash_root_oids(&mut repo);
+    let git2_head_reflog_roots = git2_head_reflog_root_oids(&repo);
+
+    let gix_repo = gix::open(&path).unwrap();
+    let gix_stash_roots = gitoxide_stash_root_oids(&gix_repo);
+    let gix_head_reflog_roots = gitoxide_head_reflog_root_oids(&gix_repo);
+
+    assert!(!git2_stash_roots.is_empty());
+    assert!(!git2_head_reflog_roots.is_empty());
+    assert_eq!(git2_stash_roots, gix_stash_roots);
+    assert_eq!(git2_head_reflog_roots, gix_head_reflog_roots);
+}
+
+#[test]
+fn gitoxide_topo_walk_matches_current_graph_metadata_on_representative_history() {
+    let (path, mut repo) = representative_graph_fixture("gitoxide-parity", 32);
+    let roots = collect_root_oids(&mut repo, true);
+    let current = graph_metadata_from_current_backend(&path);
+    let gitoxide = graph_metadata_from_gitoxide(&path, &roots);
+
+    assert_eq!(current, gitoxide);
+}
+
+#[test]
+#[ignore]
+fn benchmark_gitoxide_topo_walk_and_metadata_loading_on_representative_history() {
+    let (path, mut repo) = representative_graph_fixture("gitoxide-benchmark", 128);
+    let roots = collect_root_oids(&mut repo, true);
+    let current = graph_metadata_from_current_backend(&path);
+    let gitoxide = graph_metadata_from_gitoxide(&path, &roots);
+
+    assert_eq!(current, gitoxide);
+
+    let iterations = 5u32;
+
+    let libgit2_start = Instant::now();
+    for _ in 0..iterations {
+        let _ = black_box(graph_metadata_from_current_backend(&path));
+    }
+    let libgit2_elapsed = libgit2_start.elapsed();
+
+    let gitoxide_start = Instant::now();
+    for _ in 0..iterations {
+        let _ = black_box(graph_metadata_from_gitoxide(&path, &roots));
+    }
+    let gitoxide_elapsed = gitoxide_start.elapsed();
+
+    eprintln!("libgit2 graph load total: {libgit2_elapsed:?} average: {:?}", libgit2_elapsed / iterations);
+    eprintln!("gitoxide graph load total: {gitoxide_elapsed:?} average: {:?}", gitoxide_elapsed / iterations);
 }

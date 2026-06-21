@@ -44,7 +44,11 @@ fn temp_repo(name: &str) -> (PathBuf, Repository) {
 }
 
 fn write(path: &Path, file: &str, content: &str) {
-    fs::write(path.join(file), content).unwrap();
+    let file_path = path.join(file);
+    if let Some(parent) = file_path.parent() {
+        fs::create_dir_all(parent).unwrap();
+    }
+    fs::write(file_path, content).unwrap();
 }
 
 fn commit(repo: &Repository, file: &str, message: &str) -> Oid {
@@ -62,6 +66,12 @@ fn commit_index(repo: &Repository, message: &str) -> Oid {
     let parent = repo.head().ok().and_then(|head| head.peel_to_commit().ok());
     let parents: Vec<&git2::Commit<'_>> = parent.iter().collect();
     repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents).unwrap()
+}
+
+fn stage(repo: &Repository, file: &str) {
+    let mut index = repo.index().unwrap();
+    index.add_path(Path::new(file)).unwrap();
+    index.write().unwrap();
 }
 
 fn init_repo_at(path: &Path) -> Repository {
@@ -114,15 +124,20 @@ fn checkout_branch(repo: &Repository, name: &str) {
     repo.checkout_head(Some(CheckoutBuilder::default().force())).unwrap();
 }
 
+fn assert_contains_path(paths: &[String], expected: &str) {
+    assert!(paths.iter().any(|path| path == expected), "expected {expected} in {paths:?}");
+}
+
 #[test]
 fn workdir_diff_marks_conflicted_paths() {
     let (path, repo) = temp_repo("conflict");
     write(&path, "file.txt", "base\n");
     commit(&repo, "file.txt", "base");
+    let main_branch = repo.head().unwrap().shorthand().unwrap().to_string();
     checkout_new_branch(&repo, "feature");
     write(&path, "file.txt", "feature\n");
     commit(&repo, "file.txt", "feature");
-    checkout_branch(&repo, "master");
+    checkout_branch(&repo, &main_branch);
     write(&path, "file.txt", "main\n");
     let main = commit(&repo, "file.txt", "main");
     checkout_branch(&repo, "feature");
@@ -159,6 +174,72 @@ fn workdir_file_diff_emits_untracked_file_contents_as_added_lines() {
     assert!(!content_lines.is_empty());
     assert_eq!(content_lines.iter().map(|line| line.origin).collect::<Vec<_>>(), vec!['+', '+']);
     assert_eq!(content_lines.iter().map(|line| line.content.as_str()).collect::<Vec<_>>(), vec!["alpha\n", "beta\n"]);
+
+    let _ = fs::remove_dir_all(path);
+}
+
+#[test]
+fn workdir_diff_lists_file_statuses_without_requerying_paths() {
+    let (path, repo) = temp_repo("ordinary-statuses");
+    write(&path, "staged.txt", "base\n");
+    commit(&repo, "staged.txt", "staged base");
+    write(&path, "unstaged.txt", "base\n");
+    commit(&repo, "unstaged.txt", "unstaged base");
+    write(&path, "deleted.txt", "base\n");
+    commit(&repo, "deleted.txt", "deleted base");
+
+    write(&path, "staged.txt", "staged\n");
+    stage(&repo, "staged.txt");
+    write(&path, "unstaged.txt", "unstaged\n");
+    fs::remove_file(path.join("deleted.txt")).unwrap();
+    write(&path, "new.txt", "new\n");
+
+    let changes = get_filenames_diff_at_workdir(&repo).unwrap();
+
+    assert_contains_path(&changes.staged.modified, "staged.txt");
+    assert_contains_path(&changes.unstaged.modified, "unstaged.txt");
+    assert_contains_path(&changes.unstaged.deleted, "deleted.txt");
+    assert_contains_path(&changes.unstaged.added, "new.txt");
+    assert_eq!(changes.modified_count, 2);
+    assert_eq!(changes.added_count, 1);
+    assert_eq!(changes.deleted_count, 1);
+    assert!(changes.is_staged);
+    assert!(changes.is_unstaged);
+
+    let _ = fs::remove_dir_all(path);
+}
+
+#[test]
+fn workdir_diff_expands_untracked_directories_to_file_rows() {
+    let (path, repo) = temp_repo("untracked-directory-expansion");
+    write(&path, "tracked.txt", "base\n");
+    commit(&repo, "tracked.txt", "initial");
+    write(&path, "scratch/one.txt", "one\n");
+    write(&path, "scratch/nested/two.txt", "two\n");
+
+    let changes = get_filenames_diff_at_workdir(&repo).unwrap();
+
+    assert_contains_path(&changes.unstaged.added, "scratch/one.txt");
+    assert_contains_path(&changes.unstaged.added, "scratch/nested/two.txt");
+    assert!(!changes.unstaged.added.iter().any(|path| path == "scratch"));
+
+    let _ = fs::remove_dir_all(path);
+}
+
+#[test]
+fn workdir_diff_expands_untracked_directories_without_ignored_files() {
+    let (path, repo) = temp_repo("untracked-directory-ignore");
+    write(&path, ".gitignore", "*.ignored\n");
+    commit(&repo, ".gitignore", "ignore generated files");
+    write(&path, "scratch/one.txt", "one\n");
+    write(&path, "scratch/nested/two.txt", "two\n");
+    write(&path, "scratch/nested/skip.ignored", "ignored\n");
+
+    let changes = get_filenames_diff_at_workdir(&repo).unwrap();
+
+    assert_contains_path(&changes.unstaged.added, "scratch/one.txt");
+    assert_contains_path(&changes.unstaged.added, "scratch/nested/two.txt");
+    assert!(!changes.unstaged.added.iter().any(|path| path.ends_with("skip.ignored")));
 
     let _ = fs::remove_dir_all(path);
 }

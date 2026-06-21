@@ -129,10 +129,11 @@ fn merge_commits_are_rejected() {
     let (path, repo) = temp_repo("merge-reject");
     write(&path, "base.txt", "base\n");
     commit(&repo, "base.txt", "base");
+    let base_branch = repo.head().unwrap().shorthand().unwrap().to_string();
     checkout_new_branch(&repo, "feature");
     write(&path, "feature.txt", "feature\n");
     let feature = commit(&repo, "feature.txt", "feature");
-    checkout_branch(&repo, "master");
+    checkout_branch(&repo, &base_branch);
     write(&path, "main.txt", "main\n");
     let main = commit(&repo, "main.txt", "main");
 

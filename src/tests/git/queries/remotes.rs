@@ -59,8 +59,9 @@ fn effective_default_remote_uses_config_precedence() {
     repo.remote("origin", "https://example.com/origin.git").unwrap();
     repo.remote("upstream", "https://example.com/upstream.git").unwrap();
     let oid = commit(&repo, "file.txt");
-    repo.reference("refs/remotes/upstream/master", oid, true, "remote").unwrap();
-    repo.find_branch("master", BranchType::Local).unwrap().set_upstream(Some("upstream/master")).unwrap();
+    let current_branch = repo.head().unwrap().shorthand().unwrap().to_string();
+    repo.reference(&format!("refs/remotes/upstream/{current_branch}"), oid, true, "remote").unwrap();
+    repo.find_branch(&current_branch, BranchType::Local).unwrap().set_upstream(Some(&format!("upstream/{current_branch}"))).unwrap();
 
     assert_eq!(effective_default_remote(&repo).as_deref(), Some("upstream"));
 

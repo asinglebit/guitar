@@ -129,6 +129,51 @@ fn graph_service_reports_progress_and_answers_visible_window() {
 }
 
 #[test]
+fn graph_rows_reuse_commit_metadata_cache_for_repeated_windows() {
+    let (path, repo) = temp_repo("metadata-cache");
+    let first = commit(&repo, "one.txt", "one");
+    let second = commit(&repo, "two.txt", "two");
+    drop(repo);
+
+    let mut walker = Walker::new(path.display().to_string(), 8, HashSet::new(), false, 20).unwrap();
+    while walker.walk() {}
+
+    let worktrees = Worktrees::default();
+    let symbols = SymbolTheme::main();
+    let mut commit_metadata = CommitMetadataCache::default();
+    let rows = graph_rows(&walker, &worktrees, &mut commit_metadata, &HashSet::new(), &symbols, 1, 3);
+    assert_eq!(rows.iter().map(|row| row.oid).collect::<Vec<_>>(), vec![second, first]);
+    assert_eq!(commit_metadata.len(), 2);
+
+    let cached_rows = graph_rows(&walker, &worktrees, &mut commit_metadata, &HashSet::new(), &symbols, 1, 3);
+    assert_eq!(cached_rows.iter().map(|row| row.summary.clone()).collect::<Vec<_>>(), rows.iter().map(|row| row.summary.clone()).collect::<Vec<_>>());
+    assert_eq!(commit_metadata.len(), 2);
+}
+
+#[test]
+fn graph_rows_do_not_cache_uncommitted_pseudo_row_metadata() {
+    let (path, repo) = temp_repo("metadata-cache-uncommitted");
+    let first = commit(&repo, "one.txt", "one");
+    drop(repo);
+
+    let mut walker = Walker::new(path.display().to_string(), 8, HashSet::new(), false, 20).unwrap();
+    while walker.walk() {}
+
+    let worktrees = Worktrees::default();
+    let symbols = SymbolTheme::main();
+    let mut commit_metadata = CommitMetadataCache::default();
+    let rows = graph_rows(&walker, &worktrees, &mut commit_metadata, &HashSet::new(), &symbols, 0, 2);
+
+    assert_eq!(rows[0].alias, crate::core::chunk::NONE);
+    assert_eq!(rows[0].summary, "");
+    assert_eq!(rows[1].oid, first);
+    assert_eq!(commit_metadata.len(), 1);
+
+    let _ = graph_rows(&walker, &worktrees, &mut commit_metadata, &HashSet::new(), &symbols, 0, 2);
+    assert_eq!(commit_metadata.len(), 1);
+}
+
+#[test]
 fn graph_service_file_history_returns_visible_graph_indices() {
     let (path, repo) = temp_repo("file-history");
     let first = commit(&repo, "target.txt", "first");
@@ -276,6 +321,7 @@ fn graph_service_uses_hidden_branch_names_as_deny_list() {
 fn graph_service_omits_hidden_labels_on_visible_commits() {
     let (path, repo) = temp_repo("hidden-labels");
     let oid = commit(&repo, "one.txt", "one");
+    let current_branch = repo.head().unwrap().shorthand().unwrap().to_string();
     let commit = repo.find_commit(oid).unwrap();
     repo.branch("hidden", &commit, false).unwrap();
     repo.reference("refs/remotes/origin/archive", oid, true, "test").unwrap();
@@ -323,7 +369,7 @@ fn graph_service_omits_hidden_labels_on_visible_commits() {
                 let labels: Vec<_> = row.branches.iter().map(|branch| branch.name.as_str()).collect();
                 assert!(!labels.contains(&"hidden"));
                 assert!(!labels.contains(&"origin/archive"));
-                assert!(labels.contains(&"master"));
+                assert!(labels.contains(&current_branch.as_str()));
                 break;
             },
             _ => {},

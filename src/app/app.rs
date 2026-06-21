@@ -10,6 +10,7 @@ use crate::{
         auth::{AuthChallenge, AuthSession, NetworkResult},
         os::path::try_into_git_repo_root,
         queries::{diffs::get_filenames_diff_at_oid, files::FileSearchResult, submodules::list_submodules, worktrees::list_worktrees},
+        repository::open,
     },
     helpers::{
         branch_visibility::{current_branch_names, load_branch_visibility, prune_hidden_branches, save_branch_visibility},
@@ -921,7 +922,7 @@ impl App {
         let absolute_path: PathBuf = try_into_git_repo_root(&canonical_path).unwrap_or(canonical_path.clone());
 
         // Failure keeps the app usable by falling back to the splash screen.
-        let repo = match Repository::open(&absolute_path) {
+        let repo = match open(&absolute_path) {
             Ok(r) => Some(Rc::new(r)),
             Err(_) => None,
         };

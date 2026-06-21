@@ -42,3 +42,7 @@ pub fn pop(repo: &mut Repository, target_oid: &Oid, apply: bool) -> Result<(), g
 
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "../../tests/git/actions/stashing.rs"]
+mod tests;

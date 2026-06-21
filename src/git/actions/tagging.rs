@@ -7,3 +7,7 @@ pub fn tag(repo: &Repository, oid: git2::Oid, tag: &str) -> Result<Oid, Error> {
 pub fn untag(repo: &Repository, tag: &str) -> Result<(), Error> {
     repo.tag_delete(tag)
 }
+
+#[cfg(test)]
+#[path = "../../tests/git/actions/tagging.rs"]
+mod tests;
