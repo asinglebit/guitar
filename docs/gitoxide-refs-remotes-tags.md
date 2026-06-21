@@ -18,6 +18,7 @@ The current libgit2-backed implementation is covered by tests for:
 - lightweight tag delete
 - tag listing behavior for commit tags
 - local tag push preparation
+- current lightweight tag modal flow and delete flow in the app
 
 Relevant coverage lives in:
 
@@ -38,7 +39,7 @@ This surface will likely need to stay split across multiple adapters:
 1. ref operations for create/rename/delete
 2. remote metadata and default-remote resolution
 3. checkout materialization for remote-tracking branches
-4. lightweight tag creation, deletion, and push preparation
+4. lightweight and annotated tag creation, deletion, and push preparation
 
 The current tests are already proving the UI and repo metadata semantics that the backend replacement must preserve.
 
@@ -46,7 +47,9 @@ The current tests are already proving the UI and repo metadata semantics that th
 
 - Branch checkout from a remote-tracking name should keep materializing a local branch with the selected name.
 - Default remote resolution should preserve the current precedence order.
-- Tagging should remain lightweight unless and until annotated tag support becomes an explicit UI flow.
+- gitoxide can create annotated tags directly through `gix::Repository::tag`, but exposing that in guitar would need a message prompt in the UI.
+- Remote tag deletion is tracked in `guitar-gitoxide-port-readiness-2xl.16`.
+- Lightweight tag creation and deletion should remain unchanged.
 - Remote rename and delete should keep the default-remote config in sync so the UI does not point at a stale remote name.
 
 ## Test Gate
