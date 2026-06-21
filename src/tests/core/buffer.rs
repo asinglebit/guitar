@@ -167,3 +167,21 @@ fn shrink_to_fit_releases_overreserved_delta_capacity() {
     let history = buffer.window(1, buffer.deltas.len());
     assert_eq!(history.len(), 16);
 }
+
+#[test]
+fn window_replays_late_range_from_nearest_checkpoint() {
+    let mut buffer = Buffer::default();
+
+    for alias in 1..=8_300 {
+        buffer.update(Chunk::commit(alias, alias - 1, NONE));
+    }
+    buffer.backup();
+
+    let start = 8_001;
+    let full = buffer.window(1, buffer.deltas.len());
+    let history = buffer.window(start, buffer.deltas.len());
+    let expected = full.iter().skip(start - 1).cloned().collect::<Vector<_>>();
+
+    assert_eq!(history.len(), 300);
+    assert_eq!(history, expected);
+}
