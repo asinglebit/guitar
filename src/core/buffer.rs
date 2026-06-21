@@ -78,8 +78,15 @@ impl<'a> Iterator for DeltaOpsIter<'a> {
 
 #[derive(Clone, Default)]
 pub struct DeltaLog {
-    chunks: Vec<Vec<Delta>>,
+    chunks: Vec<Vec<DeltaSpan>>,
+    ops: Vec<DeltaOp>,
     len: usize,
+}
+
+#[derive(Clone, Copy, Default)]
+struct DeltaSpan {
+    start: u32,
+    len: u32,
 }
 
 impl DeltaLog {
@@ -97,7 +104,13 @@ impl DeltaLog {
             self.chunks.push(Vec::with_capacity(DELTA_CHUNK_SIZE));
         }
 
-        self.chunks.last_mut().expect("delta log has a writable chunk").push(delta);
+        let start = u32::try_from(self.ops.len()).expect("delta op arena exceeded u32::MAX entries");
+        for op in delta.ops.iter() {
+            self.ops.push(*op);
+        }
+        let len = u32::try_from(self.ops.len() - start as usize).expect("delta entry exceeded u32::MAX ops");
+
+        self.chunks.last_mut().expect("delta log has a writable chunk").push(DeltaSpan { start, len });
         self.len += 1;
     }
 
@@ -107,12 +120,24 @@ impl DeltaLog {
 
     fn shrink_to_fit(&mut self) {
         for chunk in &mut self.chunks {
-            for delta in chunk.iter_mut() {
-                delta.ops.shrink_to_fit();
-            }
             chunk.shrink_to_fit();
         }
         self.chunks.shrink_to_fit();
+        self.ops.shrink_to_fit();
+    }
+}
+
+struct DeltaView<'a> {
+    ops: DeltaOpsView<'a>,
+}
+
+struct DeltaOpsView<'a> {
+    ops: &'a [DeltaOp],
+}
+
+impl<'a> DeltaOpsView<'a> {
+    fn iter(&self) -> std::slice::Iter<'a, DeltaOp> {
+        self.ops.iter()
     }
 }
 
@@ -123,7 +148,7 @@ struct DeltaLogRangeIter<'a> {
 }
 
 impl<'a> Iterator for DeltaLogRangeIter<'a> {
-    type Item = &'a Delta;
+    type Item = DeltaView<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.next >= self.end {
@@ -134,7 +159,11 @@ impl<'a> Iterator for DeltaLogRangeIter<'a> {
         let delta_idx = self.next % DELTA_CHUNK_SIZE;
         self.next += 1;
 
-        self.log.chunks.get(chunk_idx).and_then(|chunk| chunk.get(delta_idx))
+        self.log.chunks.get(chunk_idx).and_then(|chunk| chunk.get(delta_idx)).map(|span| {
+            let start = span.start as usize;
+            let end = start + span.len as usize;
+            DeltaView { ops: DeltaOpsView { ops: &self.log.ops[start..end] } }
+        })
     }
 }
 

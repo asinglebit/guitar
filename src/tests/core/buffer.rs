@@ -138,6 +138,26 @@ fn capped_buffer_records_overflow_as_single_truncate_delta() {
 }
 
 #[test]
+fn window_replays_many_op_delta_from_compacted_history() {
+    let mut buffer = Buffer::default();
+
+    buffer.backup();
+    buffer.delta.ops.push(DeltaOp::Insert { index: 0, item: Chunk::commit(1, NONE, NONE) });
+    buffer.delta.ops.push(DeltaOp::Insert { index: 1, item: Chunk::commit(2, NONE, NONE) });
+    buffer.delta.ops.push(DeltaOp::Replace { index: 0, new: Chunk::commit(3, NONE, NONE) });
+    buffer.delta.ops.push(DeltaOp::Remove { index: 1 });
+    buffer.delta.ops.push(DeltaOp::Truncate { len: 1 });
+    buffer.curr.push_back(Chunk::commit(3, NONE, NONE));
+    buffer.backup();
+
+    let history = buffer.window(1, buffer.deltas.len());
+
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].len(), 1);
+    assert_eq!(history[0][0], Chunk::commit(3, NONE, NONE));
+}
+
+#[test]
 fn capped_buffer_keeps_normal_last_lane_palette_eligible_without_overflow() {
     let mut buffer = Buffer::with_lane_limit(5);
 
