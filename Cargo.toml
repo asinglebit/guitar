@@ -18,7 +18,7 @@ encoding_rs = "0.8.35"
 facet = "0.43"
 facet-json = "0.43.2"
 git2 = "0.20.4"
-gix = { version = "0.78.0", default-features = false, features = ["basic"] }
+gix = { version = "0.78.0", default-features = false, features = ["basic", "status"] }
 im = "15.1.0"
 indexmap = "2.12.1"
 miette = { version = "7", features = ["fancy"] } # pretty diagnostics
