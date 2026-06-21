@@ -1,45 +1,66 @@
-use git2::{BranchType, Oid, Repository, Revwalk};
+use git2::{BranchType, Oid, Repository};
 use im::HashSet;
 use std::cell::RefCell;
 use std::collections::HashSet as StdHashSet;
+use std::path::PathBuf;
 use std::rc::Rc;
 
-// Own the revwalk cursor so commit history can be loaded in pages.
+type CommitWalk = Box<dyn Iterator<Item = Result<gix::traverse::commit::Info, gix::traverse::commit::simple::Error>>>;
+
+// Own a lazy gitoxide commit cursor so history pages don't precompute the entire graph.
 pub struct Batcher {
-    revwalk: Revwalk<'static>,
+    repo_path: PathBuf,
+    walk: Option<CommitWalk>,
 }
 
 impl Batcher {
-    // Build the initial revwalk from all visible local and remote branch tips.
-    pub fn new(repo: Rc<RefCell<Repository>>, hidden_branch_names: &HashSet<String>, extra_roots: &[Oid]) -> Result<Self, git2::Error> {
-        let revwalk = Self::build(&repo.borrow(), hidden_branch_names, extra_roots)?;
-        Ok(Self { revwalk })
+    // Build the initial commit cursor from all visible local and remote branch tips.
+    pub fn new(repo: Rc<RefCell<Repository>>, repo_path: impl Into<PathBuf>, hidden_branch_names: &HashSet<String>, extra_roots: &[Oid]) -> Result<Self, git2::Error> {
+        let repo_path = repo_path.into();
+        let walk = Self::build(&repo.borrow(), &repo_path, hidden_branch_names, extra_roots)?;
+        Ok(Self { repo_path, walk: Some(walk) })
     }
 
     // Recreate the cursor after branch filters, fetches, or repository state changes.
     pub fn reset(&mut self, repo: Rc<RefCell<Repository>>, hidden_branch_names: &HashSet<String>, extra_roots: &[Oid]) -> Result<(), git2::Error> {
-        self.revwalk = Self::build(&repo.borrow(), hidden_branch_names, extra_roots)?;
+        self.walk = Some(Self::build(&repo.borrow(), &self.repo_path, hidden_branch_names, extra_roots)?);
         Ok(())
     }
 
-    // Pull the next page, dropping commits libgit2 cannot resolve.
+    // Pull the next page, dropping commits gitoxide cannot resolve.
     pub fn next(&mut self, count: usize) -> Vec<Oid> {
-        self.revwalk.by_ref().take(count).filter_map(Result::ok).collect()
+        let mut page = Vec::with_capacity(count);
+        self.next_into(count, &mut page);
+        page
     }
 
     // Pull the next page into an existing output buffer to avoid a temporary page allocation.
     pub fn next_into(&mut self, count: usize, out: &mut Vec<Oid>) -> usize {
         let before = out.len();
-        out.extend(self.revwalk.by_ref().take(count).filter_map(Result::ok));
+        let Some(walk) = self.walk.as_mut() else {
+            return 0;
+        };
+
+        while out.len() - before < count {
+            let Some(result) = walk.next() else {
+                self.walk = None;
+                break;
+            };
+
+            let Ok(info) = result else { continue };
+            out.push(Oid::from_bytes(info.id.as_slice()).unwrap());
+        }
         out.len() - before
     }
 
-    fn build(repo: &Repository, hidden_branch_names: &HashSet<String>, extra_roots: &[Oid]) -> Result<Revwalk<'static>, git2::Error> {
-        // The repository outlives the revwalk in App state; this keeps libgit2's lifetime usable here.
-        let repo_ref: &'static Repository = unsafe { std::mem::transmute::<&Repository, &'static Repository>(repo) };
+    pub fn remaining(&self) -> usize {
+        0
+    }
 
-        let mut revwalk = repo_ref.revwalk()?;
+    fn build(repo: &Repository, repo_path: &PathBuf, hidden_branch_names: &HashSet<String>, extra_roots: &[Oid]) -> Result<CommitWalk, git2::Error> {
+        let gix_repo = gix::open(repo_path).map_err(|error| git2::Error::from_str(&error.to_string()))?;
         let mut pushed = StdHashSet::new();
+        let mut tips = Vec::new();
 
         for branch_type in [BranchType::Local, BranchType::Remote] {
             for branch_result in repo.branches(Some(branch_type))? {
@@ -51,20 +72,22 @@ impl Batcher {
 
                 // Hidden branch names are a deny-list; new branches are visible by default.
                 if !hidden_branch_names.contains(&name) {
-                    revwalk.push(oid)?;
                     pushed.insert(oid);
+                    tips.push(gix::ObjectId::from_bytes_or_panic(oid.as_bytes()));
                 }
             }
         }
 
         for oid in extra_roots {
             if pushed.insert(*oid) {
-                revwalk.push(*oid)?;
+                tips.push(gix::ObjectId::from_bytes_or_panic(oid.as_bytes()));
             }
         }
 
-        revwalk.set_sorting(git2::Sort::TOPOLOGICAL | git2::Sort::TIME)?;
-        Ok(revwalk)
+        let walk = gix::traverse::commit::Simple::new(tips, gix_repo.objects.clone())
+            .sorting(gix::traverse::commit::simple::Sorting::ByCommitTime(gix::traverse::commit::simple::CommitTimeOrder::NewestFirst))
+            .map_err(|error| git2::Error::from_str(&error.to_string()))?;
+        Ok(Box::new(walk))
     }
 }
 
@@ -108,12 +131,12 @@ mod tests {
 
     #[test]
     fn next_into_appends_pages_without_replacing_existing_output() {
-        let (_path, repo) = temp_repo("next-into");
+        let (path, repo) = temp_repo("next-into");
         let first = commit(&repo.borrow(), "first.txt", "first");
         let second = commit(&repo.borrow(), "second.txt", "second");
         let third = commit(&repo.borrow(), "third.txt", "third");
         let sentinel = Oid::zero();
-        let mut batcher = Batcher::new(repo.clone(), &HashSet::new(), &[third]).unwrap();
+        let mut batcher = Batcher::new(repo.clone(), path.clone(), &HashSet::new(), &[third]).unwrap();
         let mut out = vec![sentinel];
 
         assert_eq!(batcher.next_into(2, &mut out), 2);
@@ -121,5 +144,22 @@ mod tests {
         assert_eq!(batcher.next_into(2, &mut out), 0);
 
         assert_eq!(out, vec![sentinel, third, second, first]);
+    }
+
+    #[test]
+    fn exhausted_batcher_stays_empty_until_reset() {
+        let (path, repo) = temp_repo("exhausted");
+        let first = commit(&repo.borrow(), "first.txt", "first");
+        let second = commit(&repo.borrow(), "second.txt", "second");
+        let mut batcher = Batcher::new(repo.clone(), path.clone(), &HashSet::new(), &[second]).unwrap();
+
+        assert_eq!(batcher.next(10), vec![second, first]);
+        assert!(batcher.next(10).is_empty());
+        assert!(batcher.next(10).is_empty());
+
+        let third = commit(&repo.borrow(), "third.txt", "third");
+        batcher.reset(repo, &HashSet::new(), &[third]).unwrap();
+
+        assert_eq!(batcher.next(10), vec![third, second, first]);
     }
 }

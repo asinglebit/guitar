@@ -2,6 +2,7 @@ use super::*;
 use git2::{Repository, ResetType, Signature};
 use std::{
     fs,
+    io::Write,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -34,6 +35,12 @@ fn commit(repo: &Repository, file: &str, message: &str) -> Oid {
     repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents).unwrap()
 }
 
+fn append_reflog_entry(repo: &Repository, new_oid: Oid, message: &str) {
+    let log_path = repo.path().join("logs/HEAD");
+    let mut log = fs::OpenOptions::new().append(true).open(log_path).unwrap();
+    writeln!(log, "{} {} Skip <skip@example.com> 0 +0000\t{}", Oid::zero(), new_oid, message).unwrap();
+}
+
 #[test]
 fn head_reflog_keeps_commit_after_reset() {
     let (_path, repo) = temp_repo("lost-head");
@@ -46,4 +53,33 @@ fn head_reflog_keeps_commit_after_reset() {
 
     assert!(entries.iter().any(|entry| entry.new_oid == lost && entry.selector.starts_with("HEAD@{")));
     assert_eq!(repo.head().unwrap().target(), Some(base));
+}
+
+#[test]
+fn gitoxide_matches_libgit2_head_reflog_entries_and_skips_missing_commits() {
+    let (_path, repo) = temp_repo("parity");
+    let base = commit(&repo, "file.txt", "base");
+    let lost = commit(&repo, "file.txt", "lost");
+    let base_commit = repo.find_commit(base).unwrap();
+    repo.reset(base_commit.as_object(), ResetType::Hard, None).unwrap();
+
+    let skipped_oid = repo.blob(b"skip-me").unwrap();
+    append_reflog_entry(&repo, skipped_oid, "skip-me");
+
+    let git2_entries = super::get_head_reflog_entries_git2(&repo).unwrap();
+    let gix_entries = get_head_reflog_entries(&repo).unwrap();
+
+    assert_eq!(git2_entries, gix_entries);
+    assert!(git2_entries.iter().any(|entry| entry.new_oid == lost));
+    assert!(!git2_entries.iter().any(|entry| entry.message == "skip-me"));
+    assert_eq!(git2_entries.first().map(|entry| entry.selector.as_str()), Some("HEAD@{1}"));
+}
+
+#[test]
+fn missing_head_reflog_behavior_matches_libgit2() {
+    let (_path, repo) = temp_repo("missing");
+    let git2_result = super::get_head_reflog_entries_git2(&repo);
+    let gix_result = get_head_reflog_entries(&repo);
+
+    assert_eq!(git2_result.is_err(), gix_result.is_err());
 }

@@ -62,6 +62,11 @@ fn result_paths(results: &[FileSearchResult]) -> Vec<String> {
     results.iter().map(|result| result.path.clone()).collect()
 }
 
+fn sorted(mut paths: Vec<String>) -> Vec<String> {
+    paths.sort();
+    paths
+}
+
 #[test]
 fn committed_index_files_are_searchable() {
     let dir = TestDir::new("committed");
@@ -110,6 +115,31 @@ fn untracked_and_deleted_files_are_excluded() {
     assert!(search_tracked_files(&repo, "gone", 10).unwrap().is_empty());
     assert!(search_tracked_files(&repo, "target", 10).unwrap().is_empty());
     assert!(search_tracked_files(&repo, "ignored", 10).unwrap().is_empty());
+}
+
+#[test]
+fn gitoxide_matches_libgit2_tracked_file_enumeration_for_search() {
+    let dir = TestDir::new("parity");
+    let repo = init_repo(&dir.path);
+    write_file(&dir.path, "tracked.rs", "tracked\n");
+    write_file(&dir.path, "kept.rs", "kept\n");
+    commit_files(&repo, &["tracked.rs", "kept.rs"], "initial");
+
+    write_file(&dir.path, "staged.rs", "staged\n");
+    let mut index = repo.index().unwrap();
+    index.add_path(Path::new("staged.rs")).unwrap();
+    index.write().unwrap();
+
+    fs::remove_file(dir.path.join("kept.rs")).unwrap();
+    write_file(&dir.path, ".gitignore", "*.log\n");
+    write_file(&dir.path, "ignored.log", "ignored\n");
+
+    let gix_repo = gix::open(&dir.path).unwrap();
+    let git2_paths = sorted(super::tracked_file_paths_git2(&repo).unwrap());
+    let gix_paths = sorted(super::tracked_file_paths_gix(&gix_repo).unwrap());
+
+    assert_eq!(git2_paths, gix_paths);
+    assert_eq!(gix_paths, vec!["staged.rs".to_string(), "tracked.rs".to_string()]);
 }
 
 #[test]

@@ -199,7 +199,7 @@ pub fn get_filenames_diff_at_oid(repo: &Repository, oid: Oid) -> Vec<FileChange>
     // Compare against the first parent, matching the normal `git show` view of merges.
     let parent_tree = commit.parent(0).unwrap().tree().unwrap();
     let mut opts = DiffOptions::new();
-    opts.include_untracked(false).recurse_untracked_dirs(false).include_typechange(false).ignore_submodules(false).show_binary(false).minimal(false).skip_binary_check(true);
+    opts.include_untracked(false).recurse_untracked_dirs(false).include_typechange(true).ignore_submodules(false).show_binary(false).minimal(false).skip_binary_check(true);
 
     let diff = repo.diff_tree_to_tree(Some(&parent_tree), Some(&tree), Some(&mut opts)).unwrap();
 
@@ -226,7 +226,50 @@ pub fn get_filenames_diff_at_oid(repo: &Repository, oid: Oid) -> Vec<FileChange>
         });
     }
 
+    // libgit2 does not consistently emit gitlink pointer changes here, so compare known
+    // submodule entries directly and upsert the expected row when the recorded commit moved.
+    add_committed_submodule_pointer_changes(repo, &parent_tree, &tree, &mut changes);
+
     changes
+}
+
+fn add_committed_submodule_pointer_changes(repo: &Repository, parent_tree: &git2::Tree, tree: &git2::Tree, changes: &mut Vec<FileChange>) {
+    let Ok(submodules) = submodules_if_present(repo) else {
+        return;
+    };
+
+    for submodule in submodules {
+        let Some(path) = submodule.path().to_str().map(str::to_string) else {
+            continue;
+        };
+
+        let parent_entry = parent_tree.get_path(Path::new(&path)).ok();
+        let new_entry = tree.get_path(Path::new(&path)).ok();
+
+        let Some(status) = committed_submodule_change_status(parent_entry.as_ref(), new_entry.as_ref()) else {
+            continue;
+        };
+
+        upsert_change(changes, path, status);
+    }
+}
+
+fn committed_submodule_change_status(parent_entry: Option<&git2::TreeEntry<'_>>, new_entry: Option<&git2::TreeEntry<'_>>) -> Option<FileStatus> {
+    match (parent_entry, new_entry) {
+        (Some(old), Some(new)) if old.id() == new.id() => None,
+        (Some(_), Some(_)) => Some(FileStatus::Modified),
+        (Some(_), None) => Some(FileStatus::Deleted),
+        (None, Some(_)) => Some(FileStatus::Added),
+        (None, None) => None,
+    }
+}
+
+fn upsert_change(changes: &mut Vec<FileChange>, filename: String, status: FileStatus) {
+    if let Some(existing) = changes.iter_mut().find(|change| change.filename == filename) {
+        existing.status = status;
+    } else {
+        changes.push(FileChange { filename, status });
+    }
 }
 
 // Build structured hunks for a working tree file against HEAD and the index.

@@ -6,7 +6,7 @@ use guitar::{
     core::{batcher::Batcher, oids::Oids, walker::Walker},
     git::queries::commits::get_sorted_oids,
 };
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
 fn main() {
     divan::main();
@@ -21,11 +21,22 @@ struct CommitBatchFixture {
     expected_commits: usize,
 }
 
+struct BatcherInitFixture {
+    path: PathBuf,
+    hidden_branch_names: im::HashSet<String>,
+    _fixture: fixtures::GraphServiceFixture,
+}
+
+fn batcher_init_fixture(rounds: usize) -> BatcherInitFixture {
+    let fixture = graph_service_fixture(rounds);
+    BatcherInitFixture { path: fixture.path.clone(), hidden_branch_names: fixture.hidden_branch_names.clone(), _fixture: fixture }
+}
+
 fn commit_batch_fixture(fixture: RepoWalkFixture) -> CommitBatchFixture {
     let repo = Rc::new(RefCell::new(git2::Repository::open(&fixture.path).unwrap()));
-    let batcher = Batcher::new(repo.clone(), &fixture.hidden_branch_names, &[]).unwrap();
     let amount = fixture.amount;
     let expected_commits = fixture.expected_commits;
+    let batcher = Batcher::new(repo.clone(), fixture.path.clone(), &fixture.hidden_branch_names, &[]).unwrap();
 
     CommitBatchFixture { _fixture: fixture, batcher, _repo: repo, scratch: Vec::with_capacity(amount), amount, expected_commits }
 }
@@ -44,6 +55,12 @@ fn sorted_oid_pages(mut fixture: CommitBatchFixture) -> usize {
 
     assert_eq!(sorted.len(), fixture.expected_commits);
     sorted.len()
+}
+
+fn initialize_batcher(fixture: BatcherInitFixture) -> usize {
+    let repo = Rc::new(RefCell::new(git2::Repository::open(&fixture.path).unwrap()));
+    let batcher = Batcher::new(repo, fixture.path, &fixture.hidden_branch_names, &[]).unwrap();
+    black_box(batcher.remaining())
 }
 
 fn walker_walk_pages(fixture: RepoWalkFixture, full_walk: bool) -> usize {
@@ -125,6 +142,13 @@ fn walker_full_walk_merge_heavy(bencher: Bencher) {
         .counter(divan::counter::ItemsCount::new(rounds.saturating_mul(3).saturating_add(1)))
         .with_inputs(|| repo_walk_merge_fixture(rounds, amount))
         .bench_local_values(|fixture| black_box(walker_walk_pages(fixture, true)));
+}
+
+#[divan::bench(sample_count = 50, sample_size = 10)]
+fn batcher_new_medium(bencher: Bencher) {
+    let rounds = 24usize;
+
+    bencher.counter(divan::counter::ItemsCount::new(rounds.saturating_mul(4))).with_inputs(|| batcher_init_fixture(rounds)).bench_local_values(|fixture| black_box(initialize_batcher(fixture)));
 }
 
 #[divan::bench(sample_count = 50, sample_size = 10)]

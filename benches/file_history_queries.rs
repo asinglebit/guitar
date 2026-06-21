@@ -64,6 +64,11 @@ fn changed_file_status(fixture: &FileHistoryFixture) -> Option<guitar::git::quer
     guitar::git::queries::file_history::changed_file_status_at_commit(&fixture.repo, fixture.oid, &fixture.path).unwrap()
 }
 
+fn changed_file_status_single_shot(fixture: &FileHistoryFixture) -> Option<guitar::git::queries::helpers::FileStatus> {
+    guitar::git::queries::file_history::clear_changed_file_status_cache();
+    changed_file_status(fixture)
+}
+
 #[divan::bench(sample_count = 75, sample_size = 25)]
 fn changed_file_status_sparse_small(bencher: divan::Bencher) {
     let fixture = sparse_fixture(16);
@@ -83,4 +88,11 @@ fn changed_file_status_rename_stress(bencher: divan::Bencher) {
     let fixture = rename_fixture(96);
 
     bencher.counter(divan::counter::ItemsCount::new(1usize)).bench_local(|| divan::black_box(changed_file_status(&fixture)));
+}
+
+#[divan::bench(sample_count = 75, sample_size = 25)]
+fn changed_file_status_rename_stress_single_shot(bencher: divan::Bencher) {
+    let fixture = rename_fixture(96);
+
+    bencher.counter(divan::counter::ItemsCount::new(98usize)).bench_local(|| divan::black_box(changed_file_status_single_shot(&fixture)));
 }

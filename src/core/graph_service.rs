@@ -1,14 +1,15 @@
 use crate::{
     core::{
         chunk::{Chunk, LaneRef, NONE},
+        oids::{git2_to_gix_oid, gix_time_to_git2_time, gix_to_git2_oid},
         reflogs::HeadReflogAliasEntry,
         walker::Walker,
         worktrees::{WorktreeEntry, Worktrees},
     },
-    git::queries::{file_history::changed_file_status_at_commit, helpers::FileStatus, reflogs::HeadReflogEntry},
+    git::queries::{file_history::changed_file_status_at_commit_gix, helpers::FileStatus, reflogs::HeadReflogEntry},
     helpers::{
         heatmap::{DAYS, WEEKS, build_heatmap},
-        localisation::{common, empty, errors, status as status_text},
+        localisation::{empty, errors, status as status_text},
         symbols::SymbolTheme,
         time::timestamp_to_utc_date_time,
     },
@@ -354,7 +355,6 @@ fn send_file_history(generation: Generation, request_id: RequestId, path: String
 }
 
 fn file_history_rows(walk_ctx: &Walker, path: &str, symbols: &SymbolTheme) -> Result<Vec<GraphFileHistoryRow>, git2::Error> {
-    let repo = walk_ctx.repo.borrow();
     let mut rows = Vec::new();
 
     for (graph_index, &alias) in walk_ctx.oids.get_sorted_aliases().iter().enumerate() {
@@ -363,11 +363,11 @@ fn file_history_rows(walk_ctx: &Walker, path: &str, symbols: &SymbolTheme) -> Re
             continue;
         }
 
-        let Some(status) = changed_file_status_at_commit(&repo, oid, path)? else {
+        let Some(status) = changed_file_status_at_commit_gix(&walk_ctx.gix_repo, git2_to_gix_oid(oid), path)? else {
             continue;
         };
 
-        let summary = repo.find_commit(oid).ok().and_then(|commit| commit.summary().map(str::to_string)).unwrap_or_else(|| no_message(symbols));
+        let summary = commit_summary_from_gix(&walk_ctx.gix_repo, oid, symbols);
         let short_oid = oid.to_string().chars().take(8).collect();
         rows.push(GraphFileHistoryRow { graph_index, oid, short_oid, summary, status });
     }
@@ -377,6 +377,31 @@ fn file_history_rows(walk_ctx: &Walker, path: &str, symbols: &SymbolTheme) -> Re
 
 fn no_message(symbols: &SymbolTheme) -> String {
     format!("{} {}", symbols.empty_state.mark, empty::NO_MESSAGE())
+}
+
+fn commit_metadata_from_gix(repo: &gix::Repository, oid: Oid, symbols: &SymbolTheme) -> (String, String, String) {
+    repo.find_commit(git2_to_gix_oid(oid))
+        .ok()
+        .and_then(|commit| {
+            let summary = commit.message().ok().map(|message| String::from_utf8_lossy(message.summary().as_ref()).into_owned()).unwrap_or_else(|| no_message(symbols));
+            let committer = commit.committer().ok()?;
+            let time = gix_time_to_git2_time(committer.time().ok()?);
+            let committer_date = timestamp_to_utc_date_time(time);
+            let committer_name = String::from_utf8_lossy(committer.name.as_ref()).into_owned();
+            Some((summary, committer_date, committer_name))
+        })
+        .unwrap_or_else(|| (no_message(symbols), String::new(), String::new()))
+}
+
+fn commit_summary_from_gix(repo: &gix::Repository, oid: Oid, symbols: &SymbolTheme) -> String {
+    repo.find_commit(git2_to_gix_oid(oid))
+        .ok()
+        .and_then(|commit| commit.message().ok().map(|message| String::from_utf8_lossy(message.summary().as_ref()).into_owned()))
+        .unwrap_or_else(|| no_message(symbols))
+}
+
+fn commit_parent_oids_from_gix(repo: &gix::Repository, oid: Oid) -> Vec<Oid> {
+    repo.find_commit(git2_to_gix_oid(oid)).ok().map(|commit| commit.parent_ids().map(|parent| gix_to_git2_oid(parent.detach())).collect()).unwrap_or_default()
 }
 
 fn graph_rows(
@@ -433,15 +458,8 @@ fn graph_rows(
 
 fn load_commit_metadata(walk_ctx: &Walker, cache: &mut CommitMetadataCache, alias: u32, oid: Oid, symbols: &SymbolTheme) -> CommitMetadata {
     cache.get_or_insert_with(alias, || {
-        if let Ok(commit) = walk_ctx.repo.borrow().find_commit(oid) {
-            let summary = commit.summary().map(str::to_string).unwrap_or_else(|| no_message(symbols));
-            let committer = commit.committer();
-            let committer_date = timestamp_to_utc_date_time(committer.when());
-            let committer_name = committer.name().unwrap_or(common::UNKNOWN()).to_string();
-            CommitMetadata { summary, committer_date, committer_name }
-        } else {
-            CommitMetadata { summary: no_message(symbols), ..CommitMetadata::default() }
-        }
+        let (summary, committer_date, committer_name) = commit_metadata_from_gix(&walk_ctx.gix_repo, oid, symbols);
+        CommitMetadata { summary, committer_date, committer_name }
     })
 }
 
@@ -472,19 +490,21 @@ fn pane_rows(pane: GraphPane, walk_ctx: &Walker) -> Vec<GraphPaneRow> {
             rows.sort_by(|a, b| a.1.cmp(&b.1));
             rows.into_iter().map(|(alias, name)| GraphPaneRow::Tag { alias, name, lane: walk_ctx.tags_lanes.get(&alias).copied(), graph_index: index_map.get(&alias).copied() }).collect()
         },
-        GraphPane::Stashes => {
-            let repo = walk_ctx.repo.borrow();
-            walk_ctx
-                .oids
-                .stashes
-                .iter()
-                .map(|&alias| {
-                    let oid = *walk_ctx.oids.get_oid_by_alias(alias);
-                    let summary = repo.find_commit(oid).ok().and_then(|commit| commit.summary().map(str::to_string)).unwrap_or_else(|| status_text::STASH().to_string());
-                    GraphPaneRow::Stash { alias, summary, lane: walk_ctx.stashes_lanes.get(&alias).copied(), graph_index: index_map.get(&alias).copied() }
-                })
-                .collect()
-        },
+        GraphPane::Stashes => walk_ctx
+            .oids
+            .stashes
+            .iter()
+            .map(|&alias| {
+                let oid = *walk_ctx.oids.get_oid_by_alias(alias);
+                let summary = walk_ctx
+                    .gix_repo
+                    .find_commit(git2_to_gix_oid(oid))
+                    .ok()
+                    .and_then(|commit| commit.message().ok().map(|message| String::from_utf8_lossy(message.summary().as_ref()).into_owned()))
+                    .unwrap_or_else(|| status_text::STASH().to_string());
+                GraphPaneRow::Stash { alias, summary, lane: walk_ctx.stashes_lanes.get(&alias).copied(), graph_index: index_map.get(&alias).copied() }
+            })
+            .collect(),
         GraphPane::Reflogs => walk_ctx
             .head_reflog_entries
             .iter()
@@ -546,9 +566,7 @@ fn parent_index(walk_ctx: &Walker, index: usize) -> Option<usize> {
         return Some(1).filter(|idx| *idx < walk_ctx.oids.get_commit_count());
     }
 
-    let repo = walk_ctx.repo.borrow();
-    let commit = repo.find_commit(oid).ok()?;
-    let parent_oid = commit.parent_ids().next()?;
+    let parent_oid = commit_parent_oids_from_gix(&walk_ctx.gix_repo, oid).into_iter().next()?;
     let parent_alias = walk_ctx.oids.aliases.get(&parent_oid).copied()?;
     walk_ctx.oids.get_sorted_aliases().iter().position(|&alias| alias == parent_alias)
 }
@@ -559,11 +577,10 @@ fn child_index(walk_ctx: &Walker, index: usize) -> Option<usize> {
         return None;
     }
 
-    let repo = walk_ctx.repo.borrow();
     walk_ctx.oids.get_sorted_aliases().iter().enumerate().take(index).find_map(|(idx, &alias)| {
         let child_oid = *walk_ctx.oids.get_oid_by_alias(alias);
-        let child = repo.find_commit(child_oid).ok()?;
-        child.parent_ids().any(|parent_oid| parent_oid == oid).then_some(idx)
+        let child_parents = commit_parent_oids_from_gix(&walk_ctx.gix_repo, child_oid);
+        child_parents.contains(&oid).then_some(idx)
     })
 }
 

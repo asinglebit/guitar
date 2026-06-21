@@ -3,8 +3,6 @@ use crate::{
     git::repository::open,
     helpers::localisation::network,
 };
-use git2::FetchPrune;
-use git2::{FetchOptions, RemoteCallbacks};
 use std::thread;
 
 // Run fetch on a worker thread so auth prompts and network latency stay outside the draw loop.
@@ -17,25 +15,27 @@ pub fn fetch_remote(repo_path: &str, remote_name: &str, auth_session: AuthSessio
         let attempt = AuthAttempt::new(auth_session, network::FETCH());
         let result = (|| -> Result<(), git2::Error> {
             let repo = open(&repo_path)?;
-            let mut remote = repo.find_remote(&remote_name)?;
-            let config = repo.config()?;
+            let mut repo = gix::open(repo.workdir().unwrap_or(repo.path())).map_err(|error| git2::Error::from_str(&error.to_string()))?;
+            repo.committer_or_set_generic_fallback().map_err(|error| git2::Error::from_str(&error.to_string()))?;
 
-            let mut callbacks = RemoteCallbacks::new();
+            let remote_name = remote_name.as_str();
+            let mut remote = repo.find_remote(remote_name).map_err(|error| git2::Error::from_str(&error.to_string()))?;
+            let remote_url = remote.url(gix::remote::Direction::Fetch).ok_or_else(|| git2::Error::from_str("Remote URL is missing"))?.to_owned();
+
+            remote = remote.with_fetch_tags(gix::remote::fetch::Tags::All);
+            let heads = format!("+refs/heads/*:refs/remotes/{remote_name}/*");
+            remote = remote.with_refspecs(Some(heads.as_str()), gix::remote::Direction::Fetch).map_err(|error| git2::Error::from_str(&error.to_string()))?;
+            remote = remote.with_refspecs(Some("refs/tags/*:refs/tags/*"), gix::remote::Direction::Fetch).map_err(|error| git2::Error::from_str(&error.to_string()))?;
+
+            let mut connection = remote.connect(gix::remote::Direction::Fetch).map_err(|error| git2::Error::from_str(&error.to_string()))?;
+            let mut configured_credentials = connection.configured_credentials(remote_url).map_err(|error| git2::Error::from_str(&error.to_string()))?;
             let auth = attempt.clone();
-            callbacks.credentials(move |url, username_from_url, allowed| auth.credentials(&config, url, username_from_url, allowed));
+            connection.set_credentials(move |action| auth.gix_credentials_with(action, &mut configured_credentials));
 
-            callbacks.transfer_progress(|_stats| {
-                // println!("Received {}/{} objects", stats.received_objects(), stats.total_objects());
-                true
-            });
-
-            let mut fetch_options = FetchOptions::new();
-            fetch_options.remote_callbacks(callbacks);
-            fetch_options.prune(FetchPrune::On);
-
-            // Fetch heads and tags explicitly because libgit2 does not expand all refspecs by default.
-            let heads = format!("refs/heads/*:refs/remotes/{remote_name}/*");
-            remote.fetch(&[heads.as_str(), "refs/tags/*:refs/tags/*"], Some(&mut fetch_options), None)?;
+            let mut progress = gix::progress::Discard;
+            let pending_pack = connection.prepare_fetch(&mut progress, Default::default()).map_err(|error| git2::Error::from_str(&error.to_string()))?;
+            let should_interrupt = std::sync::atomic::AtomicBool::new(false);
+            pending_pack.receive(&mut progress, &should_interrupt).map_err(|error| git2::Error::from_str(&error.to_string()))?;
             Ok(())
         })();
 

@@ -4,7 +4,7 @@ use crate::{
         batcher::Batcher,
         buffer::Buffer,
         chunk::{Chunk, LaneRef, NONE},
-        oids::Oids,
+        oids::{Oids, git2_to_gix_oid, gix_to_git2_oid},
     },
     git::queries::commits::{get_sorted_oids, get_tag_oids, get_tip_oids},
     git::queries::reflogs::get_head_reflog_entries,
@@ -22,6 +22,9 @@ use std::{
 pub struct Walker {
     // Repository state shared with the batcher and stash query.
     pub repo: Rc<RefCell<Repository>>,
+
+    // gitoxide repository shared with the batcher and commit metadata lookups.
+    pub gix_repo: gix::Repository,
 
     // Revwalk cursor for incremental history loading.
     pub batcher: Batcher,
@@ -55,7 +58,9 @@ pub struct Walker {
 impl Walker {
     // Open the repository and seed all metadata that does not depend on walking commits.
     pub fn new(path: String, amount: usize, hidden_branch_names: HashSet<String>, include_head_reflog_roots: bool, graph_lane_limit: usize) -> Result<Self, git2::Error> {
+        let repo_path = path.clone();
         let repo = Rc::new(RefCell::new(open(path)?));
+        let gix_repo = gix::open(repo_path.clone()).map_err(|error| git2::Error::from_str(&error.to_string()))?;
 
         let buffer = RefCell::new(Buffer::with_lane_limit(graph_lane_limit));
 
@@ -79,7 +84,8 @@ impl Walker {
         let stash_aliases: StdHashSet<u32> = oids.stashes.iter().copied().collect();
         let mut stash_parent_aliases = Vec::with_capacity(oids.stashes.len());
         for stash_alias in oids.stashes.clone() {
-            let parent_oid = repo.borrow().find_commit(*oids.get_oid_by_alias(stash_alias)).ok().and_then(|commit| commit.parent_ids().next());
+            let parent_oid =
+                gix_repo.find_commit(git2_to_gix_oid(*oids.get_oid_by_alias(stash_alias))).ok().and_then(|commit| commit.parent_ids().next().map(|parent| gix_to_git2_oid(parent.detach())));
             if let Some(parent_oid) = parent_oid {
                 let parent_alias = oids.get_alias_by_oid(parent_oid);
                 stash_parent_aliases.push((stash_alias, parent_alias));
@@ -97,11 +103,12 @@ impl Walker {
             }
         }
 
-        let batcher = Batcher::new(repo.clone(), &hidden_branch_names, &head_reflog_roots)?;
+        let batcher = Batcher::new(repo.clone(), repo_path, &hidden_branch_names, &head_reflog_roots)?;
         let sorted_batch_capacity = amount.saturating_add(oids.stashes.len());
 
         Ok(Self {
             repo,
+            gix_repo,
             batcher,
             buffer,
             oids,
@@ -158,14 +165,12 @@ impl Walker {
             let mut merger_alias: u32 = NONE;
             let mut transient_lane: Option<usize> = None;
             let oid = self.oids.get_oid_by_alias(alias);
-            let Ok(commit) = repo.find_commit(*oid) else {
-                continue;
-            };
+            let commit = self.gix_repo.find_commit(git2_to_gix_oid(*oid)).unwrap();
 
             // Only two parents are modeled because the renderer draws one merge edge.
             let mut parents_iter = commit.parent_ids();
-            let parent_a_oid = parents_iter.next();
-            let parent_b_oid = parents_iter.next();
+            let parent_a_oid = parents_iter.next().map(|parent| gix_to_git2_oid(parent.detach()));
+            let parent_b_oid = parents_iter.next().map(|parent| gix_to_git2_oid(parent.detach()));
 
             // Stashes should point only to their base commit, not the index/worktree parents.
             let (parent_a, parent_b) = if self.stash_aliases.contains(&alias) {

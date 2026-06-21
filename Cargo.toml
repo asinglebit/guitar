@@ -18,6 +18,9 @@ encoding_rs = "0.8.35"
 facet = "0.43"
 facet-json = "0.43.2"
 git2 = "0.20.4"
+gix = { version = "0.78.0", default-features = false, features = ["basic", "status", "blocking-network-client", "worktree-mutation"] }
+gix-worktree = "0.47.0"
+gix-worktree-state = "0.25.0"
 im = "15.1.0"
 indexmap = "2.12.1"
 miette = { version = "7", features = ["fancy"] } # pretty diagnostics
@@ -29,7 +32,6 @@ walkdir = "2.5.0"
 [dev-dependencies]
 divan = "0.1"
 tempfile = "3"
-gix = { version = "0.78.0", default-features = false, features = ["basic"] }
 
 [[bench]]
 name = "render_graph_projection"

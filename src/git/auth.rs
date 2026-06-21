@@ -186,6 +186,47 @@ impl AuthAttempt {
         }
     }
 
+    pub fn gix_credentials(&self, action: gix::credentials::helper::Action) -> gix::credentials::protocol::Result {
+        self.gix_credentials_with(action, gix::credentials::builtin)
+    }
+
+    pub fn gix_credentials_with<F>(&self, action: gix::credentials::helper::Action, mut fallback: F) -> gix::credentials::protocol::Result
+    where
+        F: FnMut(gix::credentials::helper::Action) -> gix::credentials::protocol::Result,
+    {
+        if let Some(result) = self.gix_credentials_from_session(&action) {
+            return result;
+        }
+
+        fallback(action)
+    }
+
+    fn gix_credentials_from_session(&self, action: &gix::credentials::helper::Action) -> Option<gix::credentials::protocol::Result> {
+        let gix::credentials::helper::Action::Get(ctx) = action else {
+            return None;
+        };
+        let url = ctx.url.clone().or_else(|| ctx.to_url())?;
+        let url = String::from_utf8_lossy(url.as_ref()).into_owned();
+        let info = classify_remote_url(&url);
+        match info.protocol {
+            AuthProtocol::Https | AuthProtocol::Http => {
+                let challenge =
+                    AuthChallenge { url: url.clone(), username: ctx.username.clone().or(info.username.clone()), protocol: info.protocol, operation: self.operation.clone(), key_path: None };
+                self.session.https_secret(&challenge.url, challenge.username.as_deref(), challenge.protocol).map(|(_, username, password)| {
+                    Ok(Some(gix::credentials::protocol::Outcome { identity: gix::sec::identity::Account { username, password, oauth_refresh_token: None }, next: ctx.clone().into() }))
+                })
+            },
+            AuthProtocol::Ssh => {
+                let username = ctx.username.clone().or(info.username).unwrap_or_else(|| "git".to_string());
+                let key_path = default_ssh_private_key()?;
+                self.session.ssh_secret(&url, &username, key_path.as_path()).map(|(_, passphrase)| {
+                    Ok(Some(gix::credentials::protocol::Outcome { identity: gix::sec::identity::Account { username, password: passphrase, oauth_refresh_token: None }, next: ctx.clone().into() }))
+                })
+            },
+            AuthProtocol::Local | AuthProtocol::Other => None,
+        }
+    }
+
     fn http_credentials(&self, config: &Config, url: &str, username_hint: Option<&str>, protocol: AuthProtocol, allowed: CredentialType) -> Result<Cred, Error> {
         let challenge = AuthChallenge { url: url.to_string(), username: username_hint.map(ToString::to_string), protocol, operation: self.operation.clone(), key_path: None };
         self.set_promptable(challenge.clone());

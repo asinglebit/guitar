@@ -54,6 +54,40 @@ fn list_remotes_returns_empty_for_repo_without_remotes() {
 }
 
 #[test]
+fn gitoxide_matches_libgit2_remote_listing_and_default_remote_resolution() {
+    let (_path, repo) = temp_repo("parity-list");
+    repo.remote("zeta", "https://example.com/zeta.git").unwrap();
+    repo.remote("alpha", "https://example.com/alpha.git").unwrap();
+    repo.remote_set_pushurl("alpha", Some("ssh://example.com/alpha.git")).unwrap();
+
+    let git2_remotes = super::list_remotes_git2(&repo).unwrap();
+    let gix_remotes = list_remotes(&repo).unwrap();
+    assert_eq!(git2_remotes, gix_remotes);
+
+    let (_path, repo) = temp_repo("parity-default");
+    repo.remote("origin", "https://example.com/origin.git").unwrap();
+    repo.remote("upstream", "https://example.com/upstream.git").unwrap();
+    let oid = commit(&repo, "file.txt");
+    let current_branch = repo.head().unwrap().shorthand().unwrap().to_string();
+    repo.reference(&format!("refs/remotes/upstream/{current_branch}"), oid, true, "remote").unwrap();
+    repo.find_branch(&current_branch, BranchType::Local).unwrap().set_upstream(Some(&format!("upstream/{current_branch}"))).unwrap();
+
+    assert_eq!(super::effective_default_remote_git2(&repo), effective_default_remote(&repo));
+
+    {
+        let mut config = repo.config().unwrap();
+        config.set_str(PUSH_DEFAULT_CONFIG, "origin").unwrap();
+    }
+    assert_eq!(super::effective_default_remote_git2(&repo), effective_default_remote(&repo));
+
+    {
+        let mut config = repo.config().unwrap();
+        config.set_str(GUITAR_DEFAULT_REMOTE_CONFIG, "upstream").unwrap();
+    }
+    assert_eq!(super::effective_default_remote_git2(&repo), effective_default_remote(&repo));
+}
+
+#[test]
 fn effective_default_remote_uses_config_precedence() {
     let (_path, repo) = temp_repo("default-precedence");
     repo.remote("origin", "https://example.com/origin.git").unwrap();
