@@ -50,6 +50,29 @@ fn aliases_with_unique_fingerprints_do_not_allocate_collision_buckets() {
 }
 
 #[test]
+fn shrink_to_fit_releases_overreserved_alias_capacity() {
+    let mut oids = Oids::default();
+    oids.reserve_aliases(10_000);
+
+    for prefix in 1..=16 {
+        let alias = oids.get_alias_by_oid(oid_with_prefix(prefix, 10));
+        oids.append_sorted_alias(alias);
+    }
+
+    let oid_capacity_before = oids.oids.capacity();
+    let alias_capacity_before = oids.aliases.capacity();
+    let sorted_capacity_before = oids.sorted_aliases.capacity();
+
+    oids.shrink_to_fit();
+
+    assert!(oid_capacity_before > oids.oids.capacity());
+    assert!(alias_capacity_before > oids.aliases.capacity());
+    assert!(sorted_capacity_before >= oids.sorted_aliases.capacity());
+    assert_eq!(oids.oids.capacity(), oids.oids.len());
+    assert_eq!(oids.sorted_aliases.capacity(), oids.sorted_aliases.len());
+}
+
+#[test]
 fn missing_alias_lookup_returns_none() {
     let mut oids = Oids::default();
     let present = oid_with_prefix(1, 10);

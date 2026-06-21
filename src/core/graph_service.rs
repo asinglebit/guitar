@@ -261,6 +261,7 @@ fn run_graph_service(config: GraphServiceConfig, rx: Receiver<GraphCommand>, tx:
 
         if is_complete {
             let heatmap = build_heatmap_from_sorted_aliases(&walk_ctx.gix_repo, &walk_ctx.oids);
+            walk_ctx.oids.shrink_to_fit();
             let _ = tx.send(GraphEvent::Heatmap { generation, heatmap });
 
             if let Some((request_id, path)) = pending_file_history.take() {

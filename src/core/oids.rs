@@ -63,6 +63,13 @@ impl CollisionBucket {
             },
         }
     }
+
+    fn shrink_to_fit(&mut self) {
+        match self {
+            CollisionBucket::Few(aliases) => aliases.shrink_to_fit(),
+            CollisionBucket::Many(aliases) => aliases.shrink_to_fit(),
+        }
+    }
 }
 
 impl Default for Oids {
@@ -75,6 +82,17 @@ impl Oids {
     pub fn reserve_aliases(&mut self, additional: usize) {
         self.oids.reserve(additional);
         self.aliases.reserve(additional);
+    }
+
+    pub fn shrink_to_fit(&mut self) {
+        self.oids.shrink_to_fit();
+        self.aliases.shrink_to_fit();
+        self.alias_collisions.shrink_to_fit();
+        for bucket in self.alias_collisions.values_mut() {
+            bucket.shrink_to_fit();
+        }
+        self.sorted_aliases.shrink_to_fit();
+        self.stashes.shrink_to_fit();
     }
 
     pub fn get_alias_by_oid(&mut self, oid: Oid) -> u32 {
