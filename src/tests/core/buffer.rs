@@ -126,8 +126,9 @@ fn capped_buffer_records_overflow_as_single_truncate_delta() {
         buffer.update(Chunk::commit(alias, 100 + alias, NONE));
     }
 
-    assert!(buffer.delta.ops.iter().any(|op| matches!(op, DeltaOp::Truncate { len: 3 })));
+    assert!(buffer.delta.ops.iter().any(|op| matches!(op, DeltaOp::Truncate { len: 3 } | DeltaOp::ReplaceAndTruncate { len: 3, .. })));
     assert!(!buffer.delta.ops.iter().any(|op| matches!(op, DeltaOp::Remove { index } if *index >= 3)));
+    assert_eq!(buffer.delta.ops.iter().count(), 2);
 
     buffer.backup();
     let history = buffer.window(1, buffer.deltas.len());

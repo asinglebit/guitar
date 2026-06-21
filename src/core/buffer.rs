@@ -15,6 +15,7 @@ pub enum DeltaOp {
     Remove { index: usize },
     Replace { index: usize, new: Chunk },
     Truncate { len: usize },
+    ReplaceAndTruncate { index: usize, new: Chunk, len: usize },
 }
 
 #[derive(Default, Clone, Debug, PartialEq, Eq)]
@@ -276,13 +277,14 @@ impl Buffer {
         let replacement = self.flattened_representative(cap_idx, preferred_idx);
         if self.curr[cap_idx] != replacement {
             self.curr[cap_idx] = replacement;
-            self.delta.ops.push(DeltaOp::Replace { index: cap_idx, new: replacement });
+            self.delta.ops.push(DeltaOp::ReplaceAndTruncate { index: cap_idx, new: replacement, len: limit });
+        } else {
+            self.delta.ops.push(DeltaOp::Truncate { len: limit });
         }
 
         while self.curr.len() > limit {
             self.curr.pop_back();
         }
-        self.delta.ops.push(DeltaOp::Truncate { len: limit });
 
         self.purge_unstored_mergers();
         self.transient_lanes.retain(|lane_idx| *lane_idx < limit && (*lane_idx + 1 != limit || !self.curr.get(*lane_idx).is_some_and(|chunk| chunk.is_flattened)));
@@ -350,6 +352,12 @@ impl Buffer {
                         curr[*index] = *new;
                     },
                     DeltaOp::Truncate { len } => {
+                        while curr.len() > *len {
+                            curr.pop_back();
+                        }
+                    },
+                    DeltaOp::ReplaceAndTruncate { index, new, len } => {
+                        curr[*index] = *new;
                         while curr.len() > *len {
                             curr.pop_back();
                         }
