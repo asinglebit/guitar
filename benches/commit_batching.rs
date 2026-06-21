@@ -22,7 +22,7 @@ struct CommitBatchFixture {
 fn commit_batch_fixture(rounds: usize, amount: usize) -> CommitBatchFixture {
     let fixture = graph_service_fixture(rounds);
     let repo = Rc::new(RefCell::new(git2::Repository::open(&fixture.path).unwrap()));
-    let batcher = Batcher::new(repo.clone(), &fixture.hidden_branch_names, &[]).unwrap();
+    let batcher = Batcher::new(repo.clone(), fixture.path.clone(), &fixture.hidden_branch_names, &[]).unwrap();
 
     CommitBatchFixture { batcher, _repo: repo, scratch: Vec::with_capacity(amount), amount }
 }

@@ -379,9 +379,6 @@ fn no_message(symbols: &SymbolTheme) -> String {
     format!("{} {}", symbols.empty_state.mark, empty::NO_MESSAGE())
 }
 
-fn graph_rows(
-    walk_ctx: &Walker, worktrees: &Worktrees, commit_metadata: &mut CommitMetadataCache, hidden_branch_names: &HashSet<String>, symbols: &SymbolTheme, start: usize, end: usize,
-) -> Vec<GraphRow> {
 fn commit_metadata_from_gix(repo: &gix::Repository, oid: Oid, symbols: &SymbolTheme) -> (String, String, String) {
     repo.find_commit(git2_to_gix_oid(oid))
         .ok()
@@ -407,7 +404,9 @@ fn commit_parent_oids_from_gix(repo: &gix::Repository, oid: Oid) -> Vec<Oid> {
     repo.find_commit(git2_to_gix_oid(oid)).ok().map(|commit| commit.parent_ids().map(|parent| gix_to_git2_oid(parent.detach())).collect()).unwrap_or_default()
 }
 
-fn graph_rows(walk_ctx: &Walker, worktrees: &Worktrees, hidden_branch_names: &HashSet<String>, symbols: &SymbolTheme, start: usize, end: usize) -> Vec<GraphRow> {
+fn graph_rows(
+    walk_ctx: &Walker, worktrees: &Worktrees, commit_metadata: &mut CommitMetadataCache, hidden_branch_names: &HashSet<String>, symbols: &SymbolTheme, start: usize, end: usize,
+) -> Vec<GraphRow> {
     let latest_reflogs = latest_reflogs_by_alias(walk_ctx);
     let mut rows = Vec::with_capacity(end.saturating_sub(start));
 

@@ -128,7 +128,7 @@ mod tests {
         let second = commit(&repo.borrow(), "second.txt", "second");
         let third = commit(&repo.borrow(), "third.txt", "third");
         let sentinel = Oid::zero();
-        let mut batcher = Batcher::new(repo.clone(), path.clone(), &HashSet::new(), &[third]).unwrap();
+        let batcher = Batcher::new(repo.clone(), path.clone(), &HashSet::new(), &[third]).unwrap();
         let mut out = vec![sentinel];
 
         assert_eq!(batcher.next_into(2, &mut out), 2);
