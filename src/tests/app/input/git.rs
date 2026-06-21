@@ -493,6 +493,35 @@ fn create_branch_from_reflog_uses_reflog_commit_target() {
 }
 
 #[test]
+fn create_worktree_from_graph_uses_the_name_for_branch_and_default_path() {
+    let (path, repo) = temp_repo("create-worktree-modal");
+    let oid = commit(&repo, "file.txt", "initial");
+    let path_string = path.display().to_string();
+    let expected_path = path.parent().unwrap().join(format!("{}-feature", path.file_name().unwrap().to_string_lossy())).display().to_string();
+
+    let mut app = App { path: Some(path_string.clone()), repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, graph_selected: 1, ..Default::default() };
+    let alias = app.oids.get_alias_by_oid(oid);
+    app.oids.sorted_aliases = vec![NONE, alias];
+
+    app.on_create_worktree();
+
+    assert_eq!(app.focus, Focus::ModalCreateWorktreeName);
+
+    app.modal_input.set_value("feature");
+    app.handle_modal_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert_eq!(app.focus, Focus::ModalCreateWorktreePath);
+    assert_eq!(app.modal_worktree_name, "feature");
+    assert_eq!(app.modal_input.value(), expected_path);
+
+    app.handle_modal_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert_eq!(app.focus, Focus::Viewport);
+    assert!(app.modal_input.value().is_empty());
+    assert!(Repository::open(&path_string).unwrap().find_worktree("feature").is_ok());
+}
+
+#[test]
 fn rename_branch_from_pane_opens_prefilled_modal_for_local_branch() {
     let (_path, repo) = temp_repo("rename-pane-local");
     let oid = commit(&repo, "file.txt", "initial");
