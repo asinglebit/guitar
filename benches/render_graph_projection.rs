@@ -54,6 +54,17 @@ fn render_graph_projection_dense(bencher: Bencher) {
     bench_render(bencher, &fixture.theme, &fixture.symbols, &fixture.rows, &fixture.history, fixture.head_alias, 0, fixture.rows.len(), false);
 }
 
+#[divan::bench(sample_count = 30, sample_size = 20)]
+fn render_graph_projection_large(bencher: Bencher) {
+    let fixture = graph_fixture(256);
+    let rendered = render_case(&fixture.theme, &fixture.symbols, &fixture.rows, &fixture.history, fixture.head_alias, 0, fixture.rows.len(), false);
+
+    bencher
+        .counter(ItemsCount::new(fixture.rows.len()))
+        .counter(BytesCount::new(rendered.1))
+        .bench(|| black_box(render_case(&fixture.theme, &fixture.symbols, &fixture.rows, &fixture.history, fixture.head_alias, 0, fixture.rows.len(), false)));
+}
+
 #[divan::bench(sample_count = 80, sample_size = 100)]
 fn render_graph_projection_uncommitted_row(bencher: Bencher) {
     let fixture = graph_fixture(12);
@@ -61,6 +72,7 @@ fn render_graph_projection_uncommitted_row(bencher: Bencher) {
         index: 0,
         alias: NONE,
         oid: Oid::zero(),
+        short_oid: String::new(),
         summary: "uncommitted".to_string(),
         committer_date: String::new(),
         committer_name: String::new(),

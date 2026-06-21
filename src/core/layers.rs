@@ -17,7 +17,7 @@ pub struct LayersContext<'a> {
     merges: Vec<LayerToken<'a>>,
     pipes: Vec<LayerToken<'a>>,
     color: ColorPicker,
-    flattened_lanes: Vec<bool>,
+    flattened_lanes: Vec<u8>,
 }
 
 impl<'a> LayersContext<'a> {
@@ -38,8 +38,9 @@ impl<'a> LayersContext<'a> {
         self.pipes.reserve(additional);
     }
 
-    pub fn set_flattened_lanes(&mut self, flattened_lanes: Vec<bool>) {
-        self.flattened_lanes = flattened_lanes;
+    pub fn set_flattened_lanes(&mut self, flattened_lanes: &[u8]) {
+        self.flattened_lanes.clear();
+        self.flattened_lanes.extend_from_slice(flattened_lanes);
     }
 
     pub fn commit(&mut self, sym: &'a str, lane: usize) {
@@ -98,10 +99,10 @@ impl<'a> LayersContext<'a> {
     }
 
     fn lane_ref_for_index(&self, lane: usize) -> LaneRef {
-        LaneRef::new(lane, self.flattened_lanes.get(lane).copied().unwrap_or(false))
+        LaneRef::new(lane, self.flattened_lanes.get(lane).copied().unwrap_or(0) != 0)
     }
 
-    pub fn bake(&mut self, spans: &mut Vec<Span<'static>>) {
+    pub fn bake(&mut self, spans: &mut Vec<Span<'a>>) {
         trim_empty(&mut self.commits);
         trim_empty(&mut self.merges);
         trim_empty(&mut self.pipes);
@@ -118,7 +119,7 @@ impl<'a> LayersContext<'a> {
                 .or_else(|| self.pipes.get(token_index).filter(|token| !is_empty(&token.symbol)));
 
             let (symbol, color) = token.map(|token| (token.symbol, token.color)).unwrap_or((" ", Color::Black));
-            spans.push(Span::styled(symbol.to_owned(), Style::default().fg(color)));
+            spans.push(Span::styled(symbol, Style::default().fg(color)));
         }
     }
 }
@@ -130,7 +131,7 @@ fn trim_empty(tokens: &mut Vec<LayerToken<'_>>) {
 }
 
 fn is_empty(symbol: &str) -> bool {
-    symbol.trim().is_empty()
+    symbol.as_bytes().iter().all(|byte| *byte == b' ')
 }
 
 #[cfg(test)]
@@ -160,5 +161,14 @@ mod tests {
         assert_eq!(spans[0].style.fg, Some(ColorPicker::from_theme(&theme).get_lane(0)));
         assert_eq!(spans[1].style.fg, Some(ColorPicker::from_theme(&theme).get_lane(1)));
         assert_eq!(spans[2].style.fg, Some(ColorPicker::from_theme(&theme).get_lane(2)));
+    }
+
+    #[test]
+    fn empty_layer_tokens_are_ascii_spaces_only() {
+        assert!(is_empty(""));
+        assert!(is_empty(" "));
+        assert!(is_empty("  "));
+        assert!(!is_empty("\t"));
+        assert!(!is_empty("·"));
     }
 }

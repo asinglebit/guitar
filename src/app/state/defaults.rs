@@ -65,6 +65,7 @@ impl Default for App {
             symbols,
             language,
             heatmap,
+            remotes: Vec::new(),
 
             // User
             name: String::new(),
@@ -74,6 +75,7 @@ impl Default for App {
             color,
             graph: Default::default(),
             graph_tx: None,
+            graph_event_tx: None,
             graph_rx: None,
             walker_cancel: None,
             walker_handle: None,

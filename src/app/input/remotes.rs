@@ -1,11 +1,8 @@
 use crate::{
     app::app::{App, Focus, RemoteInputAction},
-    git::{
-        actions::{
-            network::NetworkRequest,
-            remotes::{add_remote, delete_remote, rename_remote, set_default_remote, set_remote_push_url, set_remote_url},
-        },
-        queries::remotes::list_remotes,
+    git::actions::{
+        network::NetworkRequest,
+        remotes::{add_remote, delete_remote, rename_remote, set_default_remote, set_remote_push_url, set_remote_url},
     },
     helpers::{
         branch_visibility::save_branch_visibility,
@@ -137,20 +134,12 @@ impl App {
     }
 
     fn prefill_remote_url(&mut self, push_url: bool) {
-        let Some(repo) = self.repo.clone() else {
-            self.modal_input.clear();
-            return;
-        };
         let Some(target) = self.modal_remote_target.as_deref() else {
             self.modal_input.clear();
             return;
         };
 
-        let value = list_remotes(&repo)
-            .ok()
-            .and_then(|remotes| remotes.into_iter().find(|remote| remote.name == target))
-            .map(|remote| if push_url { remote.push_url.unwrap_or_default() } else { remote.url })
-            .unwrap_or_default();
+        let value = self.remotes.iter().find(|remote| remote.name == target).map(|remote| if push_url { remote.push_url.clone().unwrap_or_default() } else { remote.url.clone() }).unwrap_or_default();
         self.modal_input.set_value(value);
     }
 

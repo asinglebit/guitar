@@ -1,6 +1,7 @@
 use crate::{
     core::oids::gix_to_git2_oid,
     core::worktrees::{WorktreeEntry, WorktreeKind},
+    git::queries::helpers::UncommittedChanges,
 };
 use git2::{Error, Oid, Repository};
 use std::{
@@ -10,10 +11,6 @@ use std::{
 
 fn canonical_path(path: &Path) -> PathBuf {
     fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
-}
-
-fn paths_equal(a: &Path, b: &Path) -> bool {
-    canonical_path(a) == canonical_path(b)
 }
 
 fn gix_path(repo: &Repository) -> PathBuf {
@@ -59,7 +56,14 @@ fn main_worktree_path(repo: &Repository) -> Option<PathBuf> {
     repo.commondir().parent().map(Path::to_path_buf)
 }
 
-fn entry_from_gix_repo(repo: &gix::Repository, name: String, path: PathBuf, kind: WorktreeKind, current_path: &Path) -> WorktreeEntry {
+#[derive(Clone, Copy)]
+enum DirtyCheck {
+    Skip,
+    Compute,
+}
+
+fn entry_from_gix_repo(repo: &gix::Repository, name: String, path: PathBuf, kind: WorktreeKind, current_path: &Path, dirty_check: DirtyCheck) -> WorktreeEntry {
+    let canonical_entry_path = canonical_path(&path);
     WorktreeEntry {
         name,
         path: path.clone(),
@@ -67,16 +71,17 @@ fn entry_from_gix_repo(repo: &gix::Repository, name: String, path: PathBuf, kind
         head: head_oid(repo),
         alias: None,
         kind,
-        is_current: paths_equal(&path, current_path),
+        is_current: canonical_entry_path == current_path,
         is_valid: true,
         is_prunable: false,
         locked_reason: None,
-        is_dirty: repo_dirty(repo),
+        is_dirty: matches!(dirty_check, DirtyCheck::Compute) && repo_dirty(repo),
     }
 }
 
-fn linked_entry(proxy: gix::worktree::Proxy<'_>, current_path: &Path) -> Option<WorktreeEntry> {
+fn linked_entry(proxy: gix::worktree::Proxy<'_>, current_path: &Path, dirty_check: DirtyCheck) -> Option<WorktreeEntry> {
     let path = proxy.base().ok()?;
+    let canonical_entry_path = canonical_path(&path);
     let name = proxy.id().to_string();
     let is_locked = proxy.is_locked();
     let locked_reason = proxy.lock_reason().map(|reason| reason.to_string());
@@ -89,11 +94,11 @@ fn linked_entry(proxy: gix::worktree::Proxy<'_>, current_path: &Path) -> Option<
         head: repo.as_ref().and_then(head_oid),
         alias: None,
         kind: WorktreeKind::Linked,
-        is_current: paths_equal(&path, current_path),
+        is_current: canonical_entry_path == current_path,
         is_valid: repo.is_some(),
         is_prunable: !is_locked && repo.is_none(),
         locked_reason,
-        is_dirty: repo.as_ref().is_some_and(repo_dirty),
+        is_dirty: matches!(dirty_check, DirtyCheck::Compute) && repo.as_ref().is_some_and(repo_dirty),
     };
 
     if entry.is_valid {
@@ -103,8 +108,9 @@ fn linked_entry(proxy: gix::worktree::Proxy<'_>, current_path: &Path) -> Option<
     Some(entry)
 }
 
-pub fn list_worktrees(repo: &Repository, current_path: Option<&Path>) -> Result<Vec<WorktreeEntry>, Error> {
+fn list_worktrees_with_dirty_check(repo: &Repository, current_path: Option<&Path>, dirty_check: DirtyCheck) -> Result<Vec<WorktreeEntry>, Error> {
     let current = current_path.map(Path::to_path_buf).or_else(|| repo.workdir().map(Path::to_path_buf)).or_else(|| main_worktree_path(repo)).unwrap_or_else(|| PathBuf::from("."));
+    let current = canonical_path(&current);
 
     let current_repo = open_gix_repo(repo)?;
     let owner_repo = current_repo.main_repo().map_err(|err| Error::from_str(&err.to_string()))?;
@@ -113,13 +119,32 @@ pub fn list_worktrees(repo: &Repository, current_path: Option<&Path>) -> Result<
 
     if let Some(main_path) = owner_repo.worktree().map(|worktree| worktree.base().to_path_buf()) {
         let main_name = main_path.file_name().and_then(|name| name.to_str()).unwrap_or("main").to_string();
-        entries.push(entry_from_gix_repo(&owner_repo, main_name, main_path, WorktreeKind::Main, &current));
+        entries.push(entry_from_gix_repo(&owner_repo, main_name, main_path, WorktreeKind::Main, &current, dirty_check));
     }
 
-    let mut linked: Vec<WorktreeEntry> = owner_repo.worktrees().map_err(|err| Error::from_str(&err.to_string()))?.into_iter().filter_map(|proxy| linked_entry(proxy, &current)).collect();
+    let mut linked: Vec<WorktreeEntry> = owner_repo.worktrees().map_err(|err| Error::from_str(&err.to_string()))?.into_iter().filter_map(|proxy| linked_entry(proxy, &current, dirty_check)).collect();
     linked.sort_by(|a, b| a.name.cmp(&b.name));
     entries.extend(linked);
 
+    Ok(entries)
+}
+
+pub fn list_worktrees(repo: &Repository, current_path: Option<&Path>) -> Result<Vec<WorktreeEntry>, Error> {
+    list_worktrees_with_dirty_check(repo, current_path, DirtyCheck::Compute)
+}
+
+pub fn list_worktrees_metadata(repo: &Repository, current_path: Option<&Path>) -> Result<Vec<WorktreeEntry>, Error> {
+    list_worktrees_with_dirty_check(repo, current_path, DirtyCheck::Skip)
+}
+
+pub fn list_worktrees_metadata_with_current_dirty(repo: &Repository, current_path: Option<&Path>, uncommitted: &UncommittedChanges) -> Result<Vec<WorktreeEntry>, Error> {
+    let mut entries = list_worktrees_metadata(repo, current_path)?;
+    let is_dirty = !uncommitted.is_clean;
+    for entry in &mut entries {
+        if entry.is_current {
+            entry.is_dirty = is_dirty;
+        }
+    }
     Ok(entries)
 }
 

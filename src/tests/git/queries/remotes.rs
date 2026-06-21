@@ -113,6 +113,21 @@ fn effective_default_remote_uses_config_precedence() {
 }
 
 #[test]
+fn effective_default_remote_from_remotes_matches_full_resolution() {
+    let (_path, repo) = temp_repo("default-from-remotes");
+    repo.remote("origin", "https://example.com/origin.git").unwrap();
+    repo.remote("upstream", "https://example.com/upstream.git").unwrap();
+    let oid = commit(&repo, "file.txt");
+    let current_branch = repo.head().unwrap().shorthand().unwrap().to_string();
+    repo.reference(&format!("refs/remotes/upstream/{current_branch}"), oid, true, "remote").unwrap();
+    repo.find_branch(&current_branch, BranchType::Local).unwrap().set_upstream(Some(&format!("upstream/{current_branch}"))).unwrap();
+
+    let remotes = list_remotes(&repo).unwrap();
+
+    assert_eq!(effective_default_remote_from_remotes(&repo, &remotes), effective_default_remote(&repo));
+}
+
+#[test]
 fn effective_default_remote_ignores_stale_config_and_falls_back() {
     let (_path, repo) = temp_repo("default-stale");
     repo.remote("zeta", "https://example.com/zeta.git").unwrap();

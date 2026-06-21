@@ -129,6 +129,65 @@ fn graph_service_reports_progress_and_answers_visible_window() {
 }
 
 #[test]
+fn graph_service_updates_worktrees_from_command() {
+    let (path, repo) = temp_repo("worktree-update");
+    let head = commit(&repo, "one.txt", "one");
+
+    let generation = 43;
+    let (cmd_tx, cmd_rx) = channel();
+    let (event_tx, event_rx) = channel();
+    let cancel = Arc::new(AtomicBool::new(false));
+    let handle = spawn_graph_service(
+        GraphServiceConfig {
+            generation,
+            path: path.display().to_string(),
+            amount: 1,
+            hidden_branch_names: HashSet::new(),
+            include_head_reflog_roots: false,
+            graph_lane_limit: 20,
+            worktrees: Vec::new(),
+            symbols: SymbolTheme::main(),
+        },
+        cmd_rx,
+        event_tx,
+        cancel.clone(),
+    );
+
+    let updated = vec![WorktreeEntry {
+        name: "repo".to_string(),
+        path: path.clone(),
+        branch: Some("master".to_string()),
+        head: Some(head),
+        alias: None,
+        kind: crate::core::worktrees::WorktreeKind::Main,
+        is_current: true,
+        is_valid: true,
+        is_prunable: false,
+        locked_reason: None,
+        is_dirty: true,
+    }];
+    cmd_tx.send(GraphCommand::UpdateWorktrees { generation, worktrees: updated.clone() }).unwrap();
+
+    let mut saw_worktrees = false;
+    for _ in 0..20 {
+        match event_rx.recv_timeout(Duration::from_millis(250)).unwrap() {
+            GraphEvent::Worktrees { generation: event_generation, version, worktrees } if event_generation == generation => {
+                saw_worktrees = true;
+                assert_eq!(version, 1);
+                assert_eq!(worktrees, updated);
+                break;
+            },
+            _ => {},
+        }
+    }
+    assert!(saw_worktrees);
+
+    let _ = cmd_tx.send(GraphCommand::Shutdown);
+    cancel.store(true, std::sync::atomic::Ordering::SeqCst);
+    handle.join().unwrap();
+}
+
+#[test]
 fn graph_rows_reuse_commit_metadata_cache_for_repeated_windows() {
     let (path, repo) = temp_repo("metadata-cache");
     let first = commit(&repo, "one.txt", "one");
@@ -143,6 +202,7 @@ fn graph_rows_reuse_commit_metadata_cache_for_repeated_windows() {
     let mut commit_metadata = CommitMetadataCache::default();
     let rows = graph_rows(&walker, &worktrees, &mut commit_metadata, &HashSet::new(), &symbols, 1, 3);
     assert_eq!(rows.iter().map(|row| row.oid).collect::<Vec<_>>(), vec![second, first]);
+    assert_eq!(rows.iter().map(|row| row.short_oid.as_str()).collect::<Vec<_>>(), vec![&second.to_string()[..9], &first.to_string()[..9]]);
     assert_eq!(commit_metadata.len(), 2);
 
     let cached_rows = graph_rows(&walker, &worktrees, &mut commit_metadata, &HashSet::new(), &symbols, 1, 3);
@@ -171,6 +231,26 @@ fn graph_rows_do_not_cache_uncommitted_pseudo_row_metadata() {
 
     let _ = graph_rows(&walker, &worktrees, &mut commit_metadata, &HashSet::new(), &symbols, 0, 2);
     assert_eq!(commit_metadata.len(), 1);
+}
+
+#[test]
+fn alias_indices_for_only_returns_requested_aliases() {
+    let (path, repo) = temp_repo("alias-indices");
+    let first = commit(&repo, "one.txt", "one");
+    let second = commit(&repo, "two.txt", "two");
+    drop(repo);
+
+    let mut walker = Walker::new(path.display().to_string(), 8, HashSet::new(), false, 20).unwrap();
+    while walker.walk() {}
+
+    let first_alias = walker.oids.get_existing_alias(first).unwrap();
+    let second_alias = walker.oids.get_existing_alias(second).unwrap();
+    let indices = alias_indices_for(&walker, [first_alias, first_alias, second_alias]);
+
+    assert_eq!(indices.len(), 2);
+    assert_eq!(indices.get(&second_alias), Some(&1));
+    assert_eq!(indices.get(&first_alias), Some(&2));
+    assert!(!indices.contains_key(&crate::core::chunk::NONE));
 }
 
 #[test]

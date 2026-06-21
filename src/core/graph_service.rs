@@ -6,9 +6,13 @@ use crate::{
         walker::Walker,
         worktrees::{WorktreeEntry, Worktrees},
     },
-    git::queries::{file_history::changed_file_status_at_commit_gix, helpers::FileStatus, reflogs::HeadReflogEntry},
+    git::queries::{
+        file_history::changed_file_status_at_commit_gix,
+        helpers::{FileStatus, UncommittedChanges},
+        reflogs::HeadReflogEntry,
+    },
     helpers::{
-        heatmap::{DAYS, WEEKS, build_heatmap},
+        heatmap::{DAYS, WEEKS},
         localisation::{empty, errors, status as status_text},
         symbols::SymbolTheme,
         time::timestamp_to_utc_date_time,
@@ -17,7 +21,7 @@ use crate::{
 use git2::Oid;
 use im::{HashSet, Vector};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet as StdHashSet},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -63,6 +67,7 @@ pub enum GraphCommand {
     QueryPaneWindow { generation: Generation, pane: GraphPane, start: usize, end: usize },
     QueryFileHistory { generation: Generation, request_id: RequestId, path: String },
     Lookup { generation: Generation, request_id: RequestId, kind: GraphLookupKind },
+    UpdateWorktrees { generation: Generation, worktrees: Vec<WorktreeEntry> },
     Shutdown,
 }
 
@@ -91,6 +96,7 @@ pub struct GraphRow {
     pub index: usize,
     pub alias: u32,
     pub oid: Oid,
+    pub short_oid: String,
     pub summary: String,
     pub committer_date: String,
     pub committer_name: String,
@@ -170,6 +176,8 @@ pub enum GraphEvent {
     PaneWindow { generation: Generation, version: GraphVersion, pane: GraphPane, start: usize, end: usize, total: usize, rows: Vec<GraphPaneRow> },
     FileHistory { generation: Generation, request_id: RequestId, path: String, rows: Vec<GraphFileHistoryRow>, error: Option<String> },
     LookupResult { generation: Generation, request_id: RequestId, result: GraphLookupResult },
+    Worktrees { generation: Generation, version: GraphVersion, worktrees: Vec<WorktreeEntry> },
+    Uncommitted { generation: Generation, result: Result<UncommittedChanges, String> },
     Heatmap { generation: Generation, heatmap: [[usize; WEEKS]; DAYS] },
     Error { generation: Generation, message: String },
 }
@@ -212,8 +220,19 @@ fn run_graph_service(config: GraphServiceConfig, rx: Receiver<GraphCommand>, tx:
             break;
         }
 
-        if !drain_commands(generation, version, &rx, &tx, &walk_ctx, &mut worktrees, &mut pending_graph, &mut pending_file_history, &mut commit_metadata, &config.hidden_branch_names, &config.symbols)
-        {
+        if !drain_commands(
+            generation,
+            &mut version,
+            &rx,
+            &tx,
+            &walk_ctx,
+            &mut worktrees,
+            &mut pending_graph,
+            &mut pending_file_history,
+            &mut commit_metadata,
+            &config.hidden_branch_names,
+            &config.symbols,
+        ) {
             break;
         }
 
@@ -231,7 +250,7 @@ fn run_graph_service(config: GraphServiceConfig, rx: Receiver<GraphCommand>, tx:
                 Ok(command) => {
                     if !handle_command(
                         generation,
-                        version,
+                        &mut version,
                         command,
                         &tx,
                         &walk_ctx,
@@ -260,8 +279,10 @@ fn run_graph_service(config: GraphServiceConfig, rx: Receiver<GraphCommand>, tx:
         is_first = false;
 
         if is_complete {
-            let repo = walk_ctx.repo.borrow();
-            let heatmap = build_heatmap(&repo, &walk_ctx.oids.oids);
+            walk_ctx.oids.compact_alias_index();
+            walk_ctx.oids.shrink_to_fit();
+            walk_ctx.buffer.borrow_mut().shrink_to_fit();
+            let heatmap = walk_ctx.heatmap_counts.build();
             let _ = tx.send(GraphEvent::Heatmap { generation, heatmap });
 
             if let Some((request_id, path)) = pending_file_history.take() {
@@ -272,7 +293,7 @@ fn run_graph_service(config: GraphServiceConfig, rx: Receiver<GraphCommand>, tx:
 }
 
 fn drain_commands(
-    generation: Generation, version: GraphVersion, rx: &Receiver<GraphCommand>, tx: &Sender<GraphEvent>, walk_ctx: &Walker, worktrees: &mut Worktrees,
+    generation: Generation, version: &mut GraphVersion, rx: &Receiver<GraphCommand>, tx: &Sender<GraphEvent>, walk_ctx: &Walker, worktrees: &mut Worktrees,
     pending_graph: &mut Option<(RequestId, usize, usize)>, pending_file_history: &mut Option<(RequestId, String)>, commit_metadata: &mut CommitMetadataCache, hidden_branch_names: &HashSet<String>,
     symbols: &SymbolTheme,
 ) -> bool {
@@ -285,8 +306,9 @@ fn drain_commands(
 }
 
 fn handle_command(
-    generation: Generation, version: GraphVersion, command: GraphCommand, tx: &Sender<GraphEvent>, walk_ctx: &Walker, worktrees: &mut Worktrees, pending_graph: &mut Option<(RequestId, usize, usize)>,
-    pending_file_history: &mut Option<(RequestId, String)>, commit_metadata: &mut CommitMetadataCache, hidden_branch_names: &HashSet<String>, symbols: &SymbolTheme,
+    generation: Generation, version: &mut GraphVersion, command: GraphCommand, tx: &Sender<GraphEvent>, walk_ctx: &Walker, worktrees: &mut Worktrees,
+    pending_graph: &mut Option<(RequestId, usize, usize)>, pending_file_history: &mut Option<(RequestId, String)>, commit_metadata: &mut CommitMetadataCache, hidden_branch_names: &HashSet<String>,
+    symbols: &SymbolTheme,
 ) -> bool {
     match command {
         GraphCommand::Shutdown => false,
@@ -298,7 +320,7 @@ fn handle_command(
         },
         GraphCommand::QueryPaneWindow { generation: cmd_generation, pane, start, end } => {
             if cmd_generation == generation {
-                send_pane_window(generation, version, pane, start, end, tx, walk_ctx);
+                send_pane_window(generation, *version, pane, start, end, tx, walk_ctx);
             }
             true
         },
@@ -312,6 +334,14 @@ fn handle_command(
             if cmd_generation == generation {
                 let result = lookup(kind, walk_ctx, worktrees, commit_metadata, hidden_branch_names, symbols);
                 let _ = tx.send(GraphEvent::LookupResult { generation, request_id, result });
+            }
+            true
+        },
+        GraphCommand::UpdateWorktrees { generation: cmd_generation, worktrees: updated_worktrees } => {
+            if cmd_generation == generation {
+                worktrees.entries = updated_worktrees.clone();
+                *version = (*version).saturating_add(1);
+                let _ = tx.send(GraphEvent::Worktrees { generation, version: *version, worktrees: updated_worktrees });
             }
             true
         },
@@ -333,11 +363,9 @@ fn send_graph_window(
 }
 
 fn send_pane_window(generation: Generation, version: GraphVersion, pane: GraphPane, start: usize, end: usize, tx: &Sender<GraphEvent>, walk_ctx: &Walker) {
-    let all_rows = pane_rows(pane, walk_ctx);
-    let total = all_rows.len();
+    let (total, rows) = pane_window_rows(pane, walk_ctx, start, end);
     let start = start.min(total);
     let end = end.min(total);
-    let rows = all_rows.into_iter().skip(start).take(end.saturating_sub(start)).collect();
 
     let _ = tx.send(GraphEvent::PaneWindow { generation, version, pane, start, end, total, rows });
 }
@@ -368,11 +396,19 @@ fn file_history_rows(walk_ctx: &Walker, path: &str, symbols: &SymbolTheme) -> Re
         };
 
         let summary = commit_summary_from_gix(&walk_ctx.gix_repo, oid, symbols);
-        let short_oid = oid.to_string().chars().take(8).collect();
+        let short_oid = short_oid(oid);
         rows.push(GraphFileHistoryRow { graph_index, oid, short_oid, summary, status });
     }
 
     Ok(rows)
+}
+
+fn short_oid(oid: Oid) -> String {
+    oid.to_string().chars().take(8).collect()
+}
+
+fn graph_short_oid(oid: Oid) -> String {
+    oid.to_string().chars().take(9).collect()
 }
 
 fn no_message(symbols: &SymbolTheme) -> String {
@@ -440,6 +476,7 @@ fn graph_rows(
             index,
             alias,
             oid,
+            short_oid: graph_short_oid(oid),
             summary: metadata.summary,
             committer_date: metadata.committer_date,
             committer_name: metadata.committer_name,
@@ -472,53 +509,94 @@ fn graph_row_at(walk_ctx: &Walker, worktrees: &Worktrees, commit_metadata: &mut 
 }
 
 fn pane_rows(pane: GraphPane, walk_ctx: &Walker) -> Vec<GraphPaneRow> {
-    let index_map = alias_index_map(walk_ctx);
+    pane_window_rows(pane, walk_ctx, 0, usize::MAX).1
+}
+
+fn pane_window_rows(pane: GraphPane, walk_ctx: &Walker, start: usize, end: usize) -> (usize, Vec<GraphPaneRow>) {
     match pane {
         GraphPane::Branches => {
-            let mut local: Vec<_> = walk_ctx.branches_local.iter().flat_map(|(&alias, branches)| branches.iter().map(move |branch| (alias, branch.clone(), true))).collect();
-            let mut remote: Vec<_> = walk_ctx.branches_remote.iter().flat_map(|(&alias, branches)| branches.iter().map(move |branch| (alias, branch.clone(), false))).collect();
+            let mut local: Vec<_> = walk_ctx.branches_local.iter().flat_map(|(&alias, branches)| branches.iter().map(move |branch| (alias, branch, true))).collect();
+            let mut remote: Vec<_> = walk_ctx.branches_remote.iter().flat_map(|(&alias, branches)| branches.iter().map(move |branch| (alias, branch, false))).collect();
             local.sort_by(|a, b| a.1.cmp(&b.1));
             remote.sort_by(|a, b| a.1.cmp(&b.1));
-            local
+            let total = local.len() + remote.len();
+            let start = start.min(total);
+            let end = end.min(total);
+            let selected: Vec<_> = local.iter().chain(remote.iter()).skip(start).take(end.saturating_sub(start)).copied().collect();
+            let index_map = alias_indices_for(walk_ctx, selected.iter().map(|(alias, _, _)| *alias));
+            let rows = selected
                 .into_iter()
-                .chain(remote)
-                .map(|(alias, name, is_local)| GraphPaneRow::Branch { alias, name, is_local, lane: walk_ctx.branches_lanes.get(&alias).copied(), graph_index: index_map.get(&alias).copied() })
-                .collect()
+                .map(|(alias, name, is_local)| GraphPaneRow::Branch {
+                    alias,
+                    name: name.clone(),
+                    is_local,
+                    lane: walk_ctx.branches_lanes.get(&alias).copied(),
+                    graph_index: index_map.get(&alias).copied(),
+                })
+                .collect();
+            (total, rows)
         },
         GraphPane::Tags => {
-            let mut rows: Vec<_> = walk_ctx.tags_local.iter().flat_map(|(&alias, tags)| tags.iter().map(move |tag| (alias, tag.clone()))).collect();
+            let mut rows: Vec<_> = walk_ctx.tags_local.iter().flat_map(|(&alias, tags)| tags.iter().map(move |tag| (alias, tag))).collect();
             rows.sort_by(|a, b| a.1.cmp(&b.1));
-            rows.into_iter().map(|(alias, name)| GraphPaneRow::Tag { alias, name, lane: walk_ctx.tags_lanes.get(&alias).copied(), graph_index: index_map.get(&alias).copied() }).collect()
+            let total = rows.len();
+            let start = start.min(total);
+            let end = end.min(total);
+            let selected: Vec<_> = rows.iter().skip(start).take(end.saturating_sub(start)).copied().collect();
+            let index_map = alias_indices_for(walk_ctx, selected.iter().map(|(alias, _)| *alias));
+            let rows = selected
+                .into_iter()
+                .map(|(alias, name)| GraphPaneRow::Tag { alias, name: name.clone(), lane: walk_ctx.tags_lanes.get(&alias).copied(), graph_index: index_map.get(&alias).copied() })
+                .collect();
+            (total, rows)
         },
-        GraphPane::Stashes => walk_ctx
-            .oids
-            .stashes
-            .iter()
-            .map(|&alias| {
-                let oid = *walk_ctx.oids.get_oid_by_alias(alias);
-                let summary = walk_ctx
-                    .gix_repo
-                    .find_commit(git2_to_gix_oid(oid))
-                    .ok()
-                    .and_then(|commit| commit.message().ok().map(|message| String::from_utf8_lossy(message.summary().as_ref()).into_owned()))
-                    .unwrap_or_else(|| status_text::STASH().to_string());
-                GraphPaneRow::Stash { alias, summary, lane: walk_ctx.stashes_lanes.get(&alias).copied(), graph_index: index_map.get(&alias).copied() }
-            })
-            .collect(),
-        GraphPane::Reflogs => walk_ctx
-            .head_reflog_entries
-            .iter()
-            .filter_map(|entry| {
-                let alias = walk_ctx.oids.aliases.get(&entry.new_oid).copied()?;
-                Some(GraphPaneRow::Reflog {
+        GraphPane::Stashes => {
+            let total = walk_ctx.oids.stashes.len();
+            let start = start.min(total);
+            let end = end.min(total);
+            let selected: Vec<_> = walk_ctx.oids.stashes.iter().skip(start).take(end.saturating_sub(start)).copied().collect();
+            let index_map = alias_indices_for(walk_ctx, selected.iter().copied());
+            let rows = selected
+                .into_iter()
+                .map(|alias| {
+                    let oid = *walk_ctx.oids.get_oid_by_alias(alias);
+                    let summary = walk_ctx
+                        .gix_repo
+                        .find_commit(git2_to_gix_oid(oid))
+                        .ok()
+                        .and_then(|commit| commit.message().ok().map(|message| String::from_utf8_lossy(message.summary().as_ref()).into_owned()))
+                        .unwrap_or_else(|| status_text::STASH().to_string());
+                    GraphPaneRow::Stash { alias, summary, lane: walk_ctx.stashes_lanes.get(&alias).copied(), graph_index: index_map.get(&alias).copied() }
+                })
+                .collect();
+            (total, rows)
+        },
+        GraphPane::Reflogs => {
+            let rows: Vec<_> = walk_ctx
+                .head_reflog_entries
+                .iter()
+                .filter_map(|entry| {
+                    let alias = walk_ctx.oids.get_existing_alias(entry.new_oid)?;
+                    Some((alias, entry))
+                })
+                .collect();
+            let total = rows.len();
+            let start = start.min(total);
+            let end = end.min(total);
+            let selected: Vec<_> = rows.iter().skip(start).take(end.saturating_sub(start)).copied().collect();
+            let index_map = alias_indices_for(walk_ctx, selected.iter().map(|(alias, _)| *alias));
+            let rows = selected
+                .into_iter()
+                .map(|(alias, entry)| GraphPaneRow::Reflog {
                     alias,
                     selector: entry.selector.clone(),
                     message: entry.message.clone(),
                     lane: walk_ctx.reflogs_lanes.get(&alias).copied(),
                     graph_index: index_map.get(&alias).copied(),
                 })
-            })
-            .collect(),
+                .collect();
+            (total, rows)
+        },
     }
 }
 
@@ -531,11 +609,11 @@ fn lookup(
         GraphLookupKind::BranchIndex { from, direction } => GraphLookupResult::Index(branch_index(walk_ctx, hidden_branch_names, from, direction)),
         GraphLookupKind::ShaPrefix { prefix } => {
             let oid = walk_ctx.oids.oids.iter().find(|oid| oid.to_string().starts_with(&prefix)).copied();
-            let index = oid.and_then(|oid| walk_ctx.oids.aliases.get(&oid).copied()).and_then(|alias| walk_ctx.oids.get_sorted_aliases().iter().position(|&current| current == alias));
+            let index = oid.and_then(|oid| walk_ctx.oids.get_existing_alias(oid)).and_then(|alias| walk_ctx.oids.get_sorted_aliases().iter().position(|&current| current == alias));
             GraphLookupResult::Index(index)
         },
         GraphLookupKind::Oid { oid } => {
-            let index = walk_ctx.oids.aliases.get(&oid).copied().and_then(|alias| walk_ctx.oids.get_sorted_aliases().iter().position(|&current| current == alias));
+            let index = walk_ctx.oids.get_existing_alias(oid).and_then(|alias| walk_ctx.oids.get_sorted_aliases().iter().position(|&current| current == alias));
             GraphLookupResult::Index(index)
         },
         GraphLookupKind::ParentIndex { index } => GraphLookupResult::Index(parent_index(walk_ctx, index)),
@@ -567,7 +645,7 @@ fn parent_index(walk_ctx: &Walker, index: usize) -> Option<usize> {
     }
 
     let parent_oid = commit_parent_oids_from_gix(&walk_ctx.gix_repo, oid).into_iter().next()?;
-    let parent_alias = walk_ctx.oids.aliases.get(&parent_oid).copied()?;
+    let parent_alias = walk_ctx.oids.get_existing_alias(parent_oid)?;
     walk_ctx.oids.get_sorted_aliases().iter().position(|&alias| alias == parent_alias)
 }
 
@@ -585,18 +663,36 @@ fn child_index(walk_ctx: &Walker, index: usize) -> Option<usize> {
 }
 
 fn head_alias(walk_ctx: &Walker) -> u32 {
-    let repo = walk_ctx.repo.borrow();
-    repo.head().ok().and_then(|head| head.target()).and_then(|oid| walk_ctx.oids.aliases.get(&oid).copied()).unwrap_or(NONE)
+    walk_ctx.gix_repo.head_id().ok().map(|oid| gix_to_git2_oid(oid.detach())).and_then(|oid| walk_ctx.oids.get_existing_alias(oid)).unwrap_or(NONE)
 }
 
-fn alias_index_map(walk_ctx: &Walker) -> HashMap<u32, usize> {
-    walk_ctx.oids.get_sorted_aliases().iter().enumerate().map(|(idx, &alias)| (alias, idx)).collect()
+fn alias_indices_for<I>(walk_ctx: &Walker, aliases: I) -> HashMap<u32, usize>
+where
+    I: IntoIterator<Item = u32>,
+{
+    let mut wanted: StdHashSet<u32> = aliases.into_iter().collect();
+    let mut indices = HashMap::with_capacity(wanted.len());
+
+    if wanted.is_empty() {
+        return indices;
+    }
+
+    for (idx, &alias) in walk_ctx.oids.get_sorted_aliases().iter().enumerate() {
+        if wanted.remove(&alias) {
+            indices.insert(alias, idx);
+            if wanted.is_empty() {
+                break;
+            }
+        }
+    }
+
+    indices
 }
 
 fn latest_reflogs_by_alias(walk_ctx: &Walker) -> HashMap<u32, HeadReflogAliasEntry> {
     let mut latest = HashMap::new();
     for entry in &walk_ctx.head_reflog_entries {
-        let Some(&new_alias) = walk_ctx.oids.aliases.get(&entry.new_oid) else {
+        let Some(new_alias) = walk_ctx.oids.get_existing_alias(entry.new_oid) else {
             continue;
         };
         let alias_entry = alias_reflog_entry(entry, new_alias);
@@ -614,7 +710,7 @@ fn worktrees_for_alias(worktrees: &Worktrees, walk_ctx: &Walker, alias: u32) -> 
         .entries
         .iter()
         .filter_map(|entry| {
-            let entry_alias = entry.head.and_then(|oid| walk_ctx.oids.aliases.get(&oid).copied());
+            let entry_alias = entry.head.and_then(|oid| walk_ctx.oids.get_existing_alias(oid));
             (entry_alias == Some(alias)).then(|| {
                 let mut entry = entry.clone();
                 entry.alias = Some(alias);

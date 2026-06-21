@@ -4,6 +4,7 @@ version = "1.0.2"
 description = "Terminal based git interface"
 authors = ["rattleworks <gasimov.abdulali@gmail.com>"]
 edition = "2024"
+default-run = "guitar"
 homepage = "https://github.com/asinglebit/guitar/"
 repository = "https://github.com/asinglebit/guitar/"
 readme = "README.md"
@@ -26,6 +27,7 @@ indexmap = "2.12.1"
 miette = { version = "7", features = ["fancy"] } # pretty diagnostics
 rand = "0.10"
 ratatui = "0.30.0"
+rustc-hash = "2.1.2"
 toml = "1.0.1"
 walkdir = "2.5.0"
 
@@ -46,7 +48,19 @@ name = "graph_service_windows"
 harness = false
 
 [[bench]]
+name = "draw_graph"
+harness = false
+
+[[bench]]
 name = "commit_batching"
+harness = false
+
+[[bench]]
+name = "oid_aliases"
+harness = false
+
+[[bench]]
+name = "heatmap"
 harness = false
 
 [[bench]]

@@ -253,6 +253,21 @@ pub fn buffer_checkpoint_fixture(commits: usize) -> BufferFixture {
 }
 
 #[allow(dead_code)]
+pub fn buffer_capped_overflow_fixture(commits: usize, lane_limit: usize) -> BufferFixture {
+    let mut buffer = Buffer::with_lane_limit(lane_limit);
+    let mut ops = Vec::with_capacity(commits);
+
+    for alias in 1..=commits as u32 {
+        let chunk = Chunk::commit(alias, 100_000 + alias, NONE);
+        ops.push(BufferOp::Update(chunk));
+        buffer.update(chunk);
+    }
+
+    buffer.backup();
+    BufferFixture { ops, window_start: 1, window_end: buffer.deltas.len(), buffer }
+}
+
+#[allow(dead_code)]
 pub fn graph_service_fixture(rounds: usize) -> GraphServiceFixture {
     let temp = temp_dir("graph-service");
     let path = temp.to_path_buf();
@@ -460,6 +475,7 @@ fn push_commit(buffer: &mut Buffer, rows: &mut Vec<GraphRow>, index: usize, alia
         index,
         alias,
         oid: Oid::zero(),
+        short_oid: String::new(),
         summary,
         committer_date: "2026-06-20 12:34".to_string(),
         committer_name: "Benchmark Runner".to_string(),

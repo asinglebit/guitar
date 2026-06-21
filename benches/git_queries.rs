@@ -1,7 +1,7 @@
 mod fixtures;
 
 use fixtures::{TempFixture, add_path, commit_index, temp_repo, write_text};
-use git2::Repository;
+use git2::{BranchType, Repository};
 use std::fs;
 
 fn main() {
@@ -73,6 +73,62 @@ fn workdir_status_many(fixture: &WorkdirStatusFixture) -> usize {
         + changes.conflicts.len()
 }
 
+fn workdir_status_many_git2(fixture: &WorkdirStatusFixture) -> usize {
+    let changes = guitar::git::queries::diffs::get_filenames_diff_at_workdir_git2(&fixture.repo).unwrap();
+    changes.staged.modified.len()
+        + changes.staged.added.len()
+        + changes.staged.deleted.len()
+        + changes.unstaged.modified.len()
+        + changes.unstaged.added.len()
+        + changes.unstaged.deleted.len()
+        + changes.conflicts.len()
+}
+
+fn workdir_status_many_gix(fixture: &WorkdirStatusFixture) -> usize {
+    let changes = guitar::git::queries::diffs::get_filenames_diff_at_workdir_gix(&fixture.repo).unwrap();
+    changes.staged.modified.len()
+        + changes.staged.added.len()
+        + changes.staged.deleted.len()
+        + changes.unstaged.modified.len()
+        + changes.unstaged.added.len()
+        + changes.unstaged.deleted.len()
+        + changes.conflicts.len()
+}
+
+struct RemoteResolutionFixture {
+    repo: Repository,
+    remotes: Vec<guitar::git::queries::remotes::RemoteEntry>,
+    _temp: TempFixture,
+}
+
+fn build_remote_resolution_fixture(remote_count: usize) -> RemoteResolutionFixture {
+    let (workdir, repo) = temp_repo("default-remote-many");
+    let root = commit_index(&repo, "root snapshot");
+
+    for idx in 0..remote_count {
+        repo.remote(&format!("remote-{idx:03}"), &format!("https://example.com/remote-{idx:03}.git")).unwrap();
+    }
+
+    let current_branch = repo.head().unwrap().shorthand().unwrap().to_string();
+    if remote_count > 0 {
+        let remote_name = "remote-000".to_string();
+        let remote_ref = format!("refs/remotes/{remote_name}/{current_branch}");
+        repo.reference(&remote_ref, root, true, "remote").unwrap();
+        repo.find_branch(&current_branch, BranchType::Local).unwrap().set_upstream(Some(&format!("{remote_name}/{current_branch}"))).unwrap();
+    }
+
+    let remotes = guitar::git::queries::remotes::list_remotes(&repo).unwrap();
+    RemoteResolutionFixture { repo, remotes, _temp: workdir }
+}
+
+fn effective_default_remote_from_repo(fixture: &RemoteResolutionFixture) -> usize {
+    guitar::git::queries::remotes::effective_default_remote(&fixture.repo).map_or(0, |name| name.len())
+}
+
+fn effective_default_remote_from_cache(fixture: &RemoteResolutionFixture) -> usize {
+    guitar::git::queries::remotes::effective_default_remote_from_remotes(&fixture.repo, &fixture.remotes).map_or(0, |name| name.len())
+}
+
 #[divan::bench(sample_count = 30, sample_size = 10)]
 fn get_filenames_diff_at_workdir_many_changes(bencher: divan::Bencher) {
     let fixture = build_workdir_status_fixture(96, 48);
@@ -80,9 +136,51 @@ fn get_filenames_diff_at_workdir_many_changes(bencher: divan::Bencher) {
     bencher.counter(divan::counter::ItemsCount::new(fixture.expected_changes)).bench_local(|| divan::black_box(workdir_status_many(&fixture)));
 }
 
+#[divan::bench(sample_count = 30, sample_size = 10)]
+fn get_filenames_diff_at_workdir_git2_many_changes(bencher: divan::Bencher) {
+    let fixture = build_workdir_status_fixture(96, 48);
+
+    bencher.counter(divan::counter::ItemsCount::new(fixture.expected_changes)).bench_local(|| divan::black_box(workdir_status_many_git2(&fixture)));
+}
+
+#[divan::bench(sample_count = 30, sample_size = 10)]
+fn get_filenames_diff_at_workdir_gix_many_changes(bencher: divan::Bencher) {
+    let fixture = build_workdir_status_fixture(96, 48);
+
+    bencher.counter(divan::counter::ItemsCount::new(fixture.expected_changes)).bench_local(|| divan::black_box(workdir_status_many_gix(&fixture)));
+}
+
 #[divan::bench(sample_count = 30, sample_size = 5)]
 fn get_filenames_diff_at_workdir_untracked_tree(bencher: divan::Bencher) {
     let fixture = build_untracked_tree_fixture(8, 16, 4);
 
     bencher.counter(divan::counter::ItemsCount::new(fixture.expected_changes)).bench_local(|| divan::black_box(workdir_status_many(&fixture)));
+}
+
+#[divan::bench(sample_count = 30, sample_size = 5)]
+fn get_filenames_diff_at_workdir_git2_untracked_tree(bencher: divan::Bencher) {
+    let fixture = build_untracked_tree_fixture(8, 16, 4);
+
+    bencher.counter(divan::counter::ItemsCount::new(fixture.expected_changes)).bench_local(|| divan::black_box(workdir_status_many_git2(&fixture)));
+}
+
+#[divan::bench(sample_count = 30, sample_size = 5)]
+fn get_filenames_diff_at_workdir_gix_untracked_tree(bencher: divan::Bencher) {
+    let fixture = build_untracked_tree_fixture(8, 16, 4);
+
+    bencher.counter(divan::counter::ItemsCount::new(fixture.expected_changes)).bench_local(|| divan::black_box(workdir_status_many_gix(&fixture)));
+}
+
+#[divan::bench(sample_count = 30, sample_size = 5)]
+fn effective_default_remote_from_repo_many_remotes(bencher: divan::Bencher) {
+    let fixture = build_remote_resolution_fixture(96);
+
+    bencher.counter(divan::counter::ItemsCount::new(fixture.remotes.len())).bench_local(|| divan::black_box(effective_default_remote_from_repo(&fixture)));
+}
+
+#[divan::bench(sample_count = 30, sample_size = 5)]
+fn effective_default_remote_from_cache_many_remotes(bencher: divan::Bencher) {
+    let fixture = build_remote_resolution_fixture(96);
+
+    bencher.counter(divan::counter::ItemsCount::new(fixture.remotes.len())).bench_local(|| divan::black_box(effective_default_remote_from_cache(&fixture)));
 }

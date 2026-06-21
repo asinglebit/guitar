@@ -3,10 +3,14 @@ mod fixtures;
 use divan::{Bencher, black_box};
 use fixtures::{RepoWalkFixture, graph_service_fixture, repo_walk_hidden_branches_fixture, repo_walk_linear_fixture, repo_walk_many_refs_fixture, repo_walk_merge_fixture};
 use guitar::{
-    core::{batcher::Batcher, oids::Oids, walker::Walker},
+    core::{
+        batcher::{Batcher, WalkCommit},
+        oids::Oids,
+        walker::Walker,
+    },
     git::queries::commits::get_sorted_oids,
 };
-use std::{cell::RefCell, path::PathBuf, rc::Rc};
+use std::{cell::RefCell, path::PathBuf, process::Command, rc::Rc};
 
 fn main() {
     divan::main();
@@ -16,7 +20,7 @@ struct CommitBatchFixture {
     _fixture: RepoWalkFixture,
     batcher: Batcher,
     _repo: Rc<RefCell<git2::Repository>>,
-    scratch: Vec<git2::Oid>,
+    scratch: Vec<WalkCommit>,
     amount: usize,
     expected_commits: usize,
 }
@@ -39,6 +43,16 @@ fn commit_batch_fixture(fixture: RepoWalkFixture) -> CommitBatchFixture {
     let batcher = Batcher::new(repo.clone(), fixture.path.clone(), &fixture.hidden_branch_names, &[]).unwrap();
 
     CommitBatchFixture { _fixture: fixture, batcher, _repo: repo, scratch: Vec::with_capacity(amount), amount, expected_commits }
+}
+
+fn write_commit_graph(path: &PathBuf) {
+    let status = Command::new("git").arg("-C").arg(path).args(["commit-graph", "write", "--reachable"]).status().unwrap();
+    assert!(status.success());
+}
+
+fn commit_batch_fixture_with_commit_graph(fixture: RepoWalkFixture) -> CommitBatchFixture {
+    write_commit_graph(&fixture.path);
+    commit_batch_fixture(fixture)
 }
 
 fn sorted_oid_pages(mut fixture: CommitBatchFixture) -> usize {
@@ -79,6 +93,11 @@ fn walker_walk_pages(fixture: RepoWalkFixture, full_walk: bool) -> usize {
         assert!(walked <= fixture.amount.saturating_add(1));
     }
     walked
+}
+
+fn walker_walk_pages_with_commit_graph(fixture: RepoWalkFixture, full_walk: bool) -> usize {
+    write_commit_graph(&fixture.path);
+    walker_walk_pages(fixture, full_walk)
 }
 
 #[divan::bench(sample_count = 20, sample_size = 1)]
@@ -162,6 +181,28 @@ fn sorted_oid_pages_medium(bencher: Bencher) {
         .bench_local_values(|fixture| black_box(sorted_oid_pages(fixture)));
 }
 
+#[divan::bench(sample_count = 20, sample_size = 5)]
+fn sorted_oid_pages_large(bencher: Bencher) {
+    let rounds = 160usize;
+    let amount = 256usize;
+
+    bencher
+        .counter(divan::counter::ItemsCount::new(rounds.saturating_mul(4)))
+        .with_inputs(|| commit_batch_fixture(repo_walk_merge_fixture(rounds, amount)))
+        .bench_local_values(|fixture| black_box(sorted_oid_pages(fixture)));
+}
+
+#[divan::bench(sample_count = 20, sample_size = 5)]
+fn sorted_oid_pages_large_commit_graph(bencher: Bencher) {
+    let rounds = 160usize;
+    let amount = 256usize;
+
+    bencher
+        .counter(divan::counter::ItemsCount::new(rounds.saturating_mul(4)))
+        .with_inputs(|| commit_batch_fixture_with_commit_graph(repo_walk_merge_fixture(rounds, amount)))
+        .bench_local_values(|fixture| black_box(sorted_oid_pages(fixture)));
+}
+
 fn walk_all_pages(rounds: usize) -> usize {
     let fixture = graph_service_fixture(rounds);
     let mut walker = Walker::new(fixture.path.display().to_string(), fixture.amount, fixture.hidden_branch_names, fixture.include_head_reflog_roots, fixture.graph_lane_limit).unwrap();
@@ -176,4 +217,18 @@ fn walker_walk_pages_medium(bencher: Bencher) {
     let rounds = 24usize;
 
     bencher.counter(divan::counter::ItemsCount::new(rounds.saturating_mul(4))).bench(|| black_box(walk_all_pages(rounds)));
+}
+
+#[divan::bench(sample_count = 20, sample_size = 5)]
+fn walker_walk_pages_large(bencher: Bencher) {
+    let rounds = 160usize;
+
+    bencher.counter(divan::counter::ItemsCount::new(rounds.saturating_mul(4))).bench(|| black_box(walk_all_pages(rounds)));
+}
+
+#[divan::bench(sample_count = 20, sample_size = 5)]
+fn walker_walk_pages_large_commit_graph(bencher: Bencher) {
+    let rounds = 160usize;
+
+    bencher.counter(divan::counter::ItemsCount::new(rounds.saturating_mul(4))).bench(|| black_box(walker_walk_pages_with_commit_graph(repo_walk_merge_fixture(rounds, 32), true)));
 }

@@ -1,6 +1,6 @@
 use super::*;
 use crate::core::graph_service::{GraphCommand, GraphEvent, GraphFileHistoryRow, GraphLookupKind, GraphLookupResult, GraphPane, GraphRow};
-use crate::git::queries::helpers::FileStatus;
+use crate::git::queries::helpers::{FileStatus, UncommittedChanges};
 use git2::{Repository, Signature};
 use ratatui::{Terminal, backend::TestBackend, layout::Rect, style::Color};
 use std::{
@@ -9,7 +9,7 @@ use std::{
     process,
     rc::Rc,
     sync::atomic::Ordering,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 struct TestDir {
@@ -95,6 +95,7 @@ fn graph_row(index: usize, alias: u32, oid: git2::Oid) -> GraphRow {
         index,
         alias,
         oid,
+        short_oid: oid.to_string()[..9].to_string(),
         summary: "commit".to_string(),
         committer_date: String::new(),
         committer_name: String::new(),
@@ -227,8 +228,49 @@ fn first_graph_progress_with_dirty_submodule_status_stays_in_graph_view() {
 
     assert_eq!(app.viewport, Viewport::Graph);
     assert_eq!(app.focus, Focus::Viewport);
+    assert!(!app.is_uncommitted_loaded);
+
+    let clean = UncommittedChanges { is_clean: true, ..Default::default() };
+    event_tx.send(GraphEvent::Uncommitted { generation: 9, result: Ok(clean) }).unwrap();
+    app.sync(&repo);
+
     assert!(app.is_uncommitted_loaded);
     assert!(app.uncommitted.is_clean);
+}
+
+#[test]
+fn uncommitted_metadata_waits_for_complete_graph_progress() {
+    let (path, repo) = temp_repo("deferred-uncommitted");
+    commit_file(&repo, "tracked.txt", "tracked");
+    fs::write(path.join("new.txt"), "new\n").unwrap();
+    let repo = Rc::new(repo);
+    let (cmd_tx, _cmd_rx) = std::sync::mpsc::channel();
+    let (event_tx, event_rx) = std::sync::mpsc::channel();
+    let mut app = App {
+        path: Some(path.display().to_string()),
+        repo: Some(repo.clone()),
+        graph_tx: Some(cmd_tx),
+        graph_event_tx: Some(event_tx.clone()),
+        graph_rx: Some(event_rx),
+        viewport: Viewport::Graph,
+        focus: Focus::Viewport,
+        ..Default::default()
+    };
+    app.graph.generation = 11;
+
+    event_tx.send(GraphEvent::Progress { generation: 11, version: 1, total: 1, is_first: false, is_complete: false }).unwrap();
+    app.sync(&repo);
+    assert!(!app.is_uncommitted_loaded);
+
+    event_tx.send(GraphEvent::Progress { generation: 11, version: 2, total: 1, is_first: false, is_complete: true }).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while !app.is_uncommitted_loaded && Instant::now() < deadline {
+        app.sync(&repo);
+        std::thread::sleep(Duration::from_millis(5));
+    }
+
+    assert!(app.is_uncommitted_loaded);
+    assert_eq!(app.uncommitted.unstaged.added, vec!["new.txt".to_string()]);
 }
 
 #[test]

@@ -85,6 +85,22 @@ fn wait_for_graph_window(service: &RunningService, request_id: u64) -> usize {
     }
 }
 
+fn wait_for_pane_window(service: &RunningService, pane: guitar::core::graph_service::GraphPane) -> usize {
+    let deadline = Instant::now() + SERVICE_WAIT;
+    loop {
+        let Some(remaining) = deadline.checked_duration_since(Instant::now()) else {
+            panic!("timed out waiting for pane window request {pane:?}");
+        };
+        match service.event_rx.recv_timeout(remaining) {
+            Ok(GraphEvent::PaneWindow { generation: event_generation, pane: event_pane, rows, .. }) if event_generation == service.generation && event_pane == pane => {
+                return rows.len();
+            },
+            Ok(_) => {},
+            Err(error) => panic!("graph service closed before pane window request {pane:?}: {error}"),
+        }
+    }
+}
+
 fn shutdown_service(service: RunningService) {
     let _ = service.cmd_tx.send(GraphCommand::Shutdown);
     service.cancel.store(true, Ordering::SeqCst);
@@ -99,6 +115,16 @@ fn graph_service_repeated_window_roundtrip(service: &RunningService, total: usiz
     }
 
     black_box(total + rows)
+}
+
+fn graph_service_repeated_pane_roundtrip(service: &RunningService, pane: guitar::core::graph_service::GraphPane, start: usize, end: usize) -> usize {
+    let mut rows = 0;
+    for _ in 0..4 {
+        service.cmd_tx.send(GraphCommand::QueryPaneWindow { generation: service.generation, pane, start, end }).unwrap();
+        rows += wait_for_pane_window(service, pane);
+    }
+
+    black_box(rows)
 }
 
 fn graph_service_initial_load(rounds: usize) -> usize {
@@ -121,5 +147,17 @@ fn graph_service_repeated_windows_small(bencher: Bencher) {
     let total = wait_for_completion(&service);
 
     bencher.counter(divan::counter::ItemsCount::new(fixture.amount.saturating_mul(2))).bench_local(|| black_box(graph_service_repeated_window_roundtrip(&service, total, 0, 24)));
+    shutdown_service(service);
+}
+
+#[divan::bench(sample_count = 50, sample_size = 25)]
+fn graph_service_repeated_branch_panes_small(bencher: Bencher) {
+    let fixture = graph_service_fixture(4);
+    let service = spawn_fixture_service(&fixture);
+    let _total = wait_for_completion(&service);
+
+    bencher
+        .counter(divan::counter::ItemsCount::new(24usize.saturating_mul(4)))
+        .bench_local(|| black_box(graph_service_repeated_pane_roundtrip(&service, guitar::core::graph_service::GraphPane::Branches, 0, 24)));
     shutdown_service(service);
 }

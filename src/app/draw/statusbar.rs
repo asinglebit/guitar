@@ -1,6 +1,5 @@
 use crate::{
     app::app::{App, Focus, Viewport},
-    git::queries::commits::get_current_branch,
     helpers::{branch_visibility::current_branch_names, keymap::InputMode, localisation::status as status_text},
 };
 use ratatui::Frame;
@@ -19,6 +18,17 @@ impl App {
         Some(format!("{} {} ", self.symbols.submodule.default, parts.join(&self.symbols.submodule.stack_separator)))
     }
 
+    fn head_status_label(&self) -> Span<'static> {
+        let current = self.worktrees.entries.iter().find(|entry| entry.is_current);
+        if let Some(branch) = current.and_then(|entry| entry.branch.as_deref()) {
+            return Span::styled(format!("{} {}", self.symbols.branch.local_visible, branch), Style::default().fg(self.theme.COLOR_GRASS));
+        }
+        if let Some(oid) = current.and_then(|entry| entry.head) {
+            return Span::styled(format!("{} #{:.6}", status_text::DETACHED_HEAD(), oid), Style::default().fg(self.theme.COLOR_TEXT));
+        }
+        Span::styled(status_text::NO_HEAD_NO_COMMITS(), Style::default().fg(self.theme.COLOR_TEXT))
+    }
+
     pub fn draw_statusbar(&mut self, frame: &mut Frame, repo: &git2::Repository) {
         let mut left_spans: Vec<Span> = match self.worktrees.current_name() {
             Some(name) => vec![Span::styled(format!("  {} {name} ", self.symbols.worktree.current), Style::default().fg(self.theme.COLOR_GRASS))],
@@ -27,13 +37,7 @@ impl App {
         if let Some(label) = self.submodule_stack_status_label() {
             left_spans.push(Span::styled(label, Style::default().fg(self.theme.COLOR_TEAL)));
         }
-        match get_current_branch(repo) {
-            Some(branch) => left_spans.push(Span::styled(format!("{} {}", self.symbols.branch.local_visible, branch), Style::default().fg(self.theme.COLOR_GRASS))),
-            None => match repo.head().ok().and_then(|h| h.target()) {
-                Some(oid) => left_spans.push(Span::styled(format!("{} #{:.6}", status_text::DETACHED_HEAD(), oid), Style::default().fg(self.theme.COLOR_TEXT))),
-                None => left_spans.push(Span::styled(status_text::NO_HEAD_NO_COMMITS(), Style::default().fg(self.theme.COLOR_TEXT))),
-            },
-        }
+        left_spans.push(self.head_status_label());
         let lines = Line::from(left_spans);
 
         let status_paragraph = ratatui::widgets::Paragraph::new(Text::from(lines)).left_aligned().block(Block::default());

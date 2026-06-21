@@ -1,4 +1,7 @@
-use crate::core::{batcher::Batcher, oids::Oids};
+use crate::core::{
+    batcher::{Batcher, WalkCommit},
+    oids::Oids,
+};
 use git2::ObjectType;
 use git2::{Oid, Repository, Time};
 use std::collections::HashMap;
@@ -56,20 +59,18 @@ pub fn get_tag_oids(repo: &Repository, oids: &mut Oids) -> HashMap<u32, Vec<Stri
 }
 
 // Pull the next revwalk page into the global alias order.
-pub fn get_sorted_oids(batcher: &mut Batcher, oids: &mut Oids, sorted: &mut Vec<u32>, amount: usize, scratch: &mut Vec<Oid>) {
-    if sorted.is_empty() {
-        let expected = batcher.remaining();
-        oids.reserve_aliases(expected);
-        sorted.reserve(expected);
-    }
-
+pub fn get_sorted_oids(batcher: &mut Batcher, oids: &mut Oids, sorted: &mut Vec<u32>, amount: usize, scratch: &mut Vec<WalkCommit>) {
     scratch.clear();
-    if batcher.next_into(amount, scratch) == 0 {
+    let fetched = batcher.next_into(amount, scratch);
+    if fetched == 0 {
         return;
     }
 
-    for &oid in scratch.iter() {
-        let alias = oids.get_alias_by_oid(oid);
+    oids.reserve_aliases(fetched);
+    sorted.reserve(fetched);
+
+    for commit in scratch.iter() {
+        let alias = oids.get_alias_by_oid(commit.oid);
         sorted.push(alias);
     }
 }

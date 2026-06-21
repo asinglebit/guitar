@@ -41,6 +41,7 @@ fn graph_row(index: usize, alias: u32, oid: Oid) -> GraphRow {
         index,
         alias,
         oid,
+        short_oid: oid.to_string()[..9].to_string(),
         summary: "summary".to_string(),
         committer_date: String::new(),
         committer_name: String::new(),

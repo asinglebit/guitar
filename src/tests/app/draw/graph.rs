@@ -51,6 +51,7 @@ fn graph_row(index: usize, alias: u32, oid: Oid, summary: &str) -> GraphRow {
         index,
         alias,
         oid,
+        short_oid: oid.to_string()[..9].to_string(),
         summary: summary.to_string(),
         committer_date: String::new(),
         committer_name: String::new(),
@@ -262,6 +263,7 @@ fn graph_empty_state_stripes_backdrop() {
         ..Default::default()
     };
     app.layout_config.is_zen = false;
+    app.graph.is_complete = true;
     let zebra = app.theme.background_or_default(app.theme.COLOR_GREY_900);
 
     let backend = TestBackend::new(80, 3);

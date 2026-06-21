@@ -1,7 +1,7 @@
 mod fixtures;
 
 use divan::{Bencher, black_box};
-use fixtures::{BufferOp, apply_buffer_ops, buffer_checkpoint_fixture, buffer_linear_fixture, buffer_merge_fixture};
+use fixtures::{BufferOp, apply_buffer_ops, buffer_capped_overflow_fixture, buffer_checkpoint_fixture, buffer_linear_fixture, buffer_merge_fixture};
 use guitar::core::buffer::Buffer;
 
 fn main() {
@@ -33,6 +33,20 @@ fn buffer_update_checkpoint_stress(bencher: Bencher) {
     bencher.counter(divan::counter::ItemsCount::new(fixture.ops.len())).bench(|| black_box(update_buffer(&fixture.ops)));
 }
 
+#[divan::bench(sample_count = 30, sample_size = 10)]
+fn buffer_update_checkpoint_large(bencher: Bencher) {
+    let fixture = buffer_checkpoint_fixture(10_000);
+
+    bencher.counter(divan::counter::ItemsCount::new(fixture.ops.len())).bench(|| black_box(update_buffer(&fixture.ops)));
+}
+
+#[divan::bench(sample_count = 100, sample_size = 100)]
+fn buffer_update_capped_overflow_stress(bencher: Bencher) {
+    let fixture = buffer_capped_overflow_fixture(256, 20);
+
+    bencher.counter(divan::counter::ItemsCount::new(fixture.ops.len())).bench(|| black_box(update_buffer(&fixture.ops)));
+}
+
 #[divan::bench(sample_count = 100, sample_size = 100)]
 fn buffer_window_replay_small(bencher: Bencher) {
     let fixture = buffer_linear_fixture(48);
@@ -50,6 +64,38 @@ fn buffer_window_replay_medium(bencher: Bencher) {
 #[divan::bench(sample_count = 100, sample_size = 100)]
 fn buffer_window_replay_stress(bencher: Bencher) {
     let fixture = buffer_checkpoint_fixture(180);
+
+    bencher.counter(divan::counter::ItemsCount::new(fixture.buffer.deltas.len())).bench(|| black_box(fixture.buffer.window(fixture.window_start, fixture.window_end)));
+}
+
+#[divan::bench(sample_count = 30, sample_size = 10)]
+fn buffer_window_replay_large(bencher: Bencher) {
+    let fixture = buffer_checkpoint_fixture(10_000);
+
+    bencher.counter(divan::counter::ItemsCount::new(fixture.buffer.deltas.len())).bench(|| black_box(fixture.buffer.window(fixture.window_start, fixture.window_end)));
+}
+
+#[divan::bench(sample_count = 30, sample_size = 10)]
+fn buffer_window_replay_late_large(bencher: Bencher) {
+    let fixture = buffer_checkpoint_fixture(100_000);
+    let start = fixture.buffer.deltas.len().saturating_sub(1_000);
+    let end = fixture.buffer.deltas.len();
+
+    bencher.counter(divan::counter::ItemsCount::new(end - start)).bench(|| black_box(fixture.buffer.window(start, end)));
+}
+
+#[divan::bench(sample_count = 30, sample_size = 10)]
+fn buffer_window_replay_wide_checkpoint_large(bencher: Bencher) {
+    let fixture = buffer_checkpoint_fixture(100_000);
+    let end = fixture.buffer.deltas.len();
+    let start = end.saturating_sub(4_096);
+
+    bencher.counter(divan::counter::ItemsCount::new(end - start)).bench(|| black_box(fixture.buffer.window(start, end)));
+}
+
+#[divan::bench(sample_count = 100, sample_size = 100)]
+fn buffer_window_replay_capped_overflow_stress(bencher: Bencher) {
+    let fixture = buffer_capped_overflow_fixture(256, 20);
 
     bencher.counter(divan::counter::ItemsCount::new(fixture.buffer.deltas.len())).bench(|| black_box(fixture.buffer.window(fixture.window_start, fixture.window_end)));
 }

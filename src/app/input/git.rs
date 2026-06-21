@@ -17,7 +17,7 @@ use crate::{
             tagging::untag,
         },
         auth::{AuthRequired, AuthSecret, NetworkResult},
-        queries::{commits::get_current_branch, remotes::effective_default_remote, submodules::submodules_if_present},
+        queries::{commits::get_current_branch, remotes::effective_default_remote_from_remotes, submodules::submodules_if_present},
         repository::open,
     },
     helpers::{
@@ -795,7 +795,7 @@ impl App {
             return None;
         };
 
-        match effective_default_remote(&repo) {
+        match effective_default_remote_from_remotes(repo.as_ref(), &self.remotes) {
             Some(remote_name) => Some(remote_name),
             None => {
                 self.show_error(errors::no_remotes_configured(operation));

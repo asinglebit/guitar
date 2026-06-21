@@ -18,7 +18,32 @@ pub fn list_remotes(repo: &Repository) -> Result<Vec<RemoteEntry>, git2::Error> 
 
 pub fn effective_default_remote(repo: &Repository) -> Option<String> {
     let gix_repo = open_gix_repo(repo).ok()?;
-    effective_default_remote_gix(&gix_repo)
+    let remotes = list_remotes_gix(&gix_repo).ok()?;
+    effective_default_remote_from_remotes(repo, &remotes)
+}
+
+pub fn effective_default_remote_from_remotes(repo: &Repository, remotes: &[RemoteEntry]) -> Option<String> {
+    if remotes.is_empty() {
+        return None;
+    }
+
+    if let Some(remote) = repo_config_remote_git2(repo, GUITAR_DEFAULT_REMOTE_CONFIG, remotes) {
+        return Some(remote);
+    }
+
+    if let Some(remote) = repo_config_remote_git2(repo, PUSH_DEFAULT_CONFIG, remotes) {
+        return Some(remote);
+    }
+
+    if let Some(remote) = current_branch_upstream_remote_git2(repo, remotes) {
+        return Some(remote);
+    }
+
+    if remote_exists(remotes, "origin") {
+        return Some("origin".to_string());
+    }
+
+    remotes.first().map(|remote| remote.name.clone())
 }
 
 fn open_gix_repo(repo: &Repository) -> Result<gix::Repository, git2::Error> {
@@ -48,44 +73,18 @@ fn remote_push_url_gix(repo: &gix::Repository, remote_name: &str) -> Option<Stri
     Some(value.to_str().ok()?.to_string())
 }
 
-fn effective_default_remote_gix(repo: &gix::Repository) -> Option<String> {
-    let remotes = list_remotes_gix(repo).ok()?;
-    if remotes.is_empty() {
-        return None;
-    }
-
-    if let Some(remote) = repo_config_remote_gix(repo, GUITAR_DEFAULT_REMOTE_CONFIG, &remotes) {
-        return Some(remote);
-    }
-
-    if let Some(remote) = repo_config_remote_gix(repo, PUSH_DEFAULT_CONFIG, &remotes) {
-        return Some(remote);
-    }
-
-    if let Some(remote) = current_branch_upstream_remote_gix(repo, &remotes) {
-        return Some(remote);
-    }
-
-    if remote_exists(&remotes, "origin") {
-        return Some("origin".to_string());
-    }
-
-    remotes.first().map(|remote| remote.name.clone())
-}
-
-fn repo_config_remote_gix(repo: &gix::Repository, key: &str, remotes: &[RemoteEntry]) -> Option<String> {
-    repo.config_snapshot().string(key).and_then(|value| value.to_str().ok().map(|value| value.trim().to_string())).filter(|name| remote_exists(remotes, name))
-}
-
-fn current_branch_upstream_remote_gix(repo: &gix::Repository, remotes: &[RemoteEntry]) -> Option<String> {
-    let reference = repo.head().ok()?.try_into_referent()?;
-    let remote = reference.remote_name(remote::Direction::Fetch)?;
-    let name = remote.as_symbol()?.to_string();
-    remote_exists(remotes, &name).then_some(name)
-}
-
 fn remote_exists(remotes: &[RemoteEntry], name: &str) -> bool {
     remotes.iter().any(|remote| remote.name == name)
+}
+
+fn repo_config_remote_git2(repo: &Repository, key: &str, remotes: &[RemoteEntry]) -> Option<String> {
+    repo.config().ok().and_then(|config| config.get_string(key).ok()).map(|value| value.trim().to_string()).filter(|name| remote_exists(remotes, name))
+}
+
+fn current_branch_upstream_remote_git2(repo: &Repository, remotes: &[RemoteEntry]) -> Option<String> {
+    let branch = crate::git::queries::commits::get_current_branch(repo)?;
+    let refname = format!("refs/heads/{branch}");
+    repo.branch_upstream_remote(&refname).ok().and_then(|remote| remote.as_str().map(str::to_string)).filter(|name| remote_exists(remotes, name))
 }
 
 #[cfg(test)]
@@ -125,18 +124,6 @@ fn effective_default_remote_git2(repo: &Repository) -> Option<String> {
     }
 
     remotes.first().map(|remote| remote.name.clone())
-}
-
-#[cfg(test)]
-fn repo_config_remote_git2(repo: &Repository, key: &str, remotes: &[RemoteEntry]) -> Option<String> {
-    repo.config().ok().and_then(|config| config.get_string(key).ok()).map(|value| value.trim().to_string()).filter(|name| remote_exists(remotes, name))
-}
-
-#[cfg(test)]
-fn current_branch_upstream_remote_git2(repo: &Repository, remotes: &[RemoteEntry]) -> Option<String> {
-    let branch = crate::git::queries::commits::get_current_branch(repo)?;
-    let refname = format!("refs/heads/{branch}");
-    repo.branch_upstream_remote(&refname).ok().and_then(|remote| remote.as_str().map(str::to_string)).filter(|name| remote_exists(remotes, name))
 }
 
 #[cfg(test)]

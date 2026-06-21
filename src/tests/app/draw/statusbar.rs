@@ -1,6 +1,13 @@
 use super::*;
-use crate::{app::state::layout::Layout, core::submodules::SubmoduleStackEntry, helpers::symbols::submodule::DEFAULT as SYM_SUBMODULE};
-use git2::{Repository, Signature};
+use crate::{
+    app::state::layout::Layout,
+    core::{
+        submodules::SubmoduleStackEntry,
+        worktrees::{WorktreeEntry, WorktreeKind},
+    },
+    helpers::symbols::submodule::DEFAULT as SYM_SUBMODULE,
+};
+use git2::{Oid, Repository, Signature};
 use ratatui::{Terminal, backend::TestBackend, layout::Rect};
 use std::{
     fs,
@@ -34,15 +41,33 @@ fn rendered_symbols(terminal: &Terminal<TestBackend>) -> String {
     terminal.backend().buffer().content().iter().map(|cell| cell.symbol()).collect::<String>()
 }
 
+fn current_worktree(path: PathBuf, branch: Option<&str>, head: Oid) -> WorktreeEntry {
+    WorktreeEntry {
+        name: path.file_name().and_then(|name| name.to_str()).unwrap_or("repo").to_string(),
+        path,
+        branch: branch.map(str::to_string),
+        head: Some(head),
+        alias: None,
+        kind: WorktreeKind::Main,
+        is_current: true,
+        is_valid: true,
+        is_prunable: false,
+        locked_reason: None,
+        is_dirty: false,
+    }
+}
+
 #[test]
 fn statusbar_renders_submodule_stack_before_branch() {
     let (path, repo) = temp_repo("submodule-stack");
+    let head = repo.head().unwrap().target().unwrap();
     let mut app = App {
         layout: Layout { statusbar_left: Rect::new(0, 0, 180, 1), statusbar_right: Rect::new(180, 0, 20, 1), ..Default::default() },
         submodule_stack: vec![
             SubmoduleStackEntry::new(path.clone(), PathBuf::from("deps/child"), "deps/child".into()),
             SubmoduleStackEntry::new(path.join("deps/child"), PathBuf::from("vendor/grandchild"), "vendor/grandchild".into()),
         ],
+        worktrees: crate::core::worktrees::Worktrees::from_entries(vec![current_worktree(path.clone(), Some("master"), head)]),
         ..Default::default()
     };
     let backend = TestBackend::new(200, 1);

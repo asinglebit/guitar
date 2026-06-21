@@ -9,7 +9,12 @@ use crate::{
     git::{
         auth::{AuthChallenge, AuthSession, NetworkResult},
         os::path::try_into_git_repo_root,
-        queries::{diffs::get_filenames_diff_at_oid, files::FileSearchResult, submodules::list_submodules, worktrees::list_worktrees},
+        queries::{
+            diffs::get_filenames_diff_at_oid,
+            files::FileSearchResult,
+            submodules::list_submodules,
+            worktrees::{list_worktrees_metadata, list_worktrees_metadata_with_current_dirty},
+        },
         repository::open,
     },
     helpers::{
@@ -42,6 +47,7 @@ use crate::{
             commits::get_git_user_info,
             diffs::get_filenames_diff_at_workdir,
             helpers::{FileChange, UncommittedChanges},
+            remotes::list_remotes,
         },
     },
     helpers::{colors::ColorPicker, keymap::InputMode, palette::*, spinner::Spinner},
@@ -475,6 +481,7 @@ pub struct App {
     pub symbols: SymbolTheme,
     pub language: Language,
     pub heatmap: [[usize; WEEKS]; DAYS],
+    pub remotes: Vec<crate::git::queries::remotes::RemoteEntry>,
 
     // Git identity used when creating commits.
     pub name: String,
@@ -484,6 +491,7 @@ pub struct App {
     pub color: Rc<RefCell<ColorPicker>>,
     pub graph: GraphClientCache,
     pub graph_tx: Option<std::sync::mpsc::Sender<GraphCommand>>,
+    pub graph_event_tx: Option<std::sync::mpsc::Sender<GraphEvent>>,
     pub graph_rx: Option<std::sync::mpsc::Receiver<GraphEvent>>,
     pub walker_cancel: Option<Arc<AtomicBool>>,
     pub walker_handle: Option<std::thread::JoinHandle<()>>,
@@ -907,6 +915,7 @@ impl App {
         self.reflogs = HeadReflogs::default();
         self.worktrees = Worktrees::default();
         self.submodules = Submodules::default();
+        self.remotes = Vec::new();
         self.clear_file_history_search();
         self.branches.hidden_branch_names = existing_hidden_branch_names.clone();
 
@@ -935,7 +944,8 @@ impl App {
         // Repository-specific state starts only after Repository::open succeeds.
         if let Some(repo) = &self.repo {
             let current_path = PathBuf::from(&absolute_path);
-            self.worktrees = Worktrees::from_entries(list_worktrees(repo, Some(current_path.as_path())).unwrap_or_default());
+            self.remotes = list_remotes(repo).unwrap_or_default();
+            self.worktrees = Worktrees::from_entries(list_worktrees_metadata(repo, Some(current_path.as_path())).unwrap_or_default());
             self.submodules = Submodules::from_entries(list_submodules(repo).unwrap_or_default());
 
             let same_repo_reload = !has_override_path && previous_path.as_deref() == Some(absolute_path.as_str());
@@ -956,6 +966,7 @@ impl App {
             if let Some(tx) = self.graph_tx.take() {
                 let _ = tx.send(GraphCommand::Shutdown);
             }
+            self.graph_event_tx = None;
             self.graph_rx = None;
 
             if let Some(cancel_flag) = &self.walker_cancel {
@@ -988,6 +999,7 @@ impl App {
             let (command_tx, command_rx) = channel();
             let (event_tx, event_rx) = channel();
             self.graph_tx = Some(command_tx);
+            self.graph_event_tx = Some(event_tx.clone());
             self.graph_rx = Some(event_rx);
 
             // Move only serializable state into the worker thread.
@@ -1006,6 +1018,29 @@ impl App {
 
             self.walker_handle = Some(handle);
         }
+    }
+
+    fn spawn_reload_metadata(&self, generation: Generation) {
+        let Some(path) = self.path.as_ref().map(PathBuf::from) else {
+            return;
+        };
+        let Some(reload_metadata_tx) = self.graph_tx.clone() else {
+            return;
+        };
+        let Some(reload_uncommitted_tx) = self.graph_event_tx.clone() else {
+            return;
+        };
+
+        std::thread::spawn(move || {
+            let result = open(&path).map_err(|error| error.to_string()).and_then(|repo| {
+                let uncommitted = get_filenames_diff_at_workdir(&repo).map_err(|error| error.to_string())?;
+                if let Ok(worktrees) = list_worktrees_metadata_with_current_dirty(&repo, Some(path.as_path()), &uncommitted) {
+                    let _ = reload_metadata_tx.send(GraphCommand::UpdateWorktrees { generation, worktrees });
+                }
+                Ok(uncommitted)
+            });
+            let _ = reload_uncommitted_tx.send(GraphEvent::Uncommitted { generation, result });
+        });
     }
 
     pub fn sync(&mut self, repo: &git2::Repository) {
@@ -1031,21 +1066,14 @@ impl App {
                 self.graph.total = total;
                 self.graph.is_complete = is_complete;
 
+                if is_complete && !self.is_uncommitted_loaded {
+                    self.spawn_reload_metadata(generation);
+                }
+
                 if is_first {
                     if self.viewport == Viewport::Splash {
                         self.viewport = Viewport::Graph;
                     }
-
-                    match get_filenames_diff_at_workdir(repo) {
-                        Ok(uncommitted) => {
-                            self.uncommitted = uncommitted;
-                        },
-                        Err(error) => {
-                            self.uncommitted = UncommittedChanges::default();
-                            self.show_error(errors::with_error(errors::FILE_DIFF(), error));
-                        },
-                    }
-                    self.is_uncommitted_loaded = true;
                 }
 
                 if is_complete {
@@ -1160,6 +1188,26 @@ impl App {
             GraphEvent::Heatmap { generation, heatmap } => {
                 if generation == self.graph.generation {
                     self.heatmap = heatmap;
+                }
+            },
+            GraphEvent::Worktrees { generation, version, worktrees } => {
+                if generation == self.graph.generation {
+                    self.graph.version = self.graph.version.max(version);
+                    self.worktrees = Worktrees::from_entries(worktrees);
+                }
+            },
+            GraphEvent::Uncommitted { generation, result } => {
+                if generation == self.graph.generation {
+                    match result {
+                        Ok(uncommitted) => {
+                            self.uncommitted = uncommitted;
+                        },
+                        Err(error) => {
+                            self.uncommitted = UncommittedChanges::default();
+                            self.show_error(errors::with_error(errors::FILE_DIFF(), error));
+                        },
+                    }
+                    self.is_uncommitted_loaded = true;
                 }
             },
             GraphEvent::Error { generation, message } => {

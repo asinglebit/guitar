@@ -1,14 +1,16 @@
 use crate::git::queries::{commits::get_stashed_commits, reflogs::HeadReflogEntry};
 use crate::{
     core::{
-        batcher::Batcher,
+        batcher::{Batcher, WalkCommit},
         buffer::Buffer,
         chunk::{Chunk, LaneRef, NONE},
         oids::{Oids, git2_to_gix_oid, gix_to_git2_oid},
     },
+    git::gix::enable_history_object_cache,
     git::queries::commits::{get_sorted_oids, get_tag_oids, get_tip_oids},
     git::queries::reflogs::get_head_reflog_entries,
     git::repository::open,
+    helpers::heatmap::HeatmapCounts,
 };
 use git2::Repository;
 use im::{HashSet, Vector};
@@ -45,10 +47,11 @@ pub struct Walker {
     pub stashes_lanes: HashMap<u32, LaneRef>,
     pub reflogs_lanes: HashMap<u32, LaneRef>,
     pub head_reflog_entries: Vec<HeadReflogEntry>,
+    pub heatmap_counts: HeatmapCounts,
     stash_aliases: StdHashSet<u32>,
     reflog_aliases: StdHashSet<u32>,
     stash_parent_aliases: Vec<(u32, u32)>,
-    oid_batch: Vec<git2::Oid>,
+    oid_batch: Vec<WalkCommit>,
     sorted_batch: Vec<u32>,
 
     // Number of commits requested per walk iteration.
@@ -60,7 +63,8 @@ impl Walker {
     pub fn new(path: String, amount: usize, hidden_branch_names: HashSet<String>, include_head_reflog_roots: bool, graph_lane_limit: usize) -> Result<Self, git2::Error> {
         let repo_path = path.clone();
         let repo = Rc::new(RefCell::new(open(path)?));
-        let gix_repo = gix::open(repo_path.clone()).map_err(|error| git2::Error::from_str(&error.to_string()))?;
+        let mut gix_repo = gix::open(repo_path.clone()).map_err(|error| git2::Error::from_str(&error.to_string()))?;
+        enable_history_object_cache(&mut gix_repo);
 
         let buffer = RefCell::new(Buffer::with_lane_limit(graph_lane_limit));
 
@@ -120,6 +124,7 @@ impl Walker {
             stashes_lanes,
             reflogs_lanes,
             head_reflog_entries,
+            heatmap_counts: HeatmapCounts::default(),
             stash_aliases,
             reflog_aliases,
             stash_parent_aliases,
@@ -131,11 +136,9 @@ impl Walker {
 
     // Process one revwalk page and update lane snapshots for the renderer.
     pub fn walk(&mut self) -> bool {
-        let repo = self.repo.borrow();
-
         // Without HEAD there is no stable parent for the uncommitted pseudo-row.
-        let head_oid = match repo.head().ok().and_then(|h| h.target()) {
-            Some(oid) => oid,
+        let head_oid = match self.gix_repo.head_id().ok() {
+            Some(oid) => gix_to_git2_oid(oid.detach()),
             None => {
                 return false;
             },
@@ -145,6 +148,11 @@ impl Walker {
 
         self.sorted_batch.clear();
         get_sorted_oids(&mut self.batcher, &mut self.oids, &mut self.sorted_batch, self.amount, &mut self.oid_batch);
+        for commit in &self.oid_batch {
+            if let Some(seconds) = commit.commit_time {
+                self.heatmap_counts.add_commit_seconds(seconds);
+            }
+        }
 
         // Alias NONE is rendered as the uncommitted row above HEAD.
         if self.oids.get_commit_count() == 1 {
@@ -161,21 +169,25 @@ impl Walker {
         // Hold one mutable buffer borrow while the page updates topology.
         let mut buffer = self.buffer.borrow_mut();
 
+        let mut walked_commits = self.oid_batch.iter().peekable();
+
         for &alias in self.sorted_batch.iter() {
             let mut merger_alias: u32 = NONE;
             let mut transient_lane: Option<usize> = None;
-            let oid = self.oids.get_oid_by_alias(alias);
-            let commit = self.gix_repo.find_commit(git2_to_gix_oid(*oid)).unwrap();
 
-            // Only two parents are modeled because the renderer draws one merge edge.
-            let mut parents_iter = commit.parent_ids();
-            let parent_a_oid = parents_iter.next().map(|parent| gix_to_git2_oid(parent.detach()));
-            let parent_b_oid = parents_iter.next().map(|parent| gix_to_git2_oid(parent.detach()));
-
-            // Stashes should point only to their base commit, not the index/worktree parents.
             let (parent_a, parent_b) = if self.stash_aliases.contains(&alias) {
-                (parent_a_oid.map(|p| self.oids.get_alias_by_oid(p)).unwrap_or(NONE), NONE)
+                if walked_commits.peek().and_then(|commit| self.oids.get_existing_alias(commit.oid)) == Some(alias) {
+                    walked_commits.next();
+                }
+                let parent = self.stash_parent_aliases.iter().find_map(|&(stash_alias, parent_alias)| (stash_alias == alias).then_some(parent_alias)).unwrap_or(NONE);
+                (parent, NONE)
             } else {
+                let commit = walked_commits.next().expect("walked commit metadata matches sorted aliases");
+                debug_assert_eq!(self.oids.get_existing_alias(commit.oid), Some(alias));
+
+                // Only two parents are modeled because the renderer draws one merge edge.
+                let parent_a_oid = commit.parent_ids.first().map(|parent| gix_to_git2_oid(*parent));
+                let parent_b_oid = commit.parent_ids.get(1).map(|parent| gix_to_git2_oid(*parent));
                 (parent_a_oid.map(|p| self.oids.get_alias_by_oid(p)).unwrap_or(NONE), parent_b_oid.map(|p| self.oids.get_alias_by_oid(p)).unwrap_or(NONE))
             };
 

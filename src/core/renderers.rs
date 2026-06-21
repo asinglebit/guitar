@@ -28,13 +28,15 @@ pub const GRAPH_COMMITTER_WIDTH: usize = 18;
 
 // Render graph symbols from worker-projected rows. The lane history is still
 // precomputed by Buffer, but only for the requested visible range.
-pub fn render_graph_projection(
-    theme: &Theme, symbols: &SymbolTheme, rows: &[GraphRow], history: &GraphHistory, head_alias: u32, start: usize, end: usize, render_uncommitted_row: bool,
-) -> Vec<Line<'static>> {
+pub fn render_graph_projection<'a>(
+    theme: &Theme, symbols: &'a SymbolTheme, rows: &[GraphRow], history: &GraphHistory, head_alias: u32, start: usize, end: usize, render_uncommitted_row: bool,
+) -> Vec<Line<'a>> {
     let graph = &symbols.graph;
     let worktree = &symbols.worktree;
     let mut layers = LayersContext::new(ColorPicker::from_theme(theme));
-    let mut lines: Vec<Line> = Vec::new();
+    let mut lines: Vec<Line<'a>> = Vec::new();
+    let mut flattened_lanes = Vec::new();
+    let mut closeout_flattened_lanes = Vec::new();
 
     for row in rows {
         let global_idx = row.index;
@@ -64,9 +66,9 @@ pub fn render_graph_projection(
         };
         let next = history.get(delta + 1);
         layers.reserve(last.len().saturating_mul(2));
-        let flattened_lanes = flattened_lanes(last, prev);
-        let closeout_flattened_lanes = flattened_lanes_around_closeout(last, prev, next);
-        layers.set_flattened_lanes(flattened_lanes.clone());
+        fill_flattened_lanes(&mut flattened_lanes, last, prev);
+        fill_flattened_lanes_around_closeout(&mut closeout_flattened_lanes, last, prev, next);
+        layers.set_flattened_lanes(&flattened_lanes);
 
         if row.alias == NONE {
             lines.push(Line::from(Span::styled(format!(" {}", graph.uncommitted), Style::default().fg(theme.COLOR_GREY_400))));
@@ -344,28 +346,34 @@ fn branch_up_symbol(graph: &GraphSymbols, lane_idx: usize, current_row_lane_idx:
     if current_row_lane_idx.is_some_and(|row_lane_idx| lane_idx < row_lane_idx) { &graph.branch_up_right } else { &graph.branch_up }
 }
 
-fn flattened_lanes(last: &Vector<Chunk>, prev: Option<&Vector<Chunk>>) -> Vec<bool> {
+fn fill_flattened_lanes(out: &mut Vec<u8>, last: &Vector<Chunk>, prev: Option<&Vector<Chunk>>) {
     let len = last.len().max(prev.map_or(0, |snapshot| snapshot.len()));
-    (0..len).map(|lane_idx| last.get(lane_idx).is_some_and(|chunk| chunk.is_flattened) || prev.and_then(|snapshot| snapshot.get(lane_idx)).is_some_and(|chunk| chunk.is_flattened)).collect()
+    out.clear();
+    out.reserve(len);
+    out.extend(
+        (0..len).map(|lane_idx| u8::from(last.get(lane_idx).is_some_and(|chunk| chunk.is_flattened) || prev.and_then(|snapshot| snapshot.get(lane_idx)).is_some_and(|chunk| chunk.is_flattened))),
+    );
 }
 
-fn flattened_lanes_around_closeout(last: &Vector<Chunk>, prev: Option<&Vector<Chunk>>, next: Option<&Vector<Chunk>>) -> Vec<bool> {
+fn fill_flattened_lanes_around_closeout(out: &mut Vec<u8>, last: &Vector<Chunk>, prev: Option<&Vector<Chunk>>, next: Option<&Vector<Chunk>>) {
     let len = last.len().max(prev.map_or(0, |snapshot| snapshot.len())).max(next.map_or(0, |snapshot| snapshot.len()));
-    (0..len)
-        .map(|lane_idx| {
+    out.clear();
+    out.reserve(len);
+    out.extend((0..len).map(|lane_idx| {
+        u8::from(
             last.get(lane_idx).is_some_and(|chunk| chunk.is_flattened)
                 || prev.and_then(|snapshot| snapshot.get(lane_idx)).is_some_and(|chunk| chunk.is_flattened)
-                || next.and_then(|snapshot| snapshot.get(lane_idx)).is_some_and(|chunk| chunk.is_flattened)
-        })
-        .collect()
+                || next.and_then(|snapshot| snapshot.get(lane_idx)).is_some_and(|chunk| chunk.is_flattened),
+        )
+    }));
 }
 
 fn flattened_lane_idx(snapshot: &Vector<Chunk>) -> Option<usize> {
     snapshot.iter().position(|chunk| chunk.is_flattened)
 }
 
-fn merge_closeout_lane(snapshot: &Vector<Chunk>, flattened_lanes: &[bool], current_lane_idx: usize, candidate_lane_idx: usize) -> Option<usize> {
-    let lane_idx = if let Some(flattened_idx) = flattened_lanes.iter().position(|is_flattened| *is_flattened).filter(|flattened_idx| candidate_lane_idx >= *flattened_idx) {
+fn merge_closeout_lane(snapshot: &Vector<Chunk>, flattened_lanes: &[u8], current_lane_idx: usize, candidate_lane_idx: usize) -> Option<usize> {
+    let lane_idx = if let Some(flattened_idx) = flattened_lanes.iter().position(|is_flattened| *is_flattened != 0).filter(|flattened_idx| candidate_lane_idx >= *flattened_idx) {
         flattened_idx
     } else if draws_past_flattened_cap(snapshot, candidate_lane_idx) {
         flattened_lane_idx(snapshot)?
@@ -380,8 +388,8 @@ fn draws_past_flattened_cap(snapshot: &Vector<Chunk>, lane_idx: usize) -> bool {
     lane_idx >= snapshot.len() && snapshot.back().is_some_and(|chunk| chunk.is_flattened)
 }
 
-fn pipe_symbol<'a>(graph: &'a GraphSymbols, flattened_lanes: &[bool], lane_idx: usize, symbol: &'a str) -> &'a str {
-    if !flattened_lanes.get(lane_idx).copied().unwrap_or(false) {
+fn pipe_symbol<'a>(graph: &'a GraphSymbols, flattened_lanes: &[u8], lane_idx: usize, symbol: &'a str) -> &'a str {
+    if flattened_lanes.get(lane_idx).copied().unwrap_or(0) == 0 {
         return symbol;
     }
 
@@ -394,7 +402,7 @@ fn pipe_symbol<'a>(graph: &'a GraphSymbols, flattened_lanes: &[bool], lane_idx: 
     }
 }
 
-fn draw_merge_closeout_horizontals<'a>(layers: &mut LayersContext<'a>, graph: &'a GraphSymbols, flattened_lanes: &[bool], from_lane_idx: usize, to_lane_idx: usize) {
+fn draw_merge_closeout_horizontals<'a>(layers: &mut LayersContext<'a>, graph: &'a GraphSymbols, flattened_lanes: &[u8], from_lane_idx: usize, to_lane_idx: usize) {
     let symbol = pipe_symbol(graph, flattened_lanes, to_lane_idx, &graph.horizontal);
     let start_token_idx = from_lane_idx.saturating_add(1).saturating_mul(2);
     let end_token_idx = to_lane_idx.saturating_mul(2);
@@ -405,15 +413,15 @@ fn draw_merge_closeout_horizontals<'a>(layers: &mut LayersContext<'a>, graph: &'
     }
 }
 
-fn draw_merge_closeout_symbol<'a>(layers: &mut LayersContext<'a>, flattened_lanes: &[bool], symbol: &'a str, lane_idx: usize) {
+fn draw_merge_closeout_symbol<'a>(layers: &mut LayersContext<'a>, flattened_lanes: &[u8], symbol: &'a str, lane_idx: usize) {
     layers.merge_at_ref(lane_idx.saturating_mul(2), symbol, closeout_lane_ref(flattened_lanes, lane_idx));
 }
 
-fn closeout_lane_ref(flattened_lanes: &[bool], lane_idx: usize) -> LaneRef {
-    LaneRef::new(lane_idx, flattened_lanes.get(lane_idx).copied().unwrap_or(false))
+fn closeout_lane_ref(flattened_lanes: &[u8], lane_idx: usize) -> LaneRef {
+    LaneRef::new(lane_idx, flattened_lanes.get(lane_idx).copied().unwrap_or(0) != 0)
 }
 
-fn draw_branch_up_bridge<'a>(layers: &mut LayersContext<'a>, graph: &'a GraphSymbols, flattened_lanes: &[bool], from_lane_idx: usize, to_lane_idx: usize) {
+fn draw_branch_up_bridge<'a>(layers: &mut LayersContext<'a>, graph: &'a GraphSymbols, flattened_lanes: &[u8], from_lane_idx: usize, to_lane_idx: usize) {
     if from_lane_idx >= to_lane_idx {
         return;
     }

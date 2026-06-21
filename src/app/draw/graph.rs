@@ -1,9 +1,14 @@
 use crate::app::app::{App, Focus};
-use crate::core::renderers::{GRAPH_COMMITTER_WIDTH, render_committer_projection, render_date_projection, render_graph_projection, render_message_projection, render_sha_projection};
+use crate::core::{
+    chunk::NONE,
+    graph_service::GraphRow,
+    renderers::{GRAPH_COMMITTER_WIDTH, render_graph_projection, render_message_projection},
+};
+use crate::helpers::text::truncate_with_ellipsis;
 use crate::helpers::{layout::scrollbar_content_length, localisation::empty};
 use ratatui::Frame;
 use ratatui::layout::{Alignment, Constraint, Direction, Layout};
-use ratatui::text::Line;
+use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use ratatui::{
     style::Style,
@@ -46,33 +51,27 @@ impl App {
         let (preload_start, preload_end) = graph_preload_window(start, end, total_lines, visible_height);
         self.request_graph_window(preload_start, preload_end);
 
-        // An unborn repository has no graph data, so render a centered empty state.
-        match repo.head().ok().and_then(|h| h.target()) {
-            Some(_) => {},
-            None => {
-                let table = Table::new(graph_backdrop_rows(visible_height, 0, None, &self.theme), [ratatui::layout::Constraint::Min(0)])
-                    .block(Block::default().borders(Borders::LEFT | Borders::RIGHT).border_style(Style::default().fg(self.theme.COLOR_BORDER)))
-                    .column_spacing(0);
+        // The graph service reports completion with zero rows for unborn repositories.
+        if self.graph.total == 0 && self.graph.is_complete {
+            let table = Table::new(graph_backdrop_rows(visible_height, 0, None, &self.theme), [ratatui::layout::Constraint::Min(0)])
+                .block(Block::default().borders(Borders::LEFT | Borders::RIGHT).border_style(Style::default().fg(self.theme.COLOR_BORDER)))
+                .column_spacing(0);
 
-                frame.render_widget(table, self.layout.graph);
+            frame.render_widget(table, self.layout.graph);
 
-                let chunks = Layout::default().direction(Direction::Vertical).constraints([Constraint::Percentage(50), Constraint::Length(3), Constraint::Percentage(50)]).split(self.layout.graph);
+            let chunks = Layout::default().direction(Direction::Vertical).constraints([Constraint::Percentage(50), Constraint::Length(3), Constraint::Percentage(50)]).split(self.layout.graph);
 
-                let message = Paragraph::new(format!("{} {}", self.symbols.empty_state.mark, empty::NO_COMMITS())).alignment(Alignment::Center).style(Style::default().fg(self.theme.COLOR_BORDER));
+            let message = Paragraph::new(format!("{} {}", self.symbols.empty_state.mark, empty::NO_COMMITS())).alignment(Alignment::Center).style(Style::default().fg(self.theme.COLOR_BORDER));
 
-                frame.render_widget(message, chunks[1]);
-                return;
-            },
+            frame.render_widget(message, chunks[1]);
+            return;
         }
 
         let visible_len = end.saturating_sub(start);
-        let (sha_range, graph_range, date_range, committer_range, message_range) = if let Some(window) = self.graph.graph_window.as_ref().filter(|window| window.start < end && start < window.end) {
+        let (cached_start, cached_rows, graph_lines, message_lines) = if let Some(window) = self.graph.graph_window.as_ref().filter(|window| window.start < end && start < window.end) {
             // SHA, graph, and message columns are rendered from the cached window, then reindexed
             // into the requested viewport so scrolling still looks like movement while loading.
             let render_uncommitted_row = graph_window_has_stable_visible_page(window, start, end);
-            let source_sha = if self.layout_config.is_shas { Some(render_sha_projection(&self.theme, &window.rows, self.graph_selected)) } else { None };
-            let source_date = if self.layout_config.is_graph_dates { Some(render_date_projection(&self.theme, &window.rows, self.graph_selected)) } else { None };
-            let source_committer = if self.layout_config.is_graph_committers { Some(render_committer_projection(&self.theme, &window.rows, self.graph_selected)) } else { None };
             let source_graph = render_graph_projection(&self.theme, &self.symbols, &window.rows, &window.history, window.head_alias, window.start, window.end, render_uncommitted_row);
             let source_message = render_message_projection(
                 &self.theme,
@@ -85,48 +84,37 @@ impl App {
                 render_uncommitted_row,
             );
 
-            (
-                source_sha.as_ref().map(|lines| align_projection(lines, window.start, start, end)),
-                align_projection(&source_graph, window.start, start, end),
-                source_date.as_ref().map(|lines| align_projection(lines, window.start, start, end)),
-                source_committer.as_ref().map(|lines| align_projection(lines, window.start, start, end)),
-                align_projection(&source_message, window.start, start, end),
-            )
+            (window.start, window.rows.as_slice(), source_graph, source_message)
         } else {
-            (
-                self.layout_config.is_shas.then(|| blank_projection(visible_len)),
-                blank_projection(visible_len),
-                self.layout_config.is_graph_dates.then(|| blank_projection(visible_len)),
-                self.layout_config.is_graph_committers.then(|| blank_projection(visible_len)),
-                blank_projection(visible_len),
-            )
+            (start, &[][..], blank_projection(0), blank_projection(0))
         };
 
         // Build table rows and measure the graph column from rendered span widths.
         let mut rows = Vec::with_capacity(visible_height);
-        let width = graph_range.iter().map(|line| line.spans.iter().filter(|span| !span.content.is_empty()).map(|span| span.content.chars().count()).sum::<usize>()).max().unwrap_or(0) as u16;
+        let width = (start..end)
+            .filter_map(|index| projected_line(&graph_lines, cached_start, index))
+            .map(|line| line.spans.iter().filter(|span| !span.content.is_empty()).map(|span| span.content.chars().count()).sum::<usize>())
+            .max()
+            .unwrap_or(0) as u16;
         let search_highlight_indices: HashSet<usize> =
             if self.layout_config.is_search && self.search_path.is_some() { self.search_rows.iter().map(|row| row.graph_index).filter(|&index| index != 0).collect() } else { HashSet::new() };
         for idx in 0..visible_height {
-            let optional_cell_count = usize::from(self.layout_config.is_shas) + usize::from(self.layout_config.is_graph_dates) + usize::from(self.layout_config.is_graph_committers);
-            let mut cells = Vec::with_capacity(2 + optional_cell_count);
+            let global_idx = idx + start;
 
-            if let Some(sha) = &sha_range {
-                cells.push(WidgetCell::from(sha.get(idx).cloned().unwrap_or_default()));
-            }
-            cells.push(WidgetCell::from(graph_range.get(idx).cloned().unwrap_or_default()));
-            if let Some(date) = &date_range {
-                cells.push(WidgetCell::from(date.get(idx).cloned().unwrap_or_default()));
-            }
-            if let Some(committer) = &committer_range {
-                cells.push(WidgetCell::from(committer.get(idx).cloned().unwrap_or_default()));
-            }
-            cells.push(WidgetCell::from(message_range.get(idx).cloned().unwrap_or_default()));
-
-            let mut row = Row::new(cells);
+            let mut row = Row::new(graph_row_cells(
+                cached_rows,
+                self.layout_config.is_shas,
+                &graph_lines,
+                self.layout_config.is_graph_dates,
+                self.layout_config.is_graph_committers,
+                &message_lines,
+                cached_start,
+                global_idx,
+                self.graph_selected,
+                &self.theme,
+            ));
 
             // Selection highlighting is focus-sensitive so inactive panes stay quiet.
-            let global_idx = idx + start;
             let is_selected = idx < visible_len && global_idx == self.graph_selected && self.focus == Focus::Viewport;
             let is_search_highlighted = idx < visible_len && search_highlight_indices.contains(&global_idx);
             if is_selected || is_search_highlighted {
@@ -236,15 +224,57 @@ fn graph_preload_window(start: usize, end: usize, total_lines: usize, visible_he
     (start.saturating_sub(visible_height), end.saturating_add(visible_height).min(total_lines))
 }
 
-fn align_projection(lines: &[Line<'static>], cached_start: usize, target_start: usize, target_end: usize) -> Vec<Line<'static>> {
-    (target_start..target_end)
-        .map(|index| {
-            if index < cached_start {
-                return Line::default();
-            }
-            lines.get(index - cached_start).cloned().unwrap_or_default()
-        })
-        .collect()
+fn projected_line<'a, 'line>(lines: &'a [Line<'line>], cached_start: usize, target_index: usize) -> Option<&'a Line<'line>> {
+    target_index.checked_sub(cached_start).and_then(|source_index| lines.get(source_index))
+}
+
+fn graph_row_cells<'a, 'line>(
+    rows: &'a [GraphRow], is_shas: bool, graph_lines: &'a [Line<'line>], is_dates: bool, is_committers: bool, message_lines: &'a [Line<'static>], cached_start: usize, global_idx: usize,
+    selected: usize, theme: &crate::helpers::palette::Theme,
+) -> impl Iterator<Item = WidgetCell<'a>>
+where
+    'line: 'a,
+{
+    let row = projected_row(rows, cached_start, global_idx);
+    [
+        is_shas.then(|| sha_cell(row, selected, theme)),
+        Some(WidgetCell::from(projected_line(graph_lines, cached_start, global_idx).cloned().unwrap_or_default())),
+        is_dates.then(|| date_cell(row, selected, theme)),
+        is_committers.then(|| committer_cell(row, selected, theme)),
+        Some(WidgetCell::from(projected_line(message_lines, cached_start, global_idx).cloned().unwrap_or_default())),
+    ]
+    .into_iter()
+    .flatten()
+}
+
+fn projected_row(rows: &[GraphRow], cached_start: usize, target_index: usize) -> Option<&GraphRow> {
+    target_index.checked_sub(cached_start).and_then(|source_index| rows.get(source_index))
+}
+
+fn text_color(row: &GraphRow, selected: usize, theme: &crate::helpers::palette::Theme) -> ratatui::style::Color {
+    if row.index == selected { theme.COLOR_HIGHLIGHTED } else { theme.COLOR_TEXT }
+}
+
+fn sha_cell<'a>(row: Option<&'a GraphRow>, selected: usize, theme: &crate::helpers::palette::Theme) -> WidgetCell<'a> {
+    let Some(row) = row.filter(|row| row.alias != NONE) else {
+        return WidgetCell::from(Line::default());
+    };
+    WidgetCell::from(Line::from(Span::styled(row.short_oid.as_str(), Style::default().fg(text_color(row, selected, theme)))))
+}
+
+fn date_cell<'a>(row: Option<&'a GraphRow>, selected: usize, theme: &crate::helpers::palette::Theme) -> WidgetCell<'a> {
+    let Some(row) = row.filter(|row| row.alias != NONE) else {
+        return WidgetCell::from(Line::default());
+    };
+    WidgetCell::from(Line::from(Span::styled(row.committer_date.as_str(), Style::default().fg(text_color(row, selected, theme)))))
+}
+
+fn committer_cell(row: Option<&GraphRow>, selected: usize, theme: &crate::helpers::palette::Theme) -> WidgetCell<'static> {
+    let Some(row) = row.filter(|row| row.alias != NONE) else {
+        return WidgetCell::from(Line::default());
+    };
+    let truncated = truncate_with_ellipsis(&row.committer_name, GRAPH_COMMITTER_WIDTH);
+    WidgetCell::from(Line::from(Span::styled(format!("{:<width$}", truncated, width = GRAPH_COMMITTER_WIDTH), Style::default().fg(text_color(row, selected, theme)))))
 }
 
 #[cfg(test)]

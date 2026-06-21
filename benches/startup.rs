@@ -80,7 +80,7 @@ fn reload_startup_components(fixture: StartupFixture) -> usize {
     loaded
 }
 
-fn reload_until_first_graph_progress(fixture: StartupFixture) -> usize {
+fn reload_until_uncommitted_metadata(fixture: StartupFixture) -> usize {
     let mut app = reload_app(&fixture);
     let repo = app.repo.clone().unwrap();
     let deadline = Instant::now() + Duration::from_secs(10);
@@ -110,7 +110,7 @@ fn app_reload_startup_components(bencher: Bencher) {
 }
 
 #[divan::bench(sample_count = 20, sample_size = 1)]
-fn app_reload_until_first_graph_progress(bencher: Bencher) {
+fn app_reload_until_uncommitted_metadata(bencher: Bencher) {
     let commits = 96usize;
     let linked_worktrees = 8usize;
     let dirty_files = 24usize;
@@ -118,7 +118,7 @@ fn app_reload_until_first_graph_progress(bencher: Bencher) {
     bencher
         .counter(ItemsCount::new(commits.saturating_add(linked_worktrees).saturating_add(dirty_files)))
         .with_inputs(|| startup_fixture(commits, linked_worktrees, dirty_files))
-        .bench_local_values(|fixture| black_box(reload_until_first_graph_progress(fixture)));
+        .bench_local_values(|fixture| black_box(reload_until_uncommitted_metadata(fixture)));
 }
 
 #[divan::bench(sample_count = 50, sample_size = 10)]

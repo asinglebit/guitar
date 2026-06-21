@@ -1,4 +1,4 @@
-use crate::git::queries::remotes::{effective_default_remote, list_remotes};
+use crate::git::queries::remotes::effective_default_remote_from_remotes;
 use crate::helpers::heatmap::heat_cell;
 use crate::helpers::keymap::{Command, InputMode, KeymapSelection, action_keymap_visible_entries, keybinding_to_visual_string};
 use crate::helpers::layout::scrollbar_content_length;
@@ -304,8 +304,9 @@ impl App {
         lines.push(self.settings_filled_line(settings_text::ACTIONS(), settings_text::REMOTES_ACTIONS_DETAIL(), width, Style::default().fg(self.theme.COLOR_TEXT)));
         lines.push(Line::default());
 
-        match list_remotes(repo) {
-            Ok(remotes) if remotes.is_empty() => {
+        let remotes = self.remotes.clone();
+        match remotes.as_slice() {
+            [] => {
                 lines.push(self.settings_filled_line(settings_text::DEFAULT_REMOTE(), format!(" {} ", common::NONE()).as_str(), width, Style::default().fg(self.theme.COLOR_TEXT)));
                 lines.push(Line::default());
                 lines.push(self.settings_filled_line(
@@ -317,8 +318,8 @@ impl App {
                 self.add_settings_selection(lines, SettingsSelectionKind::RemoteAdd);
                 lines.push(self.settings_filled_line(&format!(" {}", empty::NO_REMOTES()), "", width, Style::default().fg(self.theme.COLOR_TEXT)));
             },
-            Ok(remotes) => {
-                let default_remote = effective_default_remote(repo);
+            remotes => {
+                let default_remote = effective_default_remote_from_remotes(repo, remotes);
                 let default_label = default_remote.as_deref().unwrap_or(common::NONE());
                 lines.push(self.settings_filled_line(settings_text::DEFAULT_REMOTE(), format!(" {default_label} ").as_str(), width, Style::default().fg(self.theme.COLOR_GRASS)));
                 lines.push(Line::default());
@@ -348,9 +349,6 @@ impl App {
                         self.add_settings_selection(lines, SettingsSelectionKind::Remote(remote.name.clone()));
                     }
                 }
-            },
-            Err(error) => {
-                lines.push(self.settings_filled_line(settings_text::REMOTE_ERROR(), format!(" {error} ").as_str(), width, Style::default().fg(self.theme.COLOR_ORANGE)));
             },
         }
     }

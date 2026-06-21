@@ -16,6 +16,7 @@ fn graph_row(index: usize, oid: Oid, summary: &str) -> GraphRow {
         index,
         alias: index as u32 + 1,
         oid,
+        short_oid: oid.to_string()[..9].to_string(),
         summary: summary.to_string(),
         committer_date: String::new(),
         committer_name: String::new(),
@@ -78,6 +79,14 @@ fn transient_merge_closeout_history() -> GraphHistory {
     GraphHistory::from(Vector::from(vec![
         Vector::from(vec![Chunk::commit(10, 100, NONE), Chunk::commit(11, 101, NONE), Chunk::commit(20, 4, 2), Chunk::commit(12, 102, NONE)]),
         Vector::from(vec![Chunk::commit(4, NONE, NONE), Chunk::commit(11, 101, NONE), Chunk::dummy(), Chunk::commit(12, 102, NONE)]),
+    ]))
+}
+
+fn offscreen_context_history() -> GraphHistory {
+    GraphHistory::from(Vector::from(vec![
+        Vector::from(vec![Chunk::commit(10, 100, NONE), Chunk::dummy(), Chunk::dummy()]),
+        Vector::from(vec![Chunk::dummy(), Chunk::commit(2, NONE, NONE), Chunk::dummy()]),
+        Vector::from(vec![Chunk::dummy(), Chunk::dummy(), Chunk::commit(30, 300, NONE)]),
     ]))
 }
 
@@ -247,6 +256,23 @@ fn graph_projection_closes_transient_merge_lane_to_first_parent() {
     assert!(commit_idx < horizontal_idx, "{text:?}");
     assert!(horizontal_idx < branch_up_idx, "{text:?}");
     assert!(!text.contains(graph::BRANCH_UP_RIGHT), "{text:?}");
+}
+
+#[test]
+fn graph_projection_uses_cached_window_end_to_select_history_rows() {
+    let theme = Theme::classic();
+    let symbols = SymbolTheme::main();
+    let rows = vec![graph_row_with_alias(0, 10), graph_row_with_alias(1, 2), graph_row_with_alias(2, 30)];
+    let history = offscreen_context_history();
+
+    let full_window = render_graph_projection(&theme, &symbols, &rows, &history, NONE, 0, 3, true);
+    let visible_only_wrong_context = render_graph_projection(&theme, &symbols, &rows[1..2], &history, NONE, 1, 2, true);
+    let full_visible_text = line_text(&full_window[1]);
+    let sliced_visible_text = line_text(&visible_only_wrong_context[0]);
+
+    assert!(full_visible_text.contains(graph::COMMIT), "{full_visible_text:?}");
+    assert_eq!(full_visible_text.matches(graph::COMMIT).count(), 1, "{full_visible_text:?}");
+    assert_ne!(full_visible_text, sliced_visible_text);
 }
 
 #[test]

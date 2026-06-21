@@ -1823,6 +1823,7 @@ dependencies = [
  "miette",
  "rand 0.10.1",
  "ratatui",
+ "rustc-hash",
  "tempfile",
  "toml",
  "walkdir",
