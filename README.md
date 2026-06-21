@@ -72,11 +72,9 @@ Use it carefully on important repositories. Keep backups, understand what the se
       </a>
     </td>
     <td width="67%" valign="top">
-      Older recording of the `v0.1.12` feature set and some technical breakdown of the core walker
+      Older recording of the `v0.1.12` feature set and some technical breakdown of the core walker. The recording is still useful as a tour. This README and the in-app settings/help view are the current source of truth for shortcuts and behavior.
   </tr>
 </table>
-
-The recording is still useful as a tour. This README and the in-app settings/help view are the current source of truth for shortcuts and behavior.
 
 ## Requirements
 
