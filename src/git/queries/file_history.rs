@@ -1,10 +1,25 @@
+use crate::core::oids::git2_to_gix_oid;
 use crate::git::queries::helpers::FileStatus;
-use git2::{Delta, DiffFindOptions, DiffOptions, Oid, Repository};
+use git2::{Oid, Repository};
 use std::path::Path;
+
+#[cfg(test)]
+use git2::{Delta, DiffFindOptions, DiffOptions};
 
 use gix::object::tree::diff::ChangeDetached;
 
 pub fn changed_file_status_at_commit(repo: &Repository, oid: Oid, path: &str) -> Result<Option<FileStatus>, git2::Error> {
+    let gix_repo = open_gix_repo(repo)?;
+    changed_file_status_at_commit_gix(&gix_repo, git2_to_gix_oid(oid), path)
+}
+
+fn open_gix_repo(repo: &Repository) -> Result<gix::Repository, git2::Error> {
+    let path = repo.workdir().unwrap_or(repo.path());
+    gix::open(path).map_err(|error| git2::Error::from_str(&error.to_string()))
+}
+
+#[cfg(test)]
+fn changed_file_status_at_commit_git2(repo: &Repository, oid: Oid, path: &str) -> Result<Option<FileStatus>, git2::Error> {
     let path = normalize_path(path);
     if path.is_empty() {
         return Ok(None);
@@ -62,6 +77,23 @@ pub(crate) fn changed_file_status_at_commit_gix(repo: &gix::Repository, oid: gix
     Ok(None)
 }
 
+#[cfg(test)]
+fn file_status(delta: Delta) -> FileStatus {
+    match delta {
+        Delta::Added => FileStatus::Added,
+        Delta::Modified => FileStatus::Modified,
+        Delta::Deleted => FileStatus::Deleted,
+        Delta::Renamed => FileStatus::Renamed,
+        _ => FileStatus::Other,
+    }
+}
+
+#[cfg(test)]
+fn delta_matches_path(delta: &git2::DiffDelta<'_>, path: &str) -> bool {
+    let selected = Path::new(path);
+    delta.old_file().path().is_some_and(|old_path| old_path == selected) || delta.new_file().path().is_some_and(|new_path| new_path == selected)
+}
+
 fn file_status_from_gix_change(change: &ChangeDetached, path: &str) -> Option<FileStatus> {
     match change {
         ChangeDetached::Addition { location, .. } if path_matches(location, path) => Some(FileStatus::Added),
@@ -92,21 +124,6 @@ fn path_matches(location: &[u8], path: &str) -> bool {
 
 fn typechange(previous_entry_mode: &gix::object::tree::EntryMode, entry_mode: &gix::object::tree::EntryMode) -> bool {
     previous_entry_mode.is_tree() != entry_mode.is_tree() || previous_entry_mode.is_link() != entry_mode.is_link() || previous_entry_mode.is_commit() != entry_mode.is_commit()
-}
-
-fn delta_matches_path(delta: &git2::DiffDelta<'_>, path: &str) -> bool {
-    let selected = Path::new(path);
-    delta.old_file().path().is_some_and(|old_path| old_path == selected) || delta.new_file().path().is_some_and(|new_path| new_path == selected)
-}
-
-fn file_status(delta: Delta) -> FileStatus {
-    match delta {
-        Delta::Added => FileStatus::Added,
-        Delta::Modified => FileStatus::Modified,
-        Delta::Deleted => FileStatus::Deleted,
-        Delta::Renamed => FileStatus::Renamed,
-        _ => FileStatus::Other,
-    }
 }
 
 fn normalize_path(path: &str) -> String {
