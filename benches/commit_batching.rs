@@ -74,6 +74,14 @@ fn sorted_oid_pages_medium(bencher: Bencher) {
     bencher.counter(divan::counter::ItemsCount::new(rounds.saturating_mul(4))).with_inputs(|| commit_batch_fixture(rounds, amount)).bench_local_values(|fixture| black_box(sorted_oid_pages(fixture)));
 }
 
+#[divan::bench(sample_count = 20, sample_size = 5)]
+fn sorted_oid_pages_large(bencher: Bencher) {
+    let rounds = 160usize;
+    let amount = 256usize;
+
+    bencher.counter(divan::counter::ItemsCount::new(rounds.saturating_mul(4))).with_inputs(|| commit_batch_fixture(rounds, amount)).bench_local_values(|fixture| black_box(sorted_oid_pages(fixture)));
+}
+
 fn walk_all_pages(rounds: usize) -> usize {
     let fixture = graph_service_fixture(rounds);
     let mut walker = Walker::new(fixture.path.display().to_string(), fixture.amount, fixture.hidden_branch_names, fixture.include_head_reflog_roots, fixture.graph_lane_limit).unwrap();
@@ -86,6 +94,13 @@ fn walk_all_pages(rounds: usize) -> usize {
 #[divan::bench(sample_count = 50, sample_size = 10)]
 fn walker_walk_pages_medium(bencher: Bencher) {
     let rounds = 24usize;
+
+    bencher.counter(divan::counter::ItemsCount::new(rounds.saturating_mul(4))).bench(|| black_box(walk_all_pages(rounds)));
+}
+
+#[divan::bench(sample_count = 20, sample_size = 5)]
+fn walker_walk_pages_large(bencher: Bencher) {
+    let rounds = 160usize;
 
     bencher.counter(divan::counter::ItemsCount::new(rounds.saturating_mul(4))).bench(|| black_box(walk_all_pages(rounds)));
 }

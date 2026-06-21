@@ -50,6 +50,10 @@ name = "commit_batching"
 harness = false
 
 [[bench]]
+name = "oid_aliases"
+harness = false
+
+[[bench]]
 name = "file_history_queries"
 harness = false
 
