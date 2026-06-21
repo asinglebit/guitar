@@ -38,6 +38,18 @@ fn aliases_keep_distinct_oids_with_shared_prefix() {
 }
 
 #[test]
+fn aliases_with_unique_fingerprints_do_not_allocate_collision_buckets() {
+    let mut oids = Oids::default();
+
+    for prefix in 1..=16 {
+        oids.get_alias_by_oid(oid_with_prefix(prefix, 10));
+    }
+
+    assert_eq!(oids.oids.len(), 16);
+    assert!(oids.alias_collisions.is_empty());
+}
+
+#[test]
 fn missing_alias_lookup_returns_none() {
     let mut oids = Oids::default();
     let present = oid_with_prefix(1, 10);

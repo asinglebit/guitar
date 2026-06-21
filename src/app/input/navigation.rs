@@ -1662,7 +1662,7 @@ impl App {
                     return;
                 };
                 self.graph.graph_window.as_ref().and_then(|window| window.rows.iter().find(|row| row.oid == parent_oid).map(|row| row.index)).or_else(|| {
-                    let parent_alias = self.oids.aliases.get(&parent_oid).copied()?;
+                    let parent_alias = self.oids.get_existing_alias(parent_oid)?;
                     self.oids.get_sorted_aliases().iter().position(|&alias| alias == parent_alias)
                 })
             };

@@ -183,8 +183,8 @@ fn alias_indices_for_only_returns_requested_aliases() {
     let mut walker = Walker::new(path.display().to_string(), 8, HashSet::new(), false, 20).unwrap();
     while walker.walk() {}
 
-    let first_alias = walker.oids.aliases[&first];
-    let second_alias = walker.oids.aliases[&second];
+    let first_alias = walker.oids.get_existing_alias(first).unwrap();
+    let second_alias = walker.oids.get_existing_alias(second).unwrap();
     let indices = alias_indices_for(&walker, [first_alias, first_alias, second_alias]);
 
     assert_eq!(indices.len(), 2);

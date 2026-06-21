@@ -513,7 +513,7 @@ fn pane_rows(pane: GraphPane, walk_ctx: &Walker) -> Vec<GraphPaneRow> {
                 .head_reflog_entries
                 .iter()
                 .filter_map(|entry| {
-                    let alias = walk_ctx.oids.aliases.get(&entry.new_oid).copied()?;
+                    let alias = walk_ctx.oids.get_existing_alias(entry.new_oid)?;
                     Some((alias, entry))
                 })
                 .collect();
@@ -540,11 +540,11 @@ fn lookup(
         GraphLookupKind::BranchIndex { from, direction } => GraphLookupResult::Index(branch_index(walk_ctx, hidden_branch_names, from, direction)),
         GraphLookupKind::ShaPrefix { prefix } => {
             let oid = walk_ctx.oids.oids.iter().find(|oid| oid.to_string().starts_with(&prefix)).copied();
-            let index = oid.and_then(|oid| walk_ctx.oids.aliases.get(&oid).copied()).and_then(|alias| walk_ctx.oids.get_sorted_aliases().iter().position(|&current| current == alias));
+            let index = oid.and_then(|oid| walk_ctx.oids.get_existing_alias(oid)).and_then(|alias| walk_ctx.oids.get_sorted_aliases().iter().position(|&current| current == alias));
             GraphLookupResult::Index(index)
         },
         GraphLookupKind::Oid { oid } => {
-            let index = walk_ctx.oids.aliases.get(&oid).copied().and_then(|alias| walk_ctx.oids.get_sorted_aliases().iter().position(|&current| current == alias));
+            let index = walk_ctx.oids.get_existing_alias(oid).and_then(|alias| walk_ctx.oids.get_sorted_aliases().iter().position(|&current| current == alias));
             GraphLookupResult::Index(index)
         },
         GraphLookupKind::ParentIndex { index } => GraphLookupResult::Index(parent_index(walk_ctx, index)),
@@ -576,7 +576,7 @@ fn parent_index(walk_ctx: &Walker, index: usize) -> Option<usize> {
     }
 
     let parent_oid = commit_parent_oids_from_gix(&walk_ctx.gix_repo, oid).into_iter().next()?;
-    let parent_alias = walk_ctx.oids.aliases.get(&parent_oid).copied()?;
+    let parent_alias = walk_ctx.oids.get_existing_alias(parent_oid)?;
     walk_ctx.oids.get_sorted_aliases().iter().position(|&alias| alias == parent_alias)
 }
 
@@ -595,7 +595,7 @@ fn child_index(walk_ctx: &Walker, index: usize) -> Option<usize> {
 
 fn head_alias(walk_ctx: &Walker) -> u32 {
     let repo = walk_ctx.repo.borrow();
-    repo.head().ok().and_then(|head| head.target()).and_then(|oid| walk_ctx.oids.aliases.get(&oid).copied()).unwrap_or(NONE)
+    repo.head().ok().and_then(|head| head.target()).and_then(|oid| walk_ctx.oids.get_existing_alias(oid)).unwrap_or(NONE)
 }
 
 fn alias_indices_for<I>(walk_ctx: &Walker, aliases: I) -> HashMap<u32, usize>
@@ -624,7 +624,7 @@ where
 fn latest_reflogs_by_alias(walk_ctx: &Walker) -> HashMap<u32, HeadReflogAliasEntry> {
     let mut latest = HashMap::new();
     for entry in &walk_ctx.head_reflog_entries {
-        let Some(&new_alias) = walk_ctx.oids.aliases.get(&entry.new_oid) else {
+        let Some(new_alias) = walk_ctx.oids.get_existing_alias(entry.new_oid) else {
             continue;
         };
         let alias_entry = alias_reflog_entry(entry, new_alias);
@@ -642,7 +642,7 @@ fn worktrees_for_alias(worktrees: &Worktrees, walk_ctx: &Walker, alias: u32) -> 
         .entries
         .iter()
         .filter_map(|entry| {
-            let entry_alias = entry.head.and_then(|oid| walk_ctx.oids.aliases.get(&oid).copied());
+            let entry_alias = entry.head.and_then(|oid| walk_ctx.oids.get_existing_alias(oid));
             (entry_alias == Some(alias)).then(|| {
                 let mut entry = entry.clone();
                 entry.alias = Some(alias);
