@@ -26,6 +26,46 @@ ratatui = "0.30.0"
 toml = "1.0.1"
 walkdir = "2.5.0"
 
+[dev-dependencies]
+divan = "0.1"
+tempfile = "3"
+
+[[bench]]
+name = "render_graph_projection"
+harness = false
+
+[[bench]]
+name = "buffer_update"
+harness = false
+
+[[bench]]
+name = "graph_service_windows"
+harness = false
+
+[[bench]]
+name = "commit_batching"
+harness = false
+
+[[bench]]
+name = "file_history_queries"
+harness = false
+
+[[bench]]
+name = "git_queries"
+harness = false
+
+[[bench]]
+name = "worktree_queries"
+harness = false
+
+[[bench]]
+name = "submodule_queries"
+harness = false
+
+[[bench]]
+name = "startup"
+harness = false
+
 # Enable more optimization in the release profile at the cost of compile time.
 [profile.release]
 # Compile the entire crate as one unit.
@@ -36,3 +76,8 @@ codegen-units = 1
 lto = "fat"
 # Strip all debugging information from the binary to slightly reduce file size.
 strip = "debuginfo"
+
+[profile.bench]
+inherits = "release"
+debug = 2
+strip = false
