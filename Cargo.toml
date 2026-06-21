@@ -54,6 +54,10 @@ name = "oid_aliases"
 harness = false
 
 [[bench]]
+name = "heatmap"
+harness = false
+
+[[bench]]
 name = "file_history_queries"
 harness = false
 
