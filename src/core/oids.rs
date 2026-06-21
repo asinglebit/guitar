@@ -2,6 +2,19 @@ use crate::core::chunk::NONE;
 use git2::Oid;
 use std::collections::HashMap;
 
+pub fn git2_to_gix_oid(oid: Oid) -> gix::ObjectId {
+    gix::ObjectId::from_bytes_or_panic(oid.as_bytes())
+}
+
+pub fn gix_to_git2_oid(oid: gix::ObjectId) -> Oid {
+    Oid::from_bytes(oid.as_bytes()).unwrap()
+}
+
+pub fn gix_time_to_git2_time(time: gix::date::Time) -> git2::Time {
+    debug_assert_eq!(time.offset % 60, 0);
+    git2::Time::new(time.seconds, time.offset / 60)
+}
+
 // Stores full OIDs once and passes small numeric aliases through UI data structures.
 #[derive(Clone)]
 pub struct Oids {
