@@ -2,6 +2,8 @@ use crate::git::queries::submodules::submodules_if_present;
 use git2::{Error, Repository, ResetType, StatusOptions, Submodule, SubmoduleIgnore, SubmoduleStatus};
 use std::path::{Path, PathBuf};
 
+use crate::git::actions::submodules::stage_submodule_head;
+
 pub fn stage_all(repo: &Repository) -> Result<(), Error> {
     let mut index = repo.index()?;
 
@@ -45,7 +47,7 @@ pub fn stage_all(repo: &Repository) -> Result<(), Error> {
     Ok(())
 }
 
-fn stage_submodule_pointer_change(repo: &Repository, mut submodule: Submodule<'_>) -> Result<(), Error> {
+fn stage_submodule_pointer_change(repo: &Repository, submodule: Submodule<'_>) -> Result<(), Error> {
     let path = submodule.path().to_path_buf();
     let path_text = path.to_string_lossy().to_string();
     let name = submodule.name().unwrap_or(path_text.as_str());
@@ -66,7 +68,8 @@ fn stage_submodule_pointer_change(repo: &Repository, mut submodule: Submodule<'_
         return Ok(());
     }
 
-    submodule.add_to_index(true)
+    let name = submodule.name().unwrap_or(path_text.as_str());
+    stage_submodule_head(repo, name)
 }
 
 fn submodule_status_for(repo: &Repository, name: &str, path: &Path) -> SubmoduleStatus {
