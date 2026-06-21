@@ -364,6 +364,41 @@ fn fetch_fixture_populates_remote_tracking_refs_and_tags() {
 }
 
 #[test]
+fn fetch_fixture_errors_for_missing_remote() {
+    let dir = TestDir::new("fetch-missing-remote");
+    let consumer = init_repo_at(&dir.join("consumer"));
+
+    let handle = fetch_remote(consumer.workdir().unwrap().to_str().unwrap(), "origin", AuthSession::default());
+    match handle.join().unwrap() {
+        NetworkResult::Failure(_) => {},
+        other => panic!("unexpected fetch result: {other:?}"),
+    }
+}
+
+#[test]
+fn fetch_fixture_errors_when_remote_path_disappears() {
+    let dir = TestDir::new("fetch-missing-path");
+    let source = init_repo_at(&dir.join("source"));
+    let commit = commit_file(&source, "file.txt", "source\n", "source");
+    create_branch(&source, "feature", commit);
+
+    let remote_path = dir.join("remote.git");
+    init_bare_repo_at(&remote_path);
+    add_remote_path(&source, "origin", &remote_path);
+    seed_remote(&source, "origin", &["refs/heads/feature:refs/heads/feature"]);
+
+    let consumer = init_repo_at(&dir.join("consumer"));
+    add_remote_path(&consumer, "origin", &remote_path);
+    fs::remove_dir_all(&remote_path).unwrap();
+
+    let handle = fetch_remote(consumer.workdir().unwrap().to_str().unwrap(), "origin", AuthSession::default());
+    match handle.join().unwrap() {
+        NetworkResult::Failure(_) => {},
+        other => panic!("unexpected fetch result: {other:?}"),
+    }
+}
+
+#[test]
 fn delete_remote_branch_fixture_removes_remote_tracking_refs() {
     let dir = TestDir::new("delete-remote-branch");
     let source = init_repo_at(&dir.join("source"));
