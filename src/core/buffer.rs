@@ -1,9 +1,10 @@
 use crate::core::chunk::{Chunk, LaneRef, NONE};
 use im::{OrdMap, Vector};
+use smallvec::SmallVec;
 
 #[derive(Default, Clone)]
 pub struct Delta {
-    pub ops: Vec<DeltaOp>,
+    pub ops: SmallVec<[DeltaOp; 2]>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
