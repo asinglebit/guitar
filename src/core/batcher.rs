@@ -1,4 +1,5 @@
 use git2::{BranchType, Oid, Repository};
+use gix::traverse::commit::ParentIds;
 use im::HashSet;
 use std::cell::RefCell;
 use std::collections::HashSet as StdHashSet;
@@ -6,6 +7,12 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 type CommitWalk = Box<dyn Iterator<Item = Result<gix::traverse::commit::Info, gix::traverse::commit::simple::Error>>>;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WalkCommit {
+    pub oid: Oid,
+    pub parent_ids: ParentIds,
+}
 
 // Own a lazy gitoxide commit cursor so history pages don't precompute the entire graph.
 pub struct Batcher {
@@ -28,14 +35,14 @@ impl Batcher {
     }
 
     // Pull the next page, dropping commits gitoxide cannot resolve.
-    pub fn next(&mut self, count: usize) -> Vec<Oid> {
+    pub fn next(&mut self, count: usize) -> Vec<WalkCommit> {
         let mut page = Vec::with_capacity(count);
         self.next_into(count, &mut page);
         page
     }
 
     // Pull the next page into an existing output buffer to avoid a temporary page allocation.
-    pub fn next_into(&mut self, count: usize, out: &mut Vec<Oid>) -> usize {
+    pub fn next_into(&mut self, count: usize, out: &mut Vec<WalkCommit>) -> usize {
         let before = out.len();
         let Some(walk) = self.walk.as_mut() else {
             return 0;
@@ -48,7 +55,7 @@ impl Batcher {
             };
 
             let Ok(info) = result else { continue };
-            out.push(Oid::from_bytes(info.id.as_slice()).unwrap());
+            out.push(WalkCommit { oid: Oid::from_bytes(info.id.as_slice()).unwrap(), parent_ids: info.parent_ids });
         }
         out.len() - before
     }
@@ -135,15 +142,19 @@ mod tests {
         let first = commit(&repo.borrow(), "first.txt", "first");
         let second = commit(&repo.borrow(), "second.txt", "second");
         let third = commit(&repo.borrow(), "third.txt", "third");
-        let sentinel = Oid::zero();
+        let sentinel = WalkCommit { oid: Oid::zero(), parent_ids: ParentIds::new() };
         let mut batcher = Batcher::new(repo.clone(), path.clone(), &HashSet::new(), &[third]).unwrap();
-        let mut out = vec![sentinel];
+        let mut out = vec![sentinel.clone()];
 
         assert_eq!(batcher.next_into(2, &mut out), 2);
         assert_eq!(batcher.next_into(2, &mut out), 1);
         assert_eq!(batcher.next_into(2, &mut out), 0);
 
-        assert_eq!(out, vec![sentinel, third, second, first]);
+        let oids = out.iter().map(|commit| commit.oid).collect::<Vec<_>>();
+        assert_eq!(oids, vec![sentinel.oid, third, second, first]);
+        assert_eq!(out[1].parent_ids.iter().map(|id| Oid::from_bytes(id.as_slice()).unwrap()).collect::<Vec<_>>(), vec![second]);
+        assert_eq!(out[2].parent_ids.iter().map(|id| Oid::from_bytes(id.as_slice()).unwrap()).collect::<Vec<_>>(), vec![first]);
+        assert!(out[3].parent_ids.is_empty());
     }
 
     #[test]
@@ -153,13 +164,13 @@ mod tests {
         let second = commit(&repo.borrow(), "second.txt", "second");
         let mut batcher = Batcher::new(repo.clone(), path.clone(), &HashSet::new(), &[second]).unwrap();
 
-        assert_eq!(batcher.next(10), vec![second, first]);
+        assert_eq!(batcher.next(10).iter().map(|commit| commit.oid).collect::<Vec<_>>(), vec![second, first]);
         assert!(batcher.next(10).is_empty());
         assert!(batcher.next(10).is_empty());
 
         let third = commit(&repo.borrow(), "third.txt", "third");
         batcher.reset(repo, &HashSet::new(), &[third]).unwrap();
 
-        assert_eq!(batcher.next(10), vec![third, second, first]);
+        assert_eq!(batcher.next(10).iter().map(|commit| commit.oid).collect::<Vec<_>>(), vec![third, second, first]);
     }
 }

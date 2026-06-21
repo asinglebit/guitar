@@ -1,7 +1,7 @@
 use crate::git::queries::{commits::get_stashed_commits, reflogs::HeadReflogEntry};
 use crate::{
     core::{
-        batcher::Batcher,
+        batcher::{Batcher, WalkCommit},
         buffer::Buffer,
         chunk::{Chunk, LaneRef, NONE},
         oids::{Oids, git2_to_gix_oid, gix_to_git2_oid},
@@ -48,7 +48,7 @@ pub struct Walker {
     stash_aliases: StdHashSet<u32>,
     reflog_aliases: StdHashSet<u32>,
     stash_parent_aliases: Vec<(u32, u32)>,
-    oid_batch: Vec<git2::Oid>,
+    oid_batch: Vec<WalkCommit>,
     sorted_batch: Vec<u32>,
 
     // Number of commits requested per walk iteration.
@@ -161,21 +161,25 @@ impl Walker {
         // Hold one mutable buffer borrow while the page updates topology.
         let mut buffer = self.buffer.borrow_mut();
 
+        let mut walked_commits = self.oid_batch.iter().peekable();
+
         for &alias in self.sorted_batch.iter() {
             let mut merger_alias: u32 = NONE;
             let mut transient_lane: Option<usize> = None;
-            let oid = self.oids.get_oid_by_alias(alias);
-            let commit = self.gix_repo.find_commit(git2_to_gix_oid(*oid)).unwrap();
 
-            // Only two parents are modeled because the renderer draws one merge edge.
-            let mut parents_iter = commit.parent_ids();
-            let parent_a_oid = parents_iter.next().map(|parent| gix_to_git2_oid(parent.detach()));
-            let parent_b_oid = parents_iter.next().map(|parent| gix_to_git2_oid(parent.detach()));
-
-            // Stashes should point only to their base commit, not the index/worktree parents.
             let (parent_a, parent_b) = if self.stash_aliases.contains(&alias) {
-                (parent_a_oid.map(|p| self.oids.get_alias_by_oid(p)).unwrap_or(NONE), NONE)
+                if walked_commits.peek().and_then(|commit| self.oids.get_existing_alias(commit.oid)) == Some(alias) {
+                    walked_commits.next();
+                }
+                let parent = self.stash_parent_aliases.iter().find_map(|&(stash_alias, parent_alias)| (stash_alias == alias).then_some(parent_alias)).unwrap_or(NONE);
+                (parent, NONE)
             } else {
+                let commit = walked_commits.next().expect("walked commit metadata matches sorted aliases");
+                debug_assert_eq!(self.oids.get_existing_alias(commit.oid), Some(alias));
+
+                // Only two parents are modeled because the renderer draws one merge edge.
+                let parent_a_oid = commit.parent_ids.first().map(|parent| gix_to_git2_oid(*parent));
+                let parent_b_oid = commit.parent_ids.get(1).map(|parent| gix_to_git2_oid(*parent));
                 (parent_a_oid.map(|p| self.oids.get_alias_by_oid(p)).unwrap_or(NONE), parent_b_oid.map(|p| self.oids.get_alias_by_oid(p)).unwrap_or(NONE))
             };
 

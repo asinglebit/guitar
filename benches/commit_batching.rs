@@ -3,7 +3,11 @@ mod fixtures;
 use divan::{Bencher, black_box};
 use fixtures::graph_service_fixture;
 use guitar::{
-    core::{batcher::Batcher, oids::Oids, walker::Walker},
+    core::{
+        batcher::{Batcher, WalkCommit},
+        oids::Oids,
+        walker::Walker,
+    },
     git::queries::commits::get_sorted_oids,
 };
 use std::{cell::RefCell, rc::Rc};
@@ -15,7 +19,7 @@ fn main() {
 struct CommitBatchFixture {
     batcher: Batcher,
     _repo: Rc<RefCell<git2::Repository>>,
-    scratch: Vec<git2::Oid>,
+    scratch: Vec<WalkCommit>,
     amount: usize,
 }
 
