@@ -314,6 +314,10 @@ pub fn classify_remote_url(url: &str) -> RemoteAuthInfo {
 
 pub fn default_ssh_private_key() -> Option<PathBuf> {
     let home = dirs::home_dir()?;
+    default_ssh_private_key_in(&home)
+}
+
+fn default_ssh_private_key_in(home: &Path) -> Option<PathBuf> {
     ["id_ed25519", "id_ecdsa", "id_rsa"].into_iter().map(|name| home.join(".ssh").join(name)).find(|path| path.is_file())
 }
 

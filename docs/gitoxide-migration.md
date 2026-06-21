@@ -28,7 +28,7 @@ The following surfaces stay on the current backend until their parity fixtures a
 - sequencer operations
 - linked worktrees
 - submodules
-- network callbacks
+- network callbacks and auth prompts
 
 Linked worktrees are especially sensitive because the current app depends on shared common-dir behavior. If gitoxide parity is incomplete there, keep that seam on libgit2 in phase 1.
 
@@ -52,6 +52,7 @@ gitoxide's public feature list covers worktree checkout and worktree stream supp
 Checkout and reset details are tracked in [docs/gitoxide-checkout-reset.md](gitoxide-checkout-reset.md).
 Sequencer details are tracked in [docs/gitoxide-sequencer.md](gitoxide-sequencer.md).
 Status and diff details are tracked in [docs/gitoxide-status-diff.md](gitoxide-status-diff.md).
+Network and auth details are tracked in [docs/gitoxide-network.md](gitoxide-network.md).
 
 ## Test Gate
 

@@ -3,8 +3,8 @@ use crate::core::chunk::NONE;
 use crate::core::reflogs::HeadReflogAliasEntry;
 use crate::git::actions::cherrypicking::{CherrypickOutcome, start_cherrypick};
 use crate::git::actions::merging::{MergeOutcome, start_merge};
-use crate::git::actions::remotes::set_default_remote;
 use crate::git::actions::rebasing::{RebaseOutcome, start_rebase};
+use crate::git::actions::remotes::set_default_remote;
 use crate::git::actions::reverting::{RevertOutcome, start_revert};
 use crate::git::auth::{AuthChallenge, AuthProtocol};
 use crate::git::queries::diffs::get_filenames_diff_at_workdir;
@@ -569,6 +569,53 @@ fn auth_required_network_result_opens_auth_modal() {
 }
 
 #[test]
+fn auth_required_ssh_network_result_opens_auth_modal_on_secret_field() {
+    let challenge = AuthChallenge {
+        url: "ssh://git@github.com/asinglebit/guitar.git".to_string(),
+        username: Some("git".to_string()),
+        protocol: AuthProtocol::Ssh,
+        operation: "Fetch".to_string(),
+        key_path: Some(PathBuf::from("/tmp/id_ed25519")),
+    };
+    let mut app = App {
+        pending_network_request: Some(NetworkRequest::Fetch { repo_path: ".".to_string(), remote_name: "origin".to_string() }),
+        viewport: Viewport::Graph,
+        focus: Focus::ModalNetworkProgress,
+        ..Default::default()
+    };
+
+    app.handle_network_result(NetworkResult::AuthRequired(AuthRequired { challenge: challenge.clone(), rejected: Vec::new() }));
+
+    assert_eq!(app.focus, Focus::ModalAuth);
+    assert_eq!(app.pending_auth_prompt, Some(challenge));
+    assert_eq!(app.auth_username_input.value(), "git");
+    assert_eq!(app.auth_input_field, AuthInputField::Secret);
+}
+
+#[test]
+fn ssh_auth_prompt_keeps_secret_field_when_toggled() {
+    let challenge = AuthChallenge {
+        url: "ssh://git@github.com/asinglebit/guitar.git".to_string(),
+        username: Some("git".to_string()),
+        protocol: AuthProtocol::Ssh,
+        operation: "Fetch".to_string(),
+        key_path: Some(PathBuf::from("/tmp/id_ed25519")),
+    };
+    let mut app = App {
+        pending_network_request: Some(NetworkRequest::Fetch { repo_path: ".".to_string(), remote_name: "origin".to_string() }),
+        viewport: Viewport::Graph,
+        focus: Focus::ModalNetworkProgress,
+        ..Default::default()
+    };
+
+    app.handle_network_result(NetworkResult::AuthRequired(AuthRequired { challenge, rejected: Vec::new() }));
+    app.auth_input_field = AuthInputField::Username;
+    app.handle_key_event(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE));
+
+    assert_eq!(app.auth_input_field, AuthInputField::Secret);
+}
+
+#[test]
 fn submitting_https_auth_stores_session_secret_and_retries_request() {
     let challenge = AuthChallenge { url: "https://github.com/asinglebit/guitar.git".to_string(), username: None, protocol: AuthProtocol::Https, operation: "Fetch".to_string(), key_path: None };
     let mut app = App {
@@ -588,6 +635,33 @@ fn submitting_https_auth_stores_session_secret_and_retries_request() {
     let handle = app.network_handle.take().expect("retry should start a worker");
     let _ = handle.join();
     assert!(app.auth_session.has_secret_for(&challenge, Some("octo")));
+}
+
+#[test]
+fn submitting_ssh_auth_stores_session_secret_and_retries_request() {
+    let challenge = AuthChallenge {
+        url: "ssh://git@github.com/asinglebit/guitar.git".to_string(),
+        username: Some("git".to_string()),
+        protocol: AuthProtocol::Ssh,
+        operation: "Fetch".to_string(),
+        key_path: Some(PathBuf::from("/tmp/id_ed25519")),
+    };
+    let mut app = App {
+        pending_network_request: Some(NetworkRequest::Fetch { repo_path: "/tmp/missing".to_string(), remote_name: "origin".to_string() }),
+        pending_auth_prompt: Some(challenge.clone()),
+        focus: Focus::ModalAuth,
+        ..Default::default()
+    };
+    app.auth_secret_input.set_value("passphrase");
+
+    app.submit_auth_prompt();
+
+    assert_eq!(app.pending_auth_prompt, None);
+    assert_eq!(app.network_auth_attempts, 1);
+    assert_eq!(app.focus, Focus::ModalNetworkProgress);
+    let handle = app.network_handle.take().expect("retry should start a worker");
+    let _ = handle.join();
+    assert!(app.auth_session.has_secret_for(&challenge, Some("git")));
 }
 
 #[test]
