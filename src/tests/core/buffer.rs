@@ -119,6 +119,24 @@ fn capped_buffer_never_returns_snapshots_wider_than_lane_limit() {
 }
 
 #[test]
+fn capped_buffer_records_overflow_as_single_truncate_delta() {
+    let mut buffer = Buffer::with_lane_limit(3);
+
+    for alias in 1..=5 {
+        buffer.update(Chunk::commit(alias, 100 + alias, NONE));
+    }
+
+    assert!(buffer.delta.ops.iter().any(|op| matches!(op, DeltaOp::Truncate { len: 3 })));
+    assert!(!buffer.delta.ops.iter().any(|op| matches!(op, DeltaOp::Remove { index } if *index >= 3)));
+
+    buffer.backup();
+    let history = buffer.window(1, buffer.deltas.len());
+
+    assert!(history.iter().all(|snapshot| snapshot.len() <= 3));
+    assert_eq!(history.back().unwrap().len(), 3);
+}
+
+#[test]
 fn capped_buffer_keeps_normal_last_lane_palette_eligible_without_overflow() {
     let mut buffer = Buffer::with_lane_limit(5);
 

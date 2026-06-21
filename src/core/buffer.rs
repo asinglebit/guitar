@@ -11,6 +11,7 @@ pub enum DeltaOp {
     Insert { index: usize, item: Chunk },
     Remove { index: usize },
     Replace { index: usize, new: Chunk },
+    Truncate { len: usize },
 }
 
 #[derive(Default, Clone, Debug, PartialEq, Eq)]
@@ -208,10 +209,9 @@ impl Buffer {
         }
 
         while self.curr.len() > limit {
-            let idx = self.curr.len() - 1;
             self.curr.pop_back();
-            self.delta.ops.push(DeltaOp::Remove { index: idx });
         }
+        self.delta.ops.push(DeltaOp::Truncate { len: limit });
 
         self.purge_unstored_mergers();
         self.transient_lanes.retain(|lane_idx| *lane_idx < limit && (*lane_idx + 1 != limit || !self.curr.get(*lane_idx).is_some_and(|chunk| chunk.is_flattened)));
@@ -270,6 +270,11 @@ impl Buffer {
                     },
                     DeltaOp::Replace { index, new } => {
                         curr[*index] = *new;
+                    },
+                    DeltaOp::Truncate { len } => {
+                        while curr.len() > *len {
+                            curr.pop_back();
+                        }
                     },
                 }
             }
