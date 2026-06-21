@@ -3,9 +3,10 @@ use crate::{
     git::repository::open,
     helpers::localisation::network,
 };
-use git2::{FetchOptions, RemoteCallbacks, Repository, SubmoduleUpdateOptions};
+use git2::Repository;
 use gix::bstr::ByteSlice;
-use std::{fs::OpenOptions, io::Write, thread};
+use gix::sec::trust::DefaultForLevel;
+use std::{fs::OpenOptions, io::Write, sync::atomic::AtomicBool, thread};
 
 fn open_gix_repo(repo: &Repository) -> Result<gix::Repository, git2::Error> {
     let path = repo.workdir().unwrap_or(repo.path());
@@ -75,6 +76,67 @@ fn sync_checked_out_submodule_url(submodule: &gix::Repository, url: &gix::Url) -
     write_local_config(&config)
 }
 
+fn open_or_init_submodule_repo(submodule: &gix::Submodule<'_>) -> Result<(gix::Repository, bool), git2::Error> {
+    if let Some(repo) = submodule.open().map_err(|error| git2::Error::from_str(&error.to_string()))? {
+        return Ok((repo, false));
+    }
+
+    let workdir = submodule.work_dir().map_err(|error| git2::Error::from_str(&error.to_string()))?;
+    let mut create_opts = gix::create::Options::default();
+    create_opts.destination_must_be_empty = true;
+    let repo = gix::ThreadSafeRepository::init_opts(workdir, gix::create::Kind::WithWorktree, create_opts, gix::open::Options::default_for_level(gix::sec::Trust::Full))
+        .map_err(|error| git2::Error::from_str(&error.to_string()))?
+        .to_thread_local();
+    Ok((repo, true))
+}
+
+fn configure_submodule_remote<'repo>(repo: &'repo gix::Repository, url: gix::Url) -> Result<gix::Remote<'repo>, git2::Error> {
+    let mut remote = repo.remote_at_without_url_rewrite(url).map_err(|error| git2::Error::from_str(&error.to_string()))?;
+    remote = remote.with_fetch_tags(gix::remote::fetch::Tags::All);
+    remote = remote.with_refspecs(Some("+refs/heads/*:refs/remotes/origin/*"), gix::remote::Direction::Fetch).map_err(|error| git2::Error::from_str(&error.to_string()))?;
+
+    let config_path = repo.config_snapshot().plumbing().meta().path.clone().ok_or_else(|| git2::Error::from_str("Repository configuration path is missing"))?;
+    let mut config = load_local_config(config_path)?;
+    remote.save_as_to("origin", &mut config).map_err(|error| git2::Error::from_str(&error.to_string()))?;
+    write_local_config(&config)?;
+    Ok(remote)
+}
+
+fn checkout_submodule_commit(repo: &mut gix::Repository, target_oid: gix::ObjectId, newly_initialized: bool) -> Result<(), git2::Error> {
+    let tree_id = {
+        let commit = repo.find_commit(target_oid).map_err(|error| git2::Error::from_str(&error.to_string()))?;
+        commit.tree().map_err(|error| git2::Error::from_str(&error.to_string()))?.id
+    };
+    let mut index = repo.index_from_tree(&tree_id).map_err(|error| git2::Error::from_str(&error.to_string()))?;
+    let mut options = repo.checkout_options(gix_worktree::stack::state::attributes::Source::IdMapping).map_err(|error| git2::Error::from_str(&error.to_string()))?;
+    options.destination_is_initially_empty = newly_initialized;
+
+    let workdir = repo.workdir().ok_or_else(|| git2::Error::from_str("Submodule has no working directory"))?;
+    let should_interrupt = AtomicBool::new(false);
+    let mut files = gix::progress::Discard;
+    let mut bytes = gix::progress::Discard;
+    gix::worktree::state::checkout(
+        &mut index,
+        workdir,
+        repo.objects.clone().into_arc().map_err(|error| git2::Error::from_str(&error.to_string()))?,
+        &mut files,
+        &mut bytes,
+        &should_interrupt,
+        options,
+    )
+    .map_err(|error| git2::Error::from_str(&error.to_string()))?;
+    index.write(Default::default()).map_err(|error| git2::Error::from_str(&error.to_string()))?;
+
+    let head: gix::refs::FullName = "HEAD".try_into().expect("valid");
+    repo.edit_reference(gix::refs::transaction::RefEdit {
+        change: gix::refs::transaction::Change::Update { log: Default::default(), expected: gix::refs::transaction::PreviousValue::Any, new: gix::refs::Target::Object(target_oid) },
+        name: head,
+        deref: false,
+    })
+    .map_err(|error| git2::Error::from_str(&error.to_string()))?;
+    Ok(())
+}
+
 pub fn sync_submodule(repo: &Repository, name: &str) -> Result<(), git2::Error> {
     let gix_repo = open_gix_repo(repo)?;
     let Some(submodule) = find_submodule(&gix_repo, name)? else {
@@ -135,20 +197,33 @@ pub fn update_submodule(repo_path: &str, name: &str, auth_session: AuthSession) 
         let attempt = AuthAttempt::new(auth_session, network::UPDATE_SUBMODULE());
         let result = (|| -> Result<(), git2::Error> {
             let repo = open(&repo_path)?;
-            let config = repo.config()?;
-            let mut submodule = repo.find_submodule(&name)?;
+            let gix_repo = open_gix_repo(&repo)?;
+            let Some(submodule) = find_submodule(&gix_repo, &name)? else {
+                return Err(git2::Error::from_str("Submodule not found"));
+            };
+            let target_oid = submodule.index_id().map_err(|error| git2::Error::from_str(&error.to_string()))?.ok_or_else(|| git2::Error::from_str("Submodule is not initialized"))?;
+            let url = submodule_url_from_modules(&gix_repo, &submodule)?;
 
-            let mut callbacks = RemoteCallbacks::new();
-            let auth = attempt.clone();
-            callbacks.credentials(move |url, username_from_url, allowed| auth.credentials(&config, url, username_from_url, allowed));
+            {
+                let (repo, newly_initialized) = open_or_init_submodule_repo(&submodule)?;
+                let mut repo = repo;
+                repo.committer_or_set_generic_fallback().map_err(|error| git2::Error::from_str(&error.to_string()))?;
 
-            let mut fetch_options = FetchOptions::new();
-            fetch_options.remote_callbacks(callbacks);
+                {
+                    let remote = configure_submodule_remote(&repo, url)?;
+                    let mut connection = remote.connect(gix::remote::Direction::Fetch).map_err(|error| git2::Error::from_str(&error.to_string()))?;
+                    let auth = attempt.clone();
+                    connection.set_credentials(move |action| auth.gix_credentials(action));
 
-            let mut options = SubmoduleUpdateOptions::new();
-            options.fetch(fetch_options);
+                    let mut progress = gix::progress::Discard;
+                    let pending_pack = connection.prepare_fetch(&mut progress, Default::default()).map_err(|error| git2::Error::from_str(&error.to_string()))?;
+                    let should_interrupt = AtomicBool::new(false);
+                    pending_pack.receive(&mut progress, &should_interrupt).map_err(|error| git2::Error::from_str(&error.to_string()))?;
+                }
 
-            submodule.update(true, Some(&mut options))
+                checkout_submodule_commit(&mut repo, target_oid, newly_initialized)?;
+            }
+            Ok(())
         })();
 
         network_result(network::UPDATE_SUBMODULE(), &attempt, result)
