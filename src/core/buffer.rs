@@ -1,6 +1,8 @@
 use crate::core::chunk::{Chunk, LaneRef, NONE};
 use im::{OrdMap, Vector};
 
+const DELTA_CHUNK_SIZE: usize = 8_192;
+
 #[derive(Default, Clone)]
 pub struct Delta {
     pub ops: DeltaOps,
@@ -72,6 +74,68 @@ impl<'a> Iterator for DeltaOpsIter<'a> {
     }
 }
 
+#[derive(Clone, Default)]
+pub struct DeltaLog {
+    chunks: Vec<Vec<Delta>>,
+    len: usize,
+}
+
+impl DeltaLog {
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    #[cfg(test)]
+    pub fn capacity(&self) -> usize {
+        self.chunks.iter().map(Vec::capacity).sum()
+    }
+
+    fn push(&mut self, delta: Delta) {
+        if self.chunks.last().is_none_or(|chunk| chunk.len() == DELTA_CHUNK_SIZE) {
+            self.chunks.push(Vec::with_capacity(DELTA_CHUNK_SIZE));
+        }
+
+        self.chunks.last_mut().expect("delta log has a writable chunk").push(delta);
+        self.len += 1;
+    }
+
+    fn iter_range(&self, start: usize, end: usize) -> DeltaLogRangeIter<'_> {
+        DeltaLogRangeIter { log: self, next: start.min(self.len), end: end.min(self.len) }
+    }
+
+    fn shrink_to_fit(&mut self) {
+        for chunk in &mut self.chunks {
+            for delta in chunk.iter_mut() {
+                delta.ops.shrink_to_fit();
+            }
+            chunk.shrink_to_fit();
+        }
+        self.chunks.shrink_to_fit();
+    }
+}
+
+struct DeltaLogRangeIter<'a> {
+    log: &'a DeltaLog,
+    next: usize,
+    end: usize,
+}
+
+impl<'a> Iterator for DeltaLogRangeIter<'a> {
+    type Item = &'a Delta;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.next >= self.end {
+            return None;
+        }
+
+        let chunk_idx = self.next / DELTA_CHUNK_SIZE;
+        let delta_idx = self.next % DELTA_CHUNK_SIZE;
+        self.next += 1;
+
+        self.log.chunks.get(chunk_idx).and_then(|chunk| chunk.get(delta_idx))
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct UpdateOutcome {
     pub lane: LaneRef,
@@ -81,8 +145,8 @@ pub struct UpdateOutcome {
 #[derive(Default, Clone)]
 pub struct Buffer {
     pub curr: Vector<Chunk>,
-    // Deltas are append-only; a plain Vec avoids persistent-vector node overhead.
-    pub deltas: Vec<Delta>,
+    // Deltas are append-only; chunking avoids giant realloc/copy spikes while loading huge repos.
+    pub deltas: DeltaLog,
     pub checkpoints: OrdMap<usize, Vector<Chunk>>,
     pub delta: Delta,
     mergers: Vec<u32>,
@@ -255,9 +319,6 @@ impl Buffer {
 
     pub fn shrink_to_fit(&mut self) {
         self.deltas.shrink_to_fit();
-        for delta in &mut self.deltas {
-            delta.ops.shrink_to_fit();
-        }
         self.delta.ops.shrink_to_fit();
         self.mergers.shrink_to_fit();
         self.transient_lanes.shrink_to_fit();
@@ -275,7 +336,7 @@ impl Buffer {
         let begin = checkpoint_idx.map_or(0, |idx| idx + 1);
         let end = end.min(self.deltas.len());
 
-        for delta in self.deltas.iter().skip(begin).take(end - begin) {
+        for delta in self.deltas.iter_range(begin, end) {
             for op in delta.ops.iter() {
                 match op {
                     DeltaOp::Insert { index, item } => {

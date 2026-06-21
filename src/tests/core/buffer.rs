@@ -152,7 +152,6 @@ fn capped_buffer_keeps_normal_last_lane_palette_eligible_without_overflow() {
 #[test]
 fn shrink_to_fit_releases_overreserved_delta_capacity() {
     let mut buffer = Buffer::default();
-    buffer.deltas.reserve(10_000);
 
     for alias in 1..=16 {
         buffer.update(Chunk::commit(alias, NONE, NONE));
