@@ -42,6 +42,7 @@ made with ♡
 - [Persistence](#persistence)
 - [Configuration Files](#configuration-files)
 - [Development](#development)
+- [Graph Internals](GRAPH.MD)
 - [Known Limitations](#known-limitations)
 - [Roadmap](#roadmap)
 - [Screenshots](#screenshots)
@@ -1266,6 +1267,8 @@ Important source areas:
 - `src/git/queries/`: repository reads, diffs, commits, reflogs, worktrees, submodules.
 - `src/git/auth.rs`: network credential classification, prompting, and session cache.
 - `src/helpers/`: keymaps, layout persistence, themes, recent repos, symbols, text, colors.
+
+Graph internals are documented separately in [GRAPH.MD](GRAPH.MD), including lane snapshots, compressed lanes, walker/buffer behavior, and renderer alignment.
 
 ## Known Limitations
 

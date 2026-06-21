@@ -1,5 +1,5 @@
 use crate::core::{
-    graph_service::{GraphHistory, GraphRow},
+    graph_service::{GraphHistory, GraphRow, GraphSnapshot},
     layers::LayersContext,
 };
 use crate::helpers::text::truncate_with_ellipsis;
@@ -54,15 +54,18 @@ pub fn render_graph_projection(
             return vec![Line::default()];
         }
         let delta = (history.len() + global_idx).saturating_sub(end);
-        let prev = if delta == 0 { None } else { history.get(delta - 1) };
-        let last = match history.get(delta) {
+        let prev_snapshot = if delta == 0 { None } else { history.get(delta - 1) };
+        let snapshot = match history.get(delta) {
             Some(snapshot) => snapshot,
             None => {
                 lines.push(Line::default());
                 continue;
             },
         };
-        let next = history.get(delta + 1);
+        let next_snapshot = history.get(delta + 1);
+        let prev = prev_snapshot.map(|snapshot| &snapshot.lanes);
+        let last = &snapshot.lanes;
+        let next = next_snapshot.map(|snapshot| &snapshot.lanes);
         layers.reserve(last.len().saturating_mul(2));
         let flattened_lanes = flattened_lanes(last, prev);
         let closeout_flattened_lanes = flattened_lanes_around_closeout(last, prev, next);
@@ -75,13 +78,14 @@ pub fn render_graph_projection(
 
         let current_row_lane_idx = last.iter().position(|chunk| !chunk.is_dummy() && chunk.alias == row.alias);
         let mut branch_up_bridges: Vec<(usize, usize)> = Vec::new();
-        let compressed_parent_bridges = current_row_lane_idx.map(|row_lane_idx| compressed_parent_bridges_to_active_lanes(prev, last, &flattened_lanes, row.alias, row_lane_idx)).unwrap_or_default();
+        let compressed_parent_bridges =
+            current_row_lane_idx.map(|row_lane_idx| compressed_parent_bridges_to_active_lanes(prev_snapshot, snapshot, &flattened_lanes, row.alias, row_lane_idx)).unwrap_or_default();
         let mut branching_lanes: Vec<usize> = Vec::new();
         for (lane_idx, chunk) in last.iter().enumerate() {
             if chunk.is_dummy()
-                && let Some(prev_snapshot) = prev
-                && let Some(prev) = prev_snapshot.get(lane_idx)
-                && dummy_lane_closes_to_row(prev, row.alias)
+                && let Some(previous) = prev
+                && previous.get(lane_idx).is_some()
+                && dummy_lane_closes_to_row(prev_snapshot, lane_idx, row.alias)
             {
                 branching_lanes.push(lane_idx);
                 continue;
@@ -116,10 +120,10 @@ pub fn render_graph_projection(
             }
 
             if chunk.is_dummy() {
-                if let Some(prev_snapshot) = prev {
-                    match prev_snapshot.get(lane_idx) {
-                        Some(prev) => {
-                            if dummy_lane_closes_to_row(prev, row.alias) {
+                if let Some(previous) = prev {
+                    match previous.get(lane_idx) {
+                        Some(_) => {
+                            if dummy_lane_closes_to_row(prev_snapshot, lane_idx, row.alias) {
                                 layers.commit(&graph.empty, lane_idx);
                                 layers.commit(&graph.empty, lane_idx);
                                 layers.pipe(branch_up_symbol(graph, lane_idx, current_row_lane_idx), lane_idx);
@@ -151,8 +155,8 @@ pub fn render_graph_projection(
                 }
             } else if row.alias == chunk.alias {
                 is_commit_found = true;
-                let is_two_parents = chunk.parent_a != NONE && chunk.parent_b != NONE;
-                if is_two_parents && !row.has_any_branch {
+                let is_two_parents = !chunk.is_flattened && chunk.parent_a != NONE && chunk.parent_b != NONE;
+                if row.is_merge && !row.has_any_branch {
                     layers.commit(&graph.merge, lane_idx);
                 } else if row.has_any_branch {
                     layers.commit(&graph.commit_branch, lane_idx);
@@ -172,8 +176,8 @@ pub fn render_graph_projection(
                 if is_two_parents {
                     let mut is_merger_found = false;
                     let mut merger_idx: usize = 0;
-                    for (chunk_nested_idx, chunk_nested) in last.iter().enumerate() {
-                        if chunk_nested_idx != lane_idx && chunk_nested.has_parent(chunk.parent_b) {
+                    for (chunk_nested_idx, _chunk_nested) in last.iter().enumerate() {
+                        if chunk_nested_idx != lane_idx && lane_carries_parent(snapshot, chunk_nested_idx, chunk.parent_b) {
                             is_merger_found = true;
                             break;
                         }
@@ -204,8 +208,8 @@ pub fn render_graph_projection(
                             } else if !is_merger_found {
                                 layers.merge(&graph.empty, merger_idx);
                                 layers.merge(&graph.empty, merger_idx);
-                            } else if let Some(parent) = carried_merge_parent(chunk, chunk_nested) {
-                                let is_merge_start = chunk_nested_idx == merger_idx || previous_scanline_carries_parent(prev, chunk_nested_idx, parent);
+                            } else if let Some(parent) = carried_merge_parent(snapshot, chunk, chunk_nested_idx) {
+                                let is_merge_start = chunk_nested_idx == merger_idx || previous_scanline_carries_parent(prev_snapshot, chunk_nested_idx, parent);
                                 let symbol = if is_merge_start && !is_merge_right_from_drawn {
                                     is_merge_right_from_drawn = true;
                                     &graph.merge_right_from
@@ -233,7 +237,7 @@ pub fn render_graph_projection(
                                 layers.merge(&graph.empty, merger_idx);
                             }
                         } else if is_merger_found && !is_merged_before {
-                            if carried_merge_parent(chunk, chunk_nested).is_some() {
+                            if carried_merge_parent(snapshot, chunk, chunk_nested_idx).is_some() {
                                 layers.merge(&graph.merge_left_from, merger_idx);
                                 layers.merge(&graph.empty, merger_idx);
                                 is_merged_before = true;
@@ -292,7 +296,7 @@ pub fn render_graph_projection(
                 layers.commit(&graph.empty, lane_idx);
                 if chunk.has_parent(head_alias) && lane_idx == 0 {
                     layers.pipe_custom(&graph.vertical_dotted, lane_idx, theme.COLOR_GREY_500);
-                } else if !chunk.has_any_parent() {
+                } else if !lane_has_any_parent(snapshot, lane_idx) {
                     layers.pipe(" ", lane_idx);
                 } else {
                     layers.pipe(pipe_symbol(graph, &flattened_lanes, lane_idx, &graph.vertical), lane_idx);
@@ -424,21 +428,22 @@ fn draw_branch_up_bridge(layers: &mut LayersContext, graph: &GraphSymbols, flatt
     }
 }
 
-fn compressed_parent_bridges_to_active_lanes(prev: Option<&Vector<Chunk>>, last: &Vector<Chunk>, flattened_lanes: &[bool], row_alias: u32, row_lane_idx: usize) -> Vec<(usize, usize)> {
+fn compressed_parent_bridges_to_active_lanes(prev: Option<&GraphSnapshot>, last: &GraphSnapshot, flattened_lanes: &[bool], row_alias: u32, row_lane_idx: usize) -> Vec<(usize, usize)> {
     let Some(prev_snapshot) = prev else {
         return Vec::new();
     };
 
     prev_snapshot
+        .lanes
         .iter()
         .enumerate()
-        .filter_map(|(lane_idx, prev_chunk)| {
-            if lane_idx <= row_lane_idx || !flattened_lanes.get(lane_idx).copied().unwrap_or(false) || !prev_chunk.has_parent(row_alias) {
+        .filter_map(|(lane_idx, _)| {
+            if lane_idx <= row_lane_idx || !flattened_lanes.get(lane_idx).copied().unwrap_or(false) || !snapshot_has_compressed_parent(prev_snapshot, row_alias) {
                 return None;
             }
 
-            let current = last.get(lane_idx)?;
-            if current.is_dummy() || current.alias == row_alias || current.has_parent(row_alias) || !current.has_any_parent() {
+            let current = last.lanes.get(lane_idx)?;
+            if current.is_dummy() || current.alias == row_alias || current.has_parent(row_alias) || !lane_has_any_parent(last, lane_idx) {
                 return None;
             }
 
@@ -461,27 +466,54 @@ fn draw_compressed_parent_bridge(layers: &mut LayersContext, graph: &GraphSymbol
     }
 }
 
-fn dummy_lane_closes_to_row(prev: &Chunk, row_alias: u32) -> bool {
-    single_active_parent(prev).is_some_and(|parent| parent == row_alias)
-        || (prev.parent_a != NONE && prev.parent_b != NONE && prev.parent_a == row_alias)
-        || prev.compressed_parents.contains(&row_alias)
-}
-
-fn carried_merge_parent(merge: &Chunk, lane: &Chunk) -> Option<u32> {
-    [merge.parent_b, merge.parent_a].into_iter().find(|parent| lane.has_parent(*parent))
-}
-
-fn previous_scanline_carries_parent(prev: Option<&Vector<Chunk>>, lane_idx: usize, parent: u32) -> bool {
-    let Some(prev_chunk) = prev.and_then(|snapshot| snapshot.get(lane_idx)) else {
+fn dummy_lane_closes_to_row(prev_snapshot: Option<&GraphSnapshot>, lane_idx: usize, row_alias: u32) -> bool {
+    let Some(prev_snapshot) = prev_snapshot else {
+        return false;
+    };
+    let Some(prev) = prev_snapshot.lanes.get(lane_idx) else {
         return false;
     };
 
-    !prev_chunk.is_dummy() && prev_chunk.has_parent(parent)
+    single_active_parent(prev).is_some_and(|parent| parent == row_alias)
+        || (!prev.is_flattened && prev.parent_a != NONE && prev.parent_b != NONE && prev.parent_a == row_alias)
+        || (prev.is_flattened && snapshot_has_compressed_parent(prev_snapshot, row_alias))
+}
+
+fn carried_merge_parent(snapshot: &GraphSnapshot, merge: &Chunk, lane_idx: usize) -> Option<u32> {
+    [merge.parent_b, merge.parent_a].into_iter().find(|parent| lane_carries_parent(snapshot, lane_idx, *parent))
+}
+
+fn previous_scanline_carries_parent(prev: Option<&GraphSnapshot>, lane_idx: usize, parent: u32) -> bool {
+    prev.is_some_and(|snapshot| lane_carries_parent(snapshot, lane_idx, parent))
 }
 
 fn single_active_parent(chunk: &Chunk) -> Option<u32> {
     let parents = chunk.parent_aliases();
     if parents.len() == 1 { Some(parents[0]) } else { None }
+}
+
+fn lane_carries_parent(snapshot: &GraphSnapshot, lane_idx: usize, parent: u32) -> bool {
+    if parent == NONE {
+        return false;
+    }
+
+    let Some(chunk) = snapshot.lanes.get(lane_idx) else {
+        return false;
+    };
+
+    !chunk.is_dummy() && (chunk.has_parent(parent) || (chunk.is_flattened && snapshot_has_compressed_parent(snapshot, parent)))
+}
+
+fn lane_has_any_parent(snapshot: &GraphSnapshot, lane_idx: usize) -> bool {
+    let Some(chunk) = snapshot.lanes.get(lane_idx) else {
+        return false;
+    };
+
+    chunk.has_any_parent() || (chunk.is_flattened && !snapshot.compressed_parents.is_empty())
+}
+
+fn snapshot_has_compressed_parent(snapshot: &GraphSnapshot, parent: u32) -> bool {
+    parent != NONE && snapshot.compressed_parents.iter().any(|candidate| *candidate == parent)
 }
 
 // Remove graph lane pairs that are visually empty across every rendered row.
@@ -538,9 +570,7 @@ pub fn remove_empty_columns(lines: &mut Vec<Line<'_>>, symbols: &SymbolTheme) {
 }
 
 fn is_visible_lane_symbol(span: &Span<'_>, symbols: &SymbolTheme) -> bool {
-    span.content.as_ref() != symbols.graph.empty.as_str()
-        && span.content.as_ref() != symbols.graph.horizontal.as_str()
-        && span.content.as_ref() != symbols.graph.horizontal_dotted.as_str()
+    span.content.as_ref() != symbols.graph.empty.as_str() && span.content.as_ref() != symbols.graph.horizontal.as_str() && span.content.as_ref() != symbols.graph.horizontal_dotted.as_str()
 }
 
 pub fn render_sha_projection(theme: &Theme, rows: &[GraphRow], selected: usize) -> Vec<Line<'static>> {

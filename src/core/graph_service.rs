@@ -1,6 +1,6 @@
 use crate::{
     core::{
-        chunk::{Chunk, LaneRef, NONE},
+        chunk::{LaneRef, NONE},
         reflogs::HeadReflogAliasEntry,
         walker::Walker,
         worktrees::{WorktreeEntry, Worktrees},
@@ -14,7 +14,7 @@ use crate::{
     },
 };
 use git2::Oid;
-use im::{HashSet, Vector};
+use im::HashSet;
 use std::{
     collections::HashMap,
     sync::{
@@ -29,7 +29,7 @@ use std::{
 pub type RequestId = u64;
 pub type Generation = u64;
 pub type GraphVersion = u64;
-pub type GraphHistory = Vector<Vector<Chunk>>;
+pub use crate::core::buffer::{GraphHistory, GraphSnapshot};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GraphPane {
@@ -93,6 +93,7 @@ pub struct GraphRow {
     pub summary: String,
     pub committer_date: String,
     pub committer_name: String,
+    pub is_merge: bool,
     pub has_any_branch: bool,
     pub branches: Vec<GraphBranchLabel>,
     pub tags: Vec<GraphTagLabel>,
@@ -344,16 +345,16 @@ fn graph_rows(walk_ctx: &Walker, worktrees: &Worktrees, hidden_branch_names: &Ha
         let alias = walk_ctx.oids.get_sorted_aliases().get(index).copied().unwrap_or(NONE);
         let oid = *walk_ctx.oids.get_oid_by_alias(alias);
         let is_uncommitted = alias == NONE || walk_ctx.oids.is_zero(&oid);
-        let (summary, committer_date, committer_name) = if is_uncommitted {
-            (String::new(), String::new(), String::new())
+        let (summary, committer_date, committer_name, is_merge_commit) = if is_uncommitted {
+            (String::new(), String::new(), String::new(), false)
         } else if let Ok(commit) = repo.find_commit(oid) {
             let summary = commit.summary().map(str::to_string).unwrap_or_else(|| no_message(symbols));
             let committer = commit.committer();
             let committer_date = timestamp_to_utc_date_time(committer.when());
             let committer_name = committer.name().unwrap_or(common::UNKNOWN()).to_string();
-            (summary, committer_date, committer_name)
+            (summary, committer_date, committer_name, commit.parent_count() > 1)
         } else {
-            (no_message(symbols), String::new(), String::new())
+            (no_message(symbols), String::new(), String::new(), false)
         };
 
         let local = walk_ctx.branches_local.get(&alias).cloned().unwrap_or_default();
@@ -372,11 +373,12 @@ fn graph_rows(walk_ctx: &Walker, worktrees: &Worktrees, hidden_branch_names: &Ha
         let tags = walk_ctx.tags_local.get(&alias).cloned().unwrap_or_default().into_iter().map(|name| GraphTagLabel { name, lane: tag_lane }).collect();
 
         let is_stash = walk_ctx.oids.stashes.contains(&alias);
+        let is_merge = is_merge_commit && !is_stash;
         let stash_lane = walk_ctx.stashes_lanes.get(&alias).copied();
         let worktrees = worktrees_for_alias(worktrees, walk_ctx, alias);
         let reflog = latest_reflogs.get(&alias).map(|entry| GraphReflogLabel { selector: entry.selector.clone(), message: entry.message.clone(), lane: walk_ctx.reflogs_lanes.get(&alias).copied() });
 
-        rows.push(GraphRow { index, alias, oid, summary, committer_date, committer_name, has_any_branch, branches, tags, is_stash, stash_lane, worktrees, reflog });
+        rows.push(GraphRow { index, alias, oid, summary, committer_date, committer_name, is_merge, has_any_branch, branches, tags, is_stash, stash_lane, worktrees, reflog });
     }
 
     rows

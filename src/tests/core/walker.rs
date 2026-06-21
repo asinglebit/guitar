@@ -72,6 +72,7 @@ fn graph_row(index: usize, alias: u32, oid: Oid) -> GraphRow {
         summary: String::new(),
         committer_date: String::new(),
         committer_name: String::new(),
+        is_merge: false,
         has_any_branch: false,
         branches: Vec::new(),
         tags: Vec::new(),
@@ -148,7 +149,15 @@ fn walker_expires_new_right_merge_lane_before_next_rendered_row() {
     assert_eq!(merge_lane + 1, history[merge_history_idx].len());
     assert!(history[merge_history_idx + 1].get(merge_lane).is_none());
 
-    let rows: Vec<_> = aliases.iter().enumerate().map(|(index, &alias)| graph_row(index, alias, *walker.oids.get_oid_by_alias(alias))).collect();
+    let rows: Vec<_> = aliases
+        .iter()
+        .enumerate()
+        .map(|(index, &alias)| {
+            let mut row = graph_row(index, alias, *walker.oids.get_oid_by_alias(alias));
+            row.is_merge = alias == merge_alias;
+            row
+        })
+        .collect();
     let symbols = SymbolTheme::main();
     let lines = render_graph_projection(&Theme::classic(), &symbols, &rows, &history, head_alias, 0, aliases.len(), true);
     let merge_text = line_text(&lines[merge_idx]);

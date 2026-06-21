@@ -1,7 +1,7 @@
 use super::*;
 use crate::core::{
     chunk::{LaneRef, NONE},
-    graph_service::{GraphBranchLabel, GraphReflogLabel, GraphTagLabel},
+    graph_service::{GraphBranchLabel, GraphReflogLabel, GraphSnapshot, GraphTagLabel},
     worktrees::{WorktreeEntry, WorktreeKind},
 };
 use crate::helpers::colors::ColorPicker;
@@ -19,6 +19,7 @@ fn graph_row(index: usize, oid: Oid, summary: &str) -> GraphRow {
         summary: summary.to_string(),
         committer_date: String::new(),
         committer_name: String::new(),
+        is_merge: false,
         has_any_branch: false,
         branches: Vec::new(),
         tags: Vec::new(),
@@ -47,11 +48,19 @@ fn graph_row_with_alias(index: usize, alias: u32) -> GraphRow {
     row
 }
 
+fn lane_history(snapshots: Vec<Vector<Chunk>>) -> GraphHistory {
+    GraphHistory::from(snapshots.into_iter().map(GraphSnapshot::from_lanes).collect::<Vec<_>>())
+}
+
+fn snapshot(lanes: Vec<Chunk>, compressed_parents: &[u32]) -> GraphSnapshot {
+    GraphSnapshot::new(Vector::from(lanes), Vector::from(compressed_parents.to_vec()))
+}
+
 fn merge_right_from_history(prev_lane_parent: u32) -> GraphHistory {
-    GraphHistory::from(Vector::from(vec![
+    lane_history(vec![
         Vector::from(vec![Chunk::commit(20, prev_lane_parent, NONE), Chunk::commit(21, 200, NONE), Chunk::dummy()]),
         Vector::from(vec![Chunk::commit(10, 1, NONE), Chunk::commit(11, 2, NONE), Chunk::commit(4, 1, 2)]),
-    ]))
+    ])
 }
 
 fn branch_up_history(current_lane: usize) -> GraphHistory {
@@ -64,67 +73,67 @@ fn branch_up_history(current_lane: usize) -> GraphHistory {
         }
     }
 
-    GraphHistory::from(Vector::from(vec![prev, last]))
+    lane_history(vec![prev, last])
 }
 
 fn branch_up_bridge_history() -> GraphHistory {
-    GraphHistory::from(Vector::from(vec![
+    lane_history(vec![
         Vector::from(vec![Chunk::commit(30, 4, NONE), Chunk::commit(31, 101, NONE), Chunk::commit(32, 102, NONE), Chunk::commit(33, 103, NONE)]),
         Vector::from(vec![Chunk::dummy(), Chunk::commit(31, 101, NONE), Chunk::commit(32, 102, NONE), Chunk::commit(4, NONE, NONE)]),
-    ]))
+    ])
 }
 
 fn transient_merge_closeout_history() -> GraphHistory {
-    GraphHistory::from(Vector::from(vec![
+    lane_history(vec![
         Vector::from(vec![Chunk::commit(10, 100, NONE), Chunk::commit(11, 101, NONE), Chunk::commit(20, 4, 2), Chunk::commit(12, 102, NONE)]),
         Vector::from(vec![Chunk::commit(4, NONE, NONE), Chunk::commit(11, 101, NONE), Chunk::dummy(), Chunk::commit(12, 102, NONE)]),
-    ]))
+    ])
 }
 
 fn capped_flattened_history(chunk: Chunk) -> GraphHistory {
-    GraphHistory::from(Vector::from(vec![Vector::from(vec![Chunk::dummy(), Chunk::dummy(), Chunk::dummy(), Chunk::dummy(), chunk.with_flattened(true)])]))
+    lane_history(vec![Vector::from(vec![Chunk::dummy(), Chunk::dummy(), Chunk::dummy(), Chunk::dummy(), chunk.with_flattened(true)])])
 }
 
 fn capped_merge_closeout_to_flattened_lane_history() -> GraphHistory {
-    GraphHistory::from(Vector::from(vec![Vector::from(vec![Chunk::commit(9, 1, 2), Chunk::dummy(), Chunk::dummy(), Chunk::dummy(), Chunk::commit(50, 99, NONE).with_flattened(true)])]))
+    lane_history(vec![Vector::from(vec![Chunk::commit(9, 1, 2), Chunk::dummy(), Chunk::dummy(), Chunk::dummy(), Chunk::commit(50, 99, NONE).with_flattened(true)])])
 }
 
 fn capped_merge_closeout_with_dummy_after_flattened_lane_history() -> GraphHistory {
-    GraphHistory::from(Vector::from(vec![
+    lane_history(vec![
         Vector::from(vec![Chunk::commit(40, NONE, NONE), Chunk::dummy(), Chunk::dummy(), Chunk::commit(50, 99, NONE).with_flattened(true), Chunk::commit(60, 100, NONE)]),
         Vector::from(vec![Chunk::commit(9, 1, 2), Chunk::dummy(), Chunk::dummy(), Chunk::commit(50, 99, NONE).with_flattened(true), Chunk::dummy()]),
-    ]))
+    ])
 }
 
 fn capped_merge_closeout_before_flattened_lane_history() -> GraphHistory {
-    GraphHistory::from(Vector::from(vec![
+    lane_history(vec![
         Vector::from(vec![Chunk::commit(40, NONE, NONE), Chunk::dummy(), Chunk::dummy(), Chunk::commit(50, 99, NONE), Chunk::commit(60, 100, NONE)]),
         Vector::from(vec![Chunk::commit(9, 1, 2), Chunk::dummy(), Chunk::dummy(), Chunk::commit(50, 99, NONE), Chunk::commit(60, 100, NONE)]),
         Vector::from(vec![Chunk::dummy(), Chunk::dummy(), Chunk::dummy(), Chunk::commit(50, 99, NONE).with_flattened(true), Chunk::commit(60, 100, NONE)]),
-    ]))
+    ])
 }
 
 fn capped_merge_on_last_lane_before_flattening_history() -> GraphHistory {
-    GraphHistory::from(Vector::from(vec![
+    lane_history(vec![
         Vector::from(vec![Chunk::commit(40, NONE, NONE), Chunk::dummy(), Chunk::dummy(), Chunk::commit(50, 99, NONE), Chunk::commit(60, 100, NONE)]),
         Vector::from(vec![Chunk::dummy(), Chunk::dummy(), Chunk::dummy(), Chunk::dummy(), Chunk::commit(9, 1, 2)]),
         Vector::from(vec![Chunk::dummy(), Chunk::dummy(), Chunk::dummy(), Chunk::dummy(), Chunk::commit(60, 100, NONE).with_flattened(true)]),
-    ]))
+    ])
 }
 
 fn compressed_parent_pipe_history() -> GraphHistory {
-    GraphHistory::from(Vector::from(vec![Vector::from(vec![Chunk::commit(1, NONE, NONE), Chunk::commit(9, NONE, NONE).with_flattened(true).with_compressed_parents([42])])]))
+    GraphHistory::from(vec![snapshot(vec![Chunk::commit(1, NONE, NONE), Chunk::commit(9, NONE, NONE).with_flattened(true)], &[42])])
 }
 
 fn compressed_parent_branch_up_history() -> GraphHistory {
-    GraphHistory::from(Vector::from(vec![Vector::from(vec![Chunk::commit(30, NONE, NONE).with_flattened(true).with_compressed_parents([4])]), Vector::from(vec![Chunk::dummy()])]))
+    GraphHistory::from(vec![snapshot(vec![Chunk::commit(30, NONE, NONE).with_flattened(true)], &[4]), snapshot(vec![Chunk::dummy()], &[])])
 }
 
 fn compressed_parent_active_bridge_history() -> GraphHistory {
-    GraphHistory::from(Vector::from(vec![
-        Vector::from(vec![Chunk::commit(10, 100, NONE), Chunk::commit(40, 4, NONE), Chunk::dummy(), Chunk::commit(30, 99, NONE).with_flattened(true).with_compressed_parents([4, 5])]),
-        Vector::from(vec![Chunk::commit(10, 100, NONE), Chunk::commit(4, NONE, NONE), Chunk::dummy(), Chunk::commit(30, 99, NONE).with_flattened(true).with_compressed_parents([5])]),
-    ]))
+    GraphHistory::from(vec![
+        snapshot(vec![Chunk::commit(10, 100, NONE), Chunk::commit(40, 4, NONE), Chunk::dummy(), Chunk::commit(30, 99, 5).with_flattened(true)], &[4, 5]),
+        snapshot(vec![Chunk::commit(10, 100, NONE), Chunk::commit(4, NONE, NONE), Chunk::dummy(), Chunk::commit(30, 99, 5).with_flattened(true)], &[5]),
+    ])
 }
 
 #[test]
@@ -188,7 +197,8 @@ fn committer_projection_renders_fixed_width_names_and_blanks_uncommitted_rows() 
 fn graph_projection_uses_merge_right_from_and_up_when_previous_lane_carries_same_parent() {
     let theme = Theme::classic();
     let symbols = SymbolTheme::main();
-    let row = graph_row_with_alias(1, 4);
+    let mut row = graph_row_with_alias(1, 4);
+    row.is_merge = true;
     let with_up_rows = vec![graph_row_with_alias(0, 20), row.clone()];
 
     let with_up = render_graph_projection(&theme, &symbols, &with_up_rows, &merge_right_from_history(1), NONE, 0, 2, true);
@@ -326,7 +336,7 @@ fn graph_projection_uses_ascii_symbols_when_requested() {
     let theme = Theme::classic();
     let symbols = SymbolTheme::ascii();
     let row = graph_row_with_alias(0, 1);
-    let history = GraphHistory::from(Vector::from(vec![Vector::from(vec![Chunk::commit(1, NONE, NONE)])]));
+    let history = lane_history(vec![Vector::from(vec![Chunk::commit(1, NONE, NONE)])]);
 
     let lines = render_graph_projection(&theme, &symbols, &[row], &history, NONE, 0, 1, true);
     let rendered = line_text(&lines[0]);
@@ -352,7 +362,7 @@ fn graph_projection_keeps_normal_last_lane_palette_colored_without_overflow() {
     let theme = Theme::classic();
     let symbols = SymbolTheme::main();
     let row = graph_row_with_alias(0, 5);
-    let history = GraphHistory::from(Vector::from(vec![Vector::from(vec![Chunk::dummy(), Chunk::dummy(), Chunk::dummy(), Chunk::dummy(), Chunk::commit(5, NONE, NONE)])]));
+    let history = lane_history(vec![Vector::from(vec![Chunk::dummy(), Chunk::dummy(), Chunk::dummy(), Chunk::dummy(), Chunk::commit(5, NONE, NONE)])]);
 
     let lines = render_graph_projection(&theme, &symbols, &[row], &history, NONE, 0, 1, true);
 
@@ -364,20 +374,21 @@ fn graph_projection_uses_flattened_color_for_pipe_merge_and_connector_spans() {
     let theme = Theme::classic();
     let symbols = SymbolTheme::main();
 
-    let pipe_history =
-        GraphHistory::from(Vector::from(vec![Vector::from(vec![Chunk::commit(1, NONE, NONE), Chunk::dummy(), Chunk::dummy(), Chunk::dummy(), Chunk::commit(9, 99, NONE).with_flattened(true)])]));
+    let pipe_history = lane_history(vec![Vector::from(vec![Chunk::commit(1, NONE, NONE), Chunk::dummy(), Chunk::dummy(), Chunk::dummy(), Chunk::commit(9, 99, NONE).with_flattened(true)])]);
     let pipe_lines = render_graph_projection(&theme, &symbols, &[graph_row_with_alias(0, 1)], &pipe_history, NONE, 0, 1, true);
     assert_eq!(span_color(&pipe_lines[0], graph::VERTICAL_DOTTED), Some(theme.COLOR_GREY_500));
     assert_eq!(span_color(&pipe_lines[0], graph::VERTICAL), None);
 
     let merge_history = capped_flattened_history(Chunk::commit(9, 1, 2));
-    let merge_lines = render_graph_projection(&theme, &symbols, &[graph_row_with_alias(0, 9)], &merge_history, NONE, 0, 1, true);
+    let mut merge_row = graph_row_with_alias(0, 9);
+    merge_row.is_merge = true;
+    let merge_lines = render_graph_projection(&theme, &symbols, &[merge_row], &merge_history, NONE, 0, 1, true);
     assert_eq!(span_color(&merge_lines[0], graph::MERGE), Some(theme.COLOR_GREY_500));
 
-    let connector_history = GraphHistory::from(Vector::from(vec![
+    let connector_history = lane_history(vec![
         Vector::from(vec![Chunk::commit(30, 4, NONE).with_flattened(true), Chunk::commit(31, 101, NONE), Chunk::commit(32, 102, NONE), Chunk::commit(33, 103, NONE)]),
         Vector::from(vec![Chunk::dummy(), Chunk::commit(31, 101, NONE), Chunk::commit(32, 102, NONE), Chunk::commit(4, NONE, NONE)]),
-    ]));
+    ]);
     let connector_rows = vec![graph_row_with_alias(0, 30), graph_row_with_alias(1, 4)];
     let connector_lines = render_graph_projection(&theme, &symbols, &connector_rows, &connector_history, NONE, 0, 2, true);
     assert_eq!(span_color(&connector_lines[1], graph::HORIZONTAL_DOTTED), Some(theme.COLOR_GREY_500));
@@ -450,7 +461,7 @@ fn graph_projection_skips_branch_down_when_merge_is_on_lookahead_flattened_lane(
 fn graph_projection_keeps_nonflattened_pipe_symbols_solid() {
     let theme = Theme::classic();
     let symbols = SymbolTheme::main();
-    let pipe_history = GraphHistory::from(Vector::from(vec![Vector::from(vec![Chunk::commit(1, NONE, NONE), Chunk::dummy(), Chunk::dummy(), Chunk::dummy(), Chunk::commit(9, 99, NONE)])]));
+    let pipe_history = lane_history(vec![Vector::from(vec![Chunk::commit(1, NONE, NONE), Chunk::dummy(), Chunk::dummy(), Chunk::dummy(), Chunk::commit(9, 99, NONE)])]);
 
     let pipe_lines = render_graph_projection(&theme, &symbols, &[graph_row_with_alias(0, 1)], &pipe_history, NONE, 0, 1, true);
 

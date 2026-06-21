@@ -195,7 +195,7 @@ impl Walker {
                     self.reflogs_lanes.insert(alias, lane);
                 }
 
-                if chunk.parent_a != NONE && chunk.parent_b != NONE {
+                if !chunk.is_flattened && chunk.parent_a != NONE && chunk.parent_b != NONE {
                     // If the second parent is not already visible as a lane, mark a deferred merge.
                     let is_merger_found = buffer.curr.iter().enumerate().any(|(idx, chunk_nested)| idx != lane_idx && chunk_nested.has_parent(chunk.parent_b));
                     if !is_merger_found {

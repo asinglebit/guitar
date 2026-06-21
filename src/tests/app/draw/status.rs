@@ -44,6 +44,7 @@ fn graph_row(index: usize, alias: u32, oid: Oid) -> GraphRow {
         summary: "summary".to_string(),
         committer_date: String::new(),
         committer_name: String::new(),
+        is_merge: false,
         has_any_branch: false,
         branches: Vec::new(),
         tags: Vec::new(),

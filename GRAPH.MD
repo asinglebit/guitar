@@ -16,7 +16,7 @@ Batcher revwalk pages
 Walker: assign aliases, read parents, update lanes
         |
         v
-Buffer: store lane snapshots as deltas
+Buffer: store lane and compressed-parent snapshots as deltas
         |
         v
 GraphService: project rows + visible history window
@@ -30,8 +30,8 @@ App::draw_graph: align cached projections into the visible table
 
 The graph is topology-first. The renderer does not ask Git where to draw a
 line. Instead, the walker records enough lane state for each commit row, and
-the renderer derives visible pipes, merge curves, branch curves, and commit
-markers from the current and previous lane snapshots.
+the renderer derives visible pipes, merge curves, branch curves, compressed
+lane bridges, and commit markers from the current and previous graph snapshots.
 
 ## Vocabulary
 
@@ -74,8 +74,8 @@ The graph pipeline is split across a few focused modules:
 | --- | --- |
 | `src/core/batcher.rs` | Owns the libgit2 revwalk and returns pages of OIDs. |
 | `src/core/oids.rs` | Maps Git OIDs to compact `u32` aliases and stores rendered order. |
-| `src/core/chunk.rs` | Defines the lane entry stored in the graph buffer. |
-| `src/core/buffer.rs` | Maintains current lanes and records deltas/checkpoints. |
+| `src/core/chunk.rs` | Defines the direct lane entry stored in the graph buffer. |
+| `src/core/buffer.rs` | Maintains current lanes, compressed parents, and records deltas/checkpoints. |
 | `src/core/walker.rs` | Reads commits, parents, refs, stashes, reflogs, and updates the buffer. |
 | `src/core/graph_service.rs` | Runs the walker in a worker thread and projects visible windows. |
 | `src/core/renderers.rs` | Renders graph, SHA, date, committer, and message projections. |
@@ -177,8 +177,16 @@ Each lane says:
 - optionally a second parent for one merge edge (`parent_b`),
 - whether the lane is a commit, dummy, or uncommitted marker.
 
-The buffer prefers to replace a lane whose `parent_a` equals the incoming
-commit alias. If none exists, the incoming commit starts a new rightmost lane.
+`Chunk` stores direct lane topology only. Compressed-lane membership lives in
+`Buffer.compressed_parents`, not in each chunk. On a flattened compressed lane,
+`parent_a` and `parent_b` are visible span markers: `parent_a` marks the start
+of the current compression span and `parent_b` marks the latest parent added to
+that span.
+
+The buffer prefers to replace a lane whose direct parent equals the incoming
+commit alias. If no direct lane matches, but the alias is in the active
+compressed-parent list, the flattened lane is replaced. If neither exists, the
+incoming commit starts a new rightmost lane.
 
 ```text
 Before update with alias B:
@@ -212,9 +220,11 @@ The full graph can be huge, so `Buffer` does not store every snapshot as a
 full copy. It stores deltas plus occasional checkpoints:
 
 ```text
-DeltaOp::Insert  { index, item }
-DeltaOp::Remove  { index }
-DeltaOp::Replace { index, new }
+DeltaOp::Insert                 { index, item }
+DeltaOp::Remove                 { index }
+DeltaOp::Replace                { index, new }
+DeltaOp::CompressedParentInsert { parent }
+DeltaOp::CompressedParentRemove { parent }
 ```
 
 `Buffer::window(start, end)` reconstructs only the snapshots needed for a
@@ -227,7 +237,12 @@ nearest checkpoint before start
 replay deltas from checkpoint+1 to end
         |
         v
-GraphHistory = Vector<Vector<Chunk>>
+GraphHistory = Vector<GraphSnapshot>
+
+GraphSnapshot {
+  lanes: Vector<Chunk>,
+  compressed_parents: Vector<u32>,
+}
 ```
 
 `GraphService` asks for:
@@ -264,6 +279,7 @@ GraphRow {
   summary,
   committer_date,
   committer_name,
+  is_merge,
   has_any_branch,
   branches,
   tags,
@@ -274,7 +290,10 @@ GraphRow {
 }
 ```
 
-Topology lives in `history`. Labels and row text live in `rows`.
+Topology lives in `history`. Labels, row text, and marker-only metadata such as
+`is_merge` live in `rows`. `is_merge` lets a flattened merge commit still show
+the merge marker without treating the flattened chunk's `parent_b` span marker
+as a real merge edge.
 
 ### 7. Renderer turns snapshots into symbols
 
@@ -290,8 +309,10 @@ For each row, it computes a history index:
 
 ```rust
 let delta = (history.len() + global_idx).saturating_sub(end);
-let prev = if delta == 0 { None } else { history.get(delta - 1) };
-let last = history.get(delta);
+let prev_snapshot = if delta == 0 { None } else { history.get(delta - 1) };
+let snapshot = history.get(delta);
+let prev = prev_snapshot.map(|snapshot| &snapshot.lanes);
+let last = &snapshot.lanes;
 ```
 
 Do not assume `history[0]` is always `rows[0]`. The window can be reconstructed
@@ -327,13 +348,17 @@ history fully cover the visible page.
 
 ```text
 Chunk
-+----------+------------------------------------------+
-| alias    | the commit occupying this lane           |
-| parent_a | the main parent this lane should meet    |
-| parent_b | optional second parent for merge drawing |
-| marker   | Uncommitted | Commit | Dummy             |
-+----------+------------------------------------------+
++--------------+----------------------------------------------------------+
+| alias        | the commit occupying this lane                           |
+| parent_a     | the main parent, or flattened compression start marker   |
+| parent_b     | second merge parent, or flattened compression end marker |
+| marker       | Uncommitted | Commit | Dummy                             |
+| is_flattened | true when this lane represents capped/compressed lanes    |
++--------------+----------------------------------------------------------+
 ```
+
+`Chunk` does not store compressed-parent membership. That state is owned by
+`Buffer` and copied into `GraphSnapshot.compressed_parents` for rendering.
 
 Examples:
 
@@ -352,6 +377,9 @@ dummy lane:
 
 uncommitted row:
   Chunk { alias: NONE, parent_a: HEAD, parent_b: NONE, marker: Uncommitted }
+
+flattened compressed lane:
+  Chunk { alias: C, parent_a: span_start, parent_b: span_end, marker: Commit, is_flattened: true }
 ```
 
 ### Buffer.curr
@@ -373,6 +401,45 @@ lane 0: row commit A      -> draw commit marker
 lane 1: active X -> Y     -> draw "|"
 lane 2: active M -> P,Q   -> draw "|", unless merge rendering overlays it
 ```
+
+### Buffer.compressed_parents
+
+`Buffer.compressed_parents` is the active unresolved list of aliases hidden
+behind the flattened lane cap. It is append-ordered and deduped:
+
+```text
+Buffer.curr:
+  lane 0: A -> B
+  lane 1: C -> S,E  (flattened)
+
+Buffer.compressed_parents:
+  [S, ..., E]
+```
+
+When a commit alias in this list is reached, `Buffer::update` replaces the
+flattened lane, removes only that alias from `compressed_parents`, and refreshes
+the flattened chunk's `parent_b` end marker to the newest remaining compressed
+parent.
+
+The flattened chunk's `parent_a`/`parent_b` are scanline markers. They keep the
+dotted compressed lane visible, but membership and routing decisions come from
+the Buffer-owned list.
+
+### GraphSnapshot
+
+Rendered windows are reconstructed as snapshots:
+
+```text
+GraphSnapshot {
+  lanes: Vector<Chunk>,
+  compressed_parents: Vector<u32>,
+}
+```
+
+`lanes` is the reconstructed `Buffer.curr` for the row. `compressed_parents` is
+the reconstructed active compressed-parent list for that same row. Renderer
+helpers check both pieces together: direct lanes use `Chunk` parents, while
+compressed commits and dotted bridges use `GraphSnapshot.compressed_parents`.
 
 ### Deltas and checkpoints
 
@@ -399,11 +466,13 @@ checkpoint[0] = []
 delta[1] = Insert lane 0: uncommitted
 delta[2] = Replace lane 0: A -> B
 delta[3] = Replace lane 0: B -> C
+delta[4] = CompressedParentInsert P
 
 window(0, 4) replays:
   [] + delta[1] => snapshot row 0
      + delta[2] => snapshot row 1
      + delta[3] => snapshot row 2
+     + delta[4] => snapshot row 3
 ```
 
 Checkpoints are stored every 100 deltas so reconstructing a far-down window
@@ -579,8 +648,8 @@ creates a lane for the second parent so later rows can draw the merge edge.
 
 ### Rule: replace matching parent lane
 
-If an incoming commit alias matches an existing lane's `parent_a`, that lane is
-replaced by the incoming commit:
+If an incoming commit alias matches an existing lane's direct parent, that lane
+is replaced by the incoming commit:
 
 ```text
 incoming: B -> C
@@ -605,6 +674,12 @@ lane 0: B -> C
 lane 1: dummy
 ```
 
+If no direct lane points at the incoming alias but
+`Buffer.compressed_parents` contains it, the incoming commit replaces the
+flattened lane. The alias is removed from `compressed_parents`, and the
+flattened lane remains alive while either the replacement chunk has direct
+parents or unresolved compressed parents remain.
+
 ### Rule: append otherwise
 
 If no lane is waiting for the incoming alias, the commit starts a new rightmost
@@ -620,6 +695,50 @@ after:
 lane 0: A -> B
 lane 1: X -> Y
 ```
+
+### Rule: enforce lane limit with a compressed span
+
+When `curr.len()` grows past the configured lane limit, the last visible lane
+becomes a flattened representative. All lanes at or beyond the cap are folded
+behind that lane:
+
+```text
+limit = 3
+
+before:
+lane 0: A -> B
+lane 1: C -> D
+lane 2: E -> F
+lane 3: X -> Y
+
+after:
+lane 0: A -> B
+lane 1: C -> D
+lane 2: X -> span_start,span_end  (flattened)
+
+compressed_parents: [span_start, ..., span_end]
+```
+
+The representative is chosen from the incoming overflow lane when possible.
+Ordering is representative-first: the representative's immediate parent becomes
+the compression span start marker (`parent_a`), and the last newly appended
+compressed parent becomes the span end marker (`parent_b`).
+
+If history stays under the cap for several rows and later exceeds it again, the
+flattened chunk starts a new marker span for that burst while the Buffer-owned
+list keeps any older unresolved compressed parents:
+
+```text
+old compressed_parents: [P1, P2]
+new overflow parent:    P3
+
+flattened chunk:        parent_a = P3, parent_b = P3
+compressed_parents:     [P1, P2, P3]
+```
+
+`parent_b` on a flattened chunk is not a merge parent. It is the end marker for
+the current compressed span. Merge scheduling and merge-edge rendering ignore
+`parent_b` when `is_flattened` is true.
 
 ## Renderer Passes
 
@@ -638,8 +757,10 @@ prev = history[delta - 1], if any
 last = history[delta]
 ```
 
-`last` is the lane state for the row. `prev` is used to decide whether a dummy
-lane should draw a branch-up curve.
+`last` is `history[delta].lanes`, the lane state for the row. `prev` is used to
+decide whether a dummy lane should draw a branch-up curve. The full
+`GraphSnapshot` is also kept nearby so helpers can check
+`compressed_parents`.
 
 ### Pass 2: handle uncommitted row
 
@@ -657,8 +778,8 @@ not stable enough to show it.
 
 Before drawing lanes, the renderer collects `branching_lanes`. These are dummy
 lanes in the current snapshot that need a branch-up curve because the previous
-snapshot showed an active single-parent lane or because the lane newly
-appeared.
+snapshot showed an active single-parent lane, a compressed parent closed into
+the current row, or because the lane newly appeared.
 
 ```text
 prev:
@@ -693,8 +814,26 @@ else if chunk.alias == row.alias:
   draw row commit marker
   maybe draw merge connector
 else:
-  draw vertical pipe if the lane still has parents
+  draw vertical pipe if the lane still has direct parents or unresolved
+  compressed parents
 ```
+
+Flattened lanes use dotted symbols. A lane is treated as carrying a parent when
+either its chunk directly references the parent or it is flattened and the
+snapshot's `compressed_parents` contains the parent.
+
+When the current row consumes a compressed parent on a normal lane, the renderer
+draws a dotted horizontal bridge from that row commit to the flattened lane:
+
+```text
+snapshot.compressed_parents previously contained P
+row P now appears on lane 1
+flattened lane is lane 3
+
+render:  o---┊
+```
+
+The actual glyphs are `COMMIT`, `HORIZONTAL_DOTTED`, and `VERTICAL_DOTTED`.
 
 ### Pass 5: fallback commit marker
 
@@ -713,7 +852,7 @@ rendered row.
 When the row alias is found, marker selection is:
 
 ```text
-if two parents and no branch label:
+if row.is_merge and no branch label:
   graph::MERGE
 else if any branch label:
   graph::COMMIT_BRANCH
@@ -737,6 +876,9 @@ ordinary commit:                   o
 
 Branch labels have higher precedence than the merge marker. This is why a
 merge commit at a branch tip can show the branch dot instead of the merge dot.
+`row.is_merge` comes from Git commit metadata, not from the rendered chunk. That
+matters for flattened chunks, where `parent_b` can be a compressed-span marker
+instead of a second merge parent.
 
 ## Caveats And Examples
 
@@ -998,6 +1140,50 @@ The walker detects the case when:
 It then calls `buffer.expire_lane_after_snapshot(lane_idx)`. The buffer keeps
 the lane for the merge row snapshot and removes it at the start of the next
 update.
+
+### Compressed lane under the lane cap
+
+When the lane limit is reached, the cap lane represents every lane that would
+have appeared to its right. The renderer should keep drawing a dotted vertical
+line for the cap lane until all compressed parents are resolved.
+
+Example with `limit = 3`:
+
+```text
+before overflow:
+lane 0: A -> B
+lane 1: C -> D
+lane 2: E -> F
+
+incoming:
+lane 3: X -> Y
+```
+
+After enforcing the cap:
+
+```text
+lane 0: A -> B
+lane 1: C -> D
+lane 2: X -> Y,F  (flattened span markers)
+
+compressed_parents: [Y, F]
+```
+
+The flattened chunk's `parent_a` is the first marker for this compression span,
+and `parent_b` is the last marker appended for that span. The active membership
+is still `compressed_parents`.
+
+Later, if `F` appears as a normal row on lane 1 while the flattened lane still
+has `Y` unresolved, the renderer draws a dotted bridge:
+
+```text
+lane 1 row F        lane 2 compressed
+      o-------------┊
+```
+
+When a compressed parent is consumed, only that alias is removed from
+`compressed_parents`. The flattened lane remains alive if direct span markers or
+other compressed parents remain.
 
 ### Uncommitted pseudo-row
 
@@ -1274,38 +1460,56 @@ When a graph bug appears, inspect the pipeline in this order:
    - Does the commit have the expected `parent_a` and `parent_b`?
    - Is it a stash, and therefore intentionally simplified to one parent?
    - Is it an octopus merge, and therefore truncated to two parents?
+   - If the lane is flattened, are `parent_a`/`parent_b` span markers rather
+     than merge parents?
 
 3. `Buffer.curr` after `buffer.update`
    - Did the commit replace an existing parent lane?
+   - Did it replace the flattened lane because its alias was in
+     `Buffer.compressed_parents`?
    - Did it start a new lane?
    - Did another lane clear a consumed parent and become dummy?
+   - Did the flattened chunk get the expected compression span markers?
 
-4. Merge scheduling
+4. Compressed parents
+   - Does `Buffer.compressed_parents` contain the unresolved aliases in append
+     order?
+   - Was only the consumed compressed alias removed?
+   - Does the reconstructed `GraphSnapshot.compressed_parents` match the Buffer
+     state expected for that row?
+
+5. Merge scheduling
    - If `parent_b` was not visible, was `buffer.merger(alias)` scheduled?
    - If both parents were visible on previous lanes, was the new rightmost lane
      marked transient instead?
+   - Is the candidate lane non-flattened before treating `parent_b` as a merge
+     parent?
 
-5. Deltas and windows
+6. Deltas and windows
    - Does `Buffer::window(start, end + 1)` contain the row snapshot?
    - Is the renderer's `delta` mapping pointing at the expected snapshot?
    - Does `prev` contain the lane state needed for branch-up rendering?
+   - Does the snapshot include compressed-parent insert/remove deltas?
 
-6. Renderer row pass
+7. Renderer row pass
    - Is the current row alias found in `last`?
    - Is an unrelated active lane drawing a vertical pipe because it still has a parent?
+   - Is a flattened lane drawing because either it has direct span markers or
+     unresolved compressed parents?
+   - Is a compressed parent row drawing a dotted bridge to the flattened lane?
    - Is a dummy lane drawing `BRANCH_UP` or `BRANCH_UP_RIGHT` because `prev`
      had a single-parent lane?
 
-7. Layer compositing
+8. Layer compositing
    - Is a commit marker hiding a merge/pipe glyph as intended?
    - Is the correct lane color being selected?
    - Are enough empty placeholders emitted to preserve visual spacing?
 
-8. Empty-column pruning
+9. Empty-column pruning
    - Did a column disappear because it contained only spaces and horizontals?
    - Is the bug only visible for a narrow cached window?
 
-9. App cache alignment
+10. App cache alignment
    - Is the cached window overlapping the visible range?
    - Is `align_projection` shifting rows because the user scrolled before the
      worker returned a new window?
@@ -1366,3 +1570,21 @@ on a new rightmost lane can mean:
 ```
 
 That is what `expire_lane_after_snapshot` records.
+
+### A compressed lane is one visible promise for many hidden ones
+
+```text
+lane 4: C -> S,E  (flattened)
+compressed_parents: [S, M, E]
+```
+
+means:
+
+```text
+"Draw one dotted lane at the cap. Treat S, M, and E as unresolved parents hidden
+behind it. Use C.parent_a/C.parent_b only as visible span markers."
+```
+
+When one of those aliases appears, the Buffer removes just that alias from the
+compressed list and the renderer draws a dotted bridge to the cap lane if the
+commit appears on another lane.

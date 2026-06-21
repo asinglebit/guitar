@@ -1,6 +1,10 @@
 use super::*;
 use crate::core::chunk::{Chunk, NONE};
 
+fn compressed_parents(buffer: &Buffer) -> Vec<u32> {
+    buffer.compressed_parents.iter().copied().collect()
+}
+
 #[test]
 fn window_rebuilds_visible_range_from_delta_history() {
     let mut buffer = Buffer::default();
@@ -143,8 +147,13 @@ fn capped_buffer_preserves_collapsed_parent_scanlines() {
     assert_eq!(buffer.curr.len(), 3);
     assert_eq!(buffer.curr[2].alias, 13);
     assert_eq!(buffer.curr[2].parent_a, 113);
+    assert_eq!(buffer.curr[2].parent_b, 112);
     assert!(buffer.curr[2].is_flattened);
-    assert!(buffer.curr[2].compressed_parents.contains(&112));
+    assert_eq!(compressed_parents(&buffer), vec![113, 112]);
+
+    buffer.backup();
+    let latest = buffer.window(1, buffer.deltas.len()).back().unwrap().clone();
+    assert_eq!(latest.compressed_parents.iter().copied().collect::<Vec<_>>(), vec![113, 112]);
 }
 
 #[test]
@@ -163,7 +172,25 @@ fn capped_buffer_consumes_only_reached_collapsed_parent() {
     assert!(!update.started_lane);
     assert_eq!(buffer.curr[2].alias, 112);
     assert_eq!(buffer.curr[2].parent_a, 212);
+    assert_eq!(buffer.curr[2].parent_b, 113);
     assert!(buffer.curr[2].is_flattened);
-    assert!(!buffer.curr[2].compressed_parents.contains(&112));
-    assert!(buffer.curr[2].compressed_parents.contains(&113));
+    assert_eq!(compressed_parents(&buffer), vec![113]);
+}
+
+#[test]
+fn capped_buffer_starts_new_span_markers_without_losing_unresolved_compressed_parents() {
+    let mut buffer = Buffer::with_lane_limit(3);
+
+    buffer.update(Chunk::commit(10, 110, NONE));
+    buffer.update(Chunk::commit(11, 111, NONE));
+    buffer.update(Chunk::commit(12, 112, NONE));
+    buffer.update(Chunk::commit(13, 113, NONE));
+    buffer.update(Chunk::commit(20, 120, NONE));
+
+    assert_eq!(buffer.curr.len(), 3);
+    assert_eq!(buffer.curr[2].alias, 20);
+    assert_eq!(buffer.curr[2].parent_a, 120);
+    assert_eq!(buffer.curr[2].parent_b, 120);
+    assert!(buffer.curr[2].is_flattened);
+    assert_eq!(compressed_parents(&buffer), vec![113, 112, 120]);
 }

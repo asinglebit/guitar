@@ -6,7 +6,7 @@ use crate::{
     },
     core::{
         chunk::NONE,
-        graph_service::{GraphCommand, GraphFileHistoryRow, GraphHistory, GraphRow},
+        graph_service::{GraphCommand, GraphFileHistoryRow, GraphHistory, GraphRow, GraphSnapshot},
     },
     git::queries::helpers::FileStatus,
     helpers::symbols::SymbolTheme,
@@ -54,6 +54,7 @@ fn graph_row(index: usize, alias: u32, oid: Oid, summary: &str) -> GraphRow {
         summary: summary.to_string(),
         committer_date: String::new(),
         committer_name: String::new(),
+        is_merge: false,
         has_any_branch: false,
         branches: Vec::new(),
         tags: Vec::new(),
@@ -84,7 +85,7 @@ fn app_with_cached_window(start: usize, summaries: &[&str], oid: Oid) -> App {
         end: start + summaries.len(),
         head_alias: 1,
         rows: summaries.iter().enumerate().map(|(offset, summary)| graph_row(start + offset, (start + offset + 1) as u32, oid, summary)).collect(),
-        history: GraphHistory::from(Vector::new()),
+        history: GraphHistory::new(),
     });
     app
 }
@@ -92,7 +93,7 @@ fn app_with_cached_window(start: usize, summaries: &[&str], oid: Oid) -> App {
 fn graph_history(len: usize) -> GraphHistory {
     let mut history = Vector::new();
     for _ in 0..len {
-        history.push_back(Vector::new());
+        history.push_back(GraphSnapshot::default());
     }
     history
 }
