@@ -1,8 +1,10 @@
 use super::*;
 use crate::core::chunk::NONE;
 use crate::core::reflogs::HeadReflogAliasEntry;
+use crate::git::actions::cherrypicking::{CherrypickOutcome, start_cherrypick};
 use crate::git::actions::merging::{MergeOutcome, start_merge};
 use crate::git::actions::remotes::set_default_remote;
+use crate::git::actions::rebasing::{RebaseOutcome, start_rebase};
 use crate::git::actions::reverting::{RevertOutcome, start_revert};
 use crate::git::auth::{AuthChallenge, AuthProtocol};
 use crate::git::queries::diffs::get_filenames_diff_at_workdir;
@@ -334,6 +336,62 @@ fn revert_state_routes_continue_and_abort_operations() {
 
     assert_eq!(app.focus, Focus::ModalOperationProgress);
     assert_eq!(app.modal_operation_kind, OperationKind::Revert);
+    assert_eq!(app.pending_operation_action, Some(PendingOperationAction::Abort));
+    let _ = fs::remove_dir_all(path);
+}
+
+#[test]
+fn cherrypick_state_routes_continue_and_abort_operations() {
+    let (path, repo) = temp_repo("cherrypick-active-operation");
+    commit_with_content(&repo, "file.txt", "base\n", "base");
+    let feature = commit_with_content(&repo, "file.txt", "feature\n", "feature");
+    commit_with_content(&repo, "file.txt", "main\n", "main");
+
+    assert_eq!(start_cherrypick(&repo, feature, "cherrypicked: feature").unwrap(), CherrypickOutcome::Conflict);
+
+    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+    app.on_continue_operation();
+
+    assert_eq!(app.focus, Focus::ModalOperationProgress);
+    assert_eq!(app.modal_operation_kind, OperationKind::Cherrypick);
+    assert_eq!(app.pending_operation_action, Some(PendingOperationAction::Continue));
+
+    app.focus = Focus::Viewport;
+    app.pending_operation_action = None;
+    app.on_abort_operation();
+
+    assert_eq!(app.focus, Focus::ModalOperationProgress);
+    assert_eq!(app.modal_operation_kind, OperationKind::Cherrypick);
+    assert_eq!(app.pending_operation_action, Some(PendingOperationAction::Abort));
+    let _ = fs::remove_dir_all(path);
+}
+
+#[test]
+fn rebase_state_routes_continue_and_abort_operations() {
+    let (path, repo) = temp_repo("rebase-active-operation");
+    commit_with_content(&repo, "file.txt", "base\n", "base");
+    let base_branch = repo.head().unwrap().shorthand().unwrap().to_string();
+    checkout_new_branch(&repo, "feature");
+    commit_with_content(&repo, "file.txt", "feature\n", "feature");
+    checkout_branch(&repo, &base_branch);
+    let main = commit_with_content(&repo, "file.txt", "main\n", "main");
+    checkout_branch(&repo, "feature");
+
+    assert_eq!(start_rebase(&repo, main).unwrap(), RebaseOutcome::Conflict);
+
+    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+    app.on_rebase();
+
+    assert_eq!(app.focus, Focus::ModalOperationProgress);
+    assert_eq!(app.modal_operation_kind, OperationKind::Rebase);
+    assert_eq!(app.pending_operation_action, Some(PendingOperationAction::Continue));
+
+    app.focus = Focus::Viewport;
+    app.pending_operation_action = None;
+    app.on_abort_operation();
+
+    assert_eq!(app.focus, Focus::ModalOperationProgress);
+    assert_eq!(app.modal_operation_kind, OperationKind::Rebase);
     assert_eq!(app.pending_operation_action, Some(PendingOperationAction::Abort));
     let _ = fs::remove_dir_all(path);
 }

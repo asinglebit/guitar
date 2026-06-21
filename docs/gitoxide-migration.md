@@ -50,6 +50,7 @@ gitoxide's public feature list covers worktree checkout and worktree stream supp
 8. Network callbacks
 
 Checkout and reset details are tracked in [docs/gitoxide-checkout-reset.md](gitoxide-checkout-reset.md).
+Sequencer details are tracked in [docs/gitoxide-sequencer.md](gitoxide-sequencer.md).
 
 ## Test Gate
 
