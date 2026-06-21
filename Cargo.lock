@@ -1822,6 +1822,7 @@ dependencies = [
  "git2",
  "gix",
  "gix-worktree",
+ "gix-worktree-state",
  "im",
  "indexmap",
  "miette",
