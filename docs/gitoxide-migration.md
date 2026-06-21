@@ -32,6 +32,12 @@ The following surfaces stay on the current backend until their parity fixtures a
 
 Linked worktrees are especially sensitive because the current app depends on shared common-dir behavior. If gitoxide parity is incomplete there, keep that seam on libgit2 in phase 1.
 
+### Linked Worktree Decision
+
+Keep linked worktree opening and owner lookup on libgit2 for the first staged backend.
+
+gitoxide's public feature list covers worktree checkout and worktree stream support, but the linked-worktree common-dir behavior that guitar needs is not documented as a supported parity surface. Until that gap is verified and the matching API exists, the `git::repository::open_worktree_owner()` seam should continue to call libgit2.
+
 ## Migration Order
 
 1. Repository open and discovery
