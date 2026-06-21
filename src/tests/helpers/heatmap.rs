@@ -38,17 +38,35 @@ fn commits_per_day_counts_rendered_dates_without_allocating_a_map() {
     let second = commit_at(&repo, &path, "second.txt", today);
     let old = commit_at(&repo, &path, "old.txt", outside_grid);
 
-    let counts = commits_per_day(&repo, &[first, second, old]);
+    let gix_repo = gix::open(&path).unwrap();
+    let counts = commits_per_day(&gix_repo, &[first, second, old]);
 
     assert_eq!(counts[0], 2);
     assert_eq!(counts.iter().sum::<usize>(), 2);
 }
 
 #[test]
+fn commits_per_day_stops_after_first_commit_older_than_rendered_grid() {
+    let (path, repo) = temp_repo("ordered");
+    let today = Utc::now().timestamp();
+    let outside_grid = today - ((TOTAL_DAYS as i64) + 10) * 24 * 60 * 60;
+    let recent = commit_at(&repo, &path, "recent.txt", today);
+    let old = commit_at(&repo, &path, "old.txt", outside_grid);
+    let would_count_if_scanned = commit_at(&repo, &path, "newer-after-old.txt", today);
+
+    let gix_repo = gix::open(&path).unwrap();
+    let counts = commits_per_day(&gix_repo, &[recent, old, would_count_if_scanned]);
+
+    assert_eq!(counts[0], 1);
+    assert_eq!(counts.iter().sum::<usize>(), 1);
+}
+
+#[test]
 fn build_heatmap_places_today_in_the_newest_week() {
     let (path, repo) = temp_repo("grid");
     let oid = commit_at(&repo, &path, "today.txt", Utc::now().timestamp());
-    let grid = build_heatmap(&repo, &[oid]);
+    let gix_repo = gix::open(&path).unwrap();
+    let grid = build_heatmap(&gix_repo, &[oid]);
     let weekday_today = Utc::now().weekday().num_days_from_monday() as usize;
 
     assert_eq!(grid[weekday_today][WEEKS - 1], 1);

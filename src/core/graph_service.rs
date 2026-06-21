@@ -8,7 +8,7 @@ use crate::{
     },
     git::queries::{file_history::changed_file_status_at_commit_gix, helpers::FileStatus, reflogs::HeadReflogEntry},
     helpers::{
-        heatmap::{DAYS, WEEKS, build_heatmap},
+        heatmap::{DAYS, WEEKS, build_heatmap_from_sorted_aliases},
         localisation::{empty, errors, status as status_text},
         symbols::SymbolTheme,
         time::timestamp_to_utc_date_time,
@@ -260,8 +260,7 @@ fn run_graph_service(config: GraphServiceConfig, rx: Receiver<GraphCommand>, tx:
         is_first = false;
 
         if is_complete {
-            let repo = walk_ctx.repo.borrow();
-            let heatmap = build_heatmap(&repo, &walk_ctx.oids.oids);
+            let heatmap = build_heatmap_from_sorted_aliases(&walk_ctx.gix_repo, &walk_ctx.oids);
             let _ = tx.send(GraphEvent::Heatmap { generation, heatmap });
 
             if let Some((request_id, path)) = pending_file_history.take() {

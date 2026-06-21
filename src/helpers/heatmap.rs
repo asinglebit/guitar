@@ -1,32 +1,49 @@
-use crate::helpers::{palette::Theme, symbols::SymbolTheme};
+use crate::{
+    core::oids::{Oids, git2_to_gix_oid},
+    helpers::{palette::Theme, symbols::SymbolTheme},
+};
 use chrono::{Datelike, NaiveDate};
 use chrono::{TimeZone, Utc};
-use git2::{Oid, Repository};
+use git2::Oid;
+use gix::prelude::FindExt;
 use ratatui::{style::Style, text::Span};
 
 pub const WEEKS: usize = 53;
 pub const DAYS: usize = 7;
 const TOTAL_DAYS: usize = WEEKS * DAYS;
 
-pub fn commits_per_day(repo: &git2::Repository, oids: &[Oid]) -> [usize; TOTAL_DAYS] {
+pub fn commits_per_day(repo: &gix::Repository, oids: &[Oid]) -> [usize; TOTAL_DAYS] {
+    commits_per_day_in_order(repo, oids.iter().copied())
+}
+
+fn commits_per_day_in_order(repo: &gix::Repository, oids: impl IntoIterator<Item = Oid>) -> [usize; TOTAL_DAYS] {
     // Use UTC dates so commits near midnight are bucketed consistently.
     let today: NaiveDate = Utc::now().date_naive();
     let mut counts = [0usize; TOTAL_DAYS];
+    let mut object_buf = Vec::new();
 
     for oid in oids {
-        let commit = match repo.find_commit(*oid) {
+        object_buf.clear();
+        let commit = match repo.objects.find_commit(git2_to_gix_oid(oid).as_ref(), &mut object_buf) {
             Ok(c) => c,
             Err(_) => continue,
         };
 
         // Git commit times are stored as epoch seconds.
-        let commit_date = Utc.timestamp_opt(commit.time().seconds(), 0).single().unwrap().date_naive();
+        let Some(commit_date) = commit.time().ok().and_then(|time| Utc.timestamp_opt(time.seconds, 0).single()).map(|date| date.date_naive()) else {
+            continue;
+        };
 
         let days_ago = today.signed_duration_since(commit_date).num_days();
 
-        // Ignore commits outside the rendered 53-week grid.
-        if !(0..TOTAL_DAYS as i64).contains(&days_ago) {
+        if days_ago < 0 {
             continue;
+        }
+
+        // Input is newest-first, so the first older commit means the rendered
+        // heatmap year is complete.
+        if days_ago >= TOTAL_DAYS as i64 {
+            break;
         }
 
         counts[days_ago as usize] += 1;
@@ -39,12 +56,17 @@ pub fn empty_heatmap() -> [[usize; WEEKS]; DAYS] {
     [[0usize; WEEKS]; DAYS]
 }
 
-pub fn build_heatmap(repo: &Repository, oids: &[Oid]) -> [[usize; WEEKS]; DAYS] {
+pub fn build_heatmap(repo: &gix::Repository, oids: &[Oid]) -> [[usize; WEEKS]; DAYS] {
+    build_heatmap_from_counts(commits_per_day(repo, oids))
+}
+
+pub fn build_heatmap_from_sorted_aliases(repo: &gix::Repository, oids: &Oids) -> [[usize; WEEKS]; DAYS] {
+    build_heatmap_from_counts(commits_per_day_in_order(repo, oids.get_sorted_aliases().iter().map(|alias| *oids.get_oid_by_alias(*alias))))
+}
+
+fn build_heatmap_from_counts(counts: [usize; TOTAL_DAYS]) -> [[usize; WEEKS]; DAYS] {
     // Rows are weekdays starting Monday, columns run oldest to newest.
     let mut grid = [[0usize; WEEKS]; DAYS];
-
-    // Counts are keyed by days ago, with 0 representing today.
-    let counts = commits_per_day(repo, oids);
 
     let today = Utc::now().date_naive();
 
