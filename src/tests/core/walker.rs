@@ -137,6 +137,36 @@ fn collect_root_oids(repo: &mut Repository, include_head_reflog_roots: bool) -> 
     roots
 }
 
+fn git2_stash_root_oids(repo: &mut Repository) -> StdHashSet<Oid> {
+    let mut oids = Oids::default();
+    get_stashed_commits(repo, &mut oids).into_iter().map(|alias| *oids.get_oid_by_alias(alias)).collect()
+}
+
+fn git2_head_reflog_root_oids(repo: &Repository) -> StdHashSet<Oid> {
+    get_head_reflog_entries(repo).unwrap_or_default().into_iter().map(|entry| entry.new_oid).collect()
+}
+
+fn gitoxide_stash_root_oids(repo: &gix::Repository) -> StdHashSet<Oid> {
+    repo.try_find_reference("refs/stash").ok().flatten().and_then(|reference| reference.try_id().map(|id| Oid::from_bytes(id.as_bytes()).unwrap())).into_iter().collect()
+}
+
+fn gitoxide_head_reflog_root_oids(repo: &gix::Repository) -> StdHashSet<Oid> {
+    repo.head().unwrap().log_iter().all().unwrap().into_iter().flat_map(|logs| logs.filter_map(Result::ok)).map(|line| Oid::from_bytes(line.new_oid().as_bytes()).unwrap()).collect()
+}
+
+fn special_roots_fixture(name: &str) -> (PathBuf, Repository) {
+    let (path, mut repo) = temp_repo(name);
+    let base = commit(&repo, "file.txt", "base");
+    let tip = commit(&repo, "file.txt", "tip");
+    let base_commit = repo.find_commit(base).unwrap();
+    repo.reset(base_commit.as_object(), ResetType::Hard, None).unwrap();
+    drop(base_commit);
+    let _stash = stash_tracked_change(&mut repo, "file.txt", "stashed change");
+
+    assert_ne!(base, tip);
+    (path, repo)
+}
+
 fn graph_metadata_from_walker(walker: &Walker) -> HashMap<Oid, CommitMetadata> {
     let repo = walker.repo.borrow();
     walker
@@ -301,6 +331,22 @@ fn walker_keeps_stash_adjacent_to_its_base_parent() {
     let stash_idx = aliases.iter().position(|alias| *alias == stash_alias).unwrap();
 
     assert_eq!(stash_idx + 1, base_idx);
+}
+
+#[test]
+fn gitoxide_reproduces_stash_and_head_reflog_roots() {
+    let (path, mut repo) = special_roots_fixture("special-root-parity");
+    let git2_stash_roots = git2_stash_root_oids(&mut repo);
+    let git2_head_reflog_roots = git2_head_reflog_root_oids(&repo);
+
+    let gix_repo = gix::open(&path).unwrap();
+    let gix_stash_roots = gitoxide_stash_root_oids(&gix_repo);
+    let gix_head_reflog_roots = gitoxide_head_reflog_root_oids(&gix_repo);
+
+    assert!(!git2_stash_roots.is_empty());
+    assert!(!git2_head_reflog_roots.is_empty());
+    assert_eq!(git2_stash_roots, gix_stash_roots);
+    assert_eq!(git2_head_reflog_roots, gix_head_reflog_roots);
 }
 
 #[test]
