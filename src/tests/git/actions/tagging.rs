@@ -45,3 +45,22 @@ fn tag_creates_lightweight_reference_and_untag_removes_it() {
     untag(&repo, "v1.0.0").unwrap();
     assert!(repo.find_reference("refs/tags/v1.0.0").is_err());
 }
+
+#[test]
+fn tag_rejects_existing_lightweight_reference() {
+    let (_path, repo) = temp_repo("tag-existing");
+    let oid = commit(&repo, "file.txt", "initial");
+    let object = repo.find_object(oid, None).unwrap();
+    repo.tag_lightweight("v1.0.0", &object, false).unwrap();
+
+    assert!(tag(&repo, oid, "v1.0.0").is_err());
+    assert_eq!(repo.find_reference("refs/tags/v1.0.0").unwrap().target(), Some(oid));
+}
+
+#[test]
+fn untag_rejects_missing_lightweight_reference() {
+    let (_path, repo) = temp_repo("untag-missing");
+
+    assert!(untag(&repo, "v1.0.0").is_err());
+    assert!(repo.find_reference("refs/tags/v1.0.0").is_err());
+}
