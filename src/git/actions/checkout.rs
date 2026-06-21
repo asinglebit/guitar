@@ -64,3 +64,7 @@ pub fn checkout_branch(repo: &Repository, hidden_branch_names: &mut HashSet<Stri
 
     Err(git2::Error::from_str("No matching local or remote branch found"))
 }
+
+#[cfg(test)]
+#[path = "../../tests/git/actions/checkout.rs"]
+mod tests;
