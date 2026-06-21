@@ -60,6 +60,7 @@ fn commit(repo: &Repository, file: &str, message: &str) -> Oid {
 
 fn commit_index(repo: &Repository, message: &str) -> Oid {
     let mut index = repo.index().unwrap();
+    index.read(true).unwrap();
     let tree_oid = index.write_tree().unwrap();
     let tree = repo.find_tree(tree_oid).unwrap();
     let sig = Signature::now("Test User", "test@example.com").unwrap();
