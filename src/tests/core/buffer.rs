@@ -148,3 +148,22 @@ fn capped_buffer_keeps_normal_last_lane_palette_eligible_without_overflow() {
     assert_eq!(buffer.curr[4].alias, 5);
     assert!(!buffer.curr[4].is_flattened);
 }
+
+#[test]
+fn shrink_to_fit_releases_overreserved_delta_capacity() {
+    let mut buffer = Buffer::default();
+    buffer.deltas.reserve(10_000);
+
+    for alias in 1..=16 {
+        buffer.update(Chunk::commit(alias, NONE, NONE));
+    }
+    buffer.backup();
+
+    let capacity_before = buffer.deltas.capacity();
+    buffer.shrink_to_fit();
+
+    assert!(capacity_before > buffer.deltas.capacity());
+    assert_eq!(buffer.deltas.capacity(), buffer.deltas.len());
+    let history = buffer.window(1, buffer.deltas.len());
+    assert_eq!(history.len(), 16);
+}

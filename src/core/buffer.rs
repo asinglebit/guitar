@@ -44,6 +44,12 @@ impl DeltaOps {
             DeltaOps::Many(ops) => DeltaOpsIter::Many(ops.iter()),
         }
     }
+
+    fn shrink_to_fit(&mut self) {
+        if let DeltaOps::Many(ops) = self {
+            ops.shrink_to_fit();
+        }
+    }
 }
 
 pub enum DeltaOpsIter<'a> {
@@ -245,6 +251,16 @@ impl Buffer {
         if idx.is_multiple_of(100) {
             self.checkpoints.insert(idx, self.curr.clone());
         }
+    }
+
+    pub fn shrink_to_fit(&mut self) {
+        self.deltas.shrink_to_fit();
+        for delta in &mut self.deltas {
+            delta.ops.shrink_to_fit();
+        }
+        self.delta.ops.shrink_to_fit();
+        self.mergers.shrink_to_fit();
+        self.transient_lanes.shrink_to_fit();
     }
 
     pub fn window(&self, start: usize, end: usize) -> Vector<Vector<Chunk>> {
