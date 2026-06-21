@@ -112,6 +112,10 @@ fn checkout_branch(repo: &Repository, name: &str) {
     repo.checkout_head(Some(CheckoutBuilder::default().force())).unwrap();
 }
 
+fn current_branch_name(repo: &Repository) -> String {
+    repo.head().unwrap().shorthand().unwrap().to_string()
+}
+
 fn file_search_keymaps() -> crate::helpers::keymap::Keymaps {
     let mut maps = IndexMap::new();
     let mut normal = IndexMap::new();
@@ -204,12 +208,13 @@ fn force_push_uses_configured_default_remote() {
     commit(&repo, "file.txt", "initial");
     let _remote_path = add_local_bare_remote(&repo, "upstream");
     set_default_remote(&repo, "upstream").unwrap();
+    let branch = current_branch_name(&repo);
     let path_string = path.display().to_string();
     let mut app = App { path: Some(path_string.clone()), repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
 
     app.on_force_push();
 
-    assert_eq!(app.pending_network_request, Some(NetworkRequest::PushBranch { repo_path: path_string, remote_name: "upstream".to_string(), branch: "master".to_string(), force: true }));
+    assert_eq!(app.pending_network_request, Some(NetworkRequest::PushBranch { repo_path: path_string, remote_name: "upstream".to_string(), branch, force: true }));
     join_network_worker(&mut app);
 }
 
@@ -264,9 +269,10 @@ fn revert_opens_message_modal_with_prefilled_summary() {
 fn revert_rejects_merge_commits_before_opening_modal() {
     let (_path, repo) = temp_repo("revert-merge-modal");
     commit_with_content(&repo, "base.txt", "base\n", "base");
+    let main_branch = current_branch_name(&repo);
     checkout_new_branch(&repo, "feature");
     let feature = commit_with_content(&repo, "feature.txt", "feature\n", "feature");
-    checkout_branch(&repo, "master");
+    checkout_branch(&repo, &main_branch);
     let main = commit_with_content(&repo, "main.txt", "main\n", "main");
 
     let merge = {
@@ -336,9 +342,10 @@ fn revert_state_routes_continue_and_abort_operations() {
 fn merge_state_routes_continue_and_abort_operations() {
     let (path, repo) = temp_repo("merge-active-operation");
     commit_with_content(&repo, "file.txt", "base\n", "base");
+    let main_branch = current_branch_name(&repo);
     checkout_new_branch(&repo, "feature");
     let feature = commit_with_content(&repo, "file.txt", "feature\n", "feature");
-    checkout_branch(&repo, "master");
+    checkout_branch(&repo, &main_branch);
     commit_with_content(&repo, "file.txt", "main\n", "main");
 
     assert_eq!(start_merge(&repo, feature).unwrap(), MergeOutcome::Conflict);
