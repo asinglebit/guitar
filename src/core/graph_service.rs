@@ -102,6 +102,35 @@ pub struct GraphRow {
     pub reflog: Option<GraphReflogLabel>,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct CommitMetadata {
+    summary: String,
+    committer_date: String,
+    committer_name: String,
+}
+
+#[derive(Debug, Default)]
+struct CommitMetadataCache {
+    entries: HashMap<u32, CommitMetadata>,
+}
+
+impl CommitMetadataCache {
+    fn get_or_insert_with(&mut self, alias: u32, load: impl FnOnce() -> CommitMetadata) -> CommitMetadata {
+        if let Some(metadata) = self.entries.get(&alias).cloned() {
+            return metadata;
+        }
+
+        let metadata = load();
+        self.entries.insert(alias, metadata.clone());
+        metadata
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.entries.len()
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum GraphPaneRow {
     Branch { alias: u32, name: String, is_local: bool, lane: Option<LaneRef>, graph_index: Option<usize> },
@@ -175,18 +204,20 @@ fn run_graph_service(config: GraphServiceConfig, rx: Receiver<GraphCommand>, tx:
     let mut is_complete = false;
     let mut pending_graph: Option<(RequestId, usize, usize)> = None;
     let mut pending_file_history: Option<(RequestId, String)> = None;
+    let mut commit_metadata = CommitMetadataCache::default();
 
     loop {
         if cancel.load(Ordering::SeqCst) {
             break;
         }
 
-        if !drain_commands(generation, version, &rx, &tx, &walk_ctx, &mut worktrees, &mut pending_graph, &mut pending_file_history, &config.hidden_branch_names, &config.symbols) {
+        if !drain_commands(generation, version, &rx, &tx, &walk_ctx, &mut worktrees, &mut pending_graph, &mut pending_file_history, &mut commit_metadata, &config.hidden_branch_names, &config.symbols)
+        {
             break;
         }
 
         if let Some((request_id, start, end)) = pending_graph.take() {
-            send_graph_window(generation, request_id, version, start, end, &tx, &walk_ctx, &worktrees, &config.hidden_branch_names, &config.symbols);
+            send_graph_window(generation, request_id, version, start, end, &tx, &walk_ctx, &worktrees, &mut commit_metadata, &config.hidden_branch_names, &config.symbols);
         }
 
         if is_complete && let Some((request_id, path)) = pending_file_history.take() {
@@ -197,7 +228,19 @@ fn run_graph_service(config: GraphServiceConfig, rx: Receiver<GraphCommand>, tx:
             match rx.recv_timeout(Duration::from_millis(50)) {
                 Ok(GraphCommand::Shutdown) => break,
                 Ok(command) => {
-                    if !handle_command(generation, version, command, &tx, &walk_ctx, &mut worktrees, &mut pending_graph, &mut pending_file_history, &config.hidden_branch_names, &config.symbols) {
+                    if !handle_command(
+                        generation,
+                        version,
+                        command,
+                        &tx,
+                        &walk_ctx,
+                        &mut worktrees,
+                        &mut pending_graph,
+                        &mut pending_file_history,
+                        &mut commit_metadata,
+                        &config.hidden_branch_names,
+                        &config.symbols,
+                    ) {
                         break;
                     }
                 },
@@ -229,10 +272,11 @@ fn run_graph_service(config: GraphServiceConfig, rx: Receiver<GraphCommand>, tx:
 
 fn drain_commands(
     generation: Generation, version: GraphVersion, rx: &Receiver<GraphCommand>, tx: &Sender<GraphEvent>, walk_ctx: &Walker, worktrees: &mut Worktrees,
-    pending_graph: &mut Option<(RequestId, usize, usize)>, pending_file_history: &mut Option<(RequestId, String)>, hidden_branch_names: &HashSet<String>, symbols: &SymbolTheme,
+    pending_graph: &mut Option<(RequestId, usize, usize)>, pending_file_history: &mut Option<(RequestId, String)>, commit_metadata: &mut CommitMetadataCache, hidden_branch_names: &HashSet<String>,
+    symbols: &SymbolTheme,
 ) -> bool {
     while let Ok(command) = rx.try_recv() {
-        if !handle_command(generation, version, command, tx, walk_ctx, worktrees, pending_graph, pending_file_history, hidden_branch_names, symbols) {
+        if !handle_command(generation, version, command, tx, walk_ctx, worktrees, pending_graph, pending_file_history, commit_metadata, hidden_branch_names, symbols) {
             return false;
         }
     }
@@ -241,7 +285,7 @@ fn drain_commands(
 
 fn handle_command(
     generation: Generation, version: GraphVersion, command: GraphCommand, tx: &Sender<GraphEvent>, walk_ctx: &Walker, worktrees: &mut Worktrees, pending_graph: &mut Option<(RequestId, usize, usize)>,
-    pending_file_history: &mut Option<(RequestId, String)>, hidden_branch_names: &HashSet<String>, symbols: &SymbolTheme,
+    pending_file_history: &mut Option<(RequestId, String)>, commit_metadata: &mut CommitMetadataCache, hidden_branch_names: &HashSet<String>, symbols: &SymbolTheme,
 ) -> bool {
     match command {
         GraphCommand::Shutdown => false,
@@ -265,7 +309,7 @@ fn handle_command(
         },
         GraphCommand::Lookup { generation: cmd_generation, request_id, kind } => {
             if cmd_generation == generation {
-                let result = lookup(kind, walk_ctx, worktrees, hidden_branch_names, symbols);
+                let result = lookup(kind, walk_ctx, worktrees, commit_metadata, hidden_branch_names, symbols);
                 let _ = tx.send(GraphEvent::LookupResult { generation, request_id, result });
             }
             true
@@ -275,13 +319,13 @@ fn handle_command(
 
 fn send_graph_window(
     generation: Generation, request_id: RequestId, version: GraphVersion, start: usize, end: usize, tx: &Sender<GraphEvent>, walk_ctx: &Walker, worktrees: &Worktrees,
-    hidden_branch_names: &HashSet<String>, symbols: &SymbolTheme,
+    commit_metadata: &mut CommitMetadataCache, hidden_branch_names: &HashSet<String>, symbols: &SymbolTheme,
 ) {
     let total = walk_ctx.oids.get_commit_count();
     let start = start.min(total);
     let end = end.min(total);
     let history = walk_ctx.buffer.borrow().window(start, end.saturating_add(1));
-    let rows = graph_rows(walk_ctx, worktrees, hidden_branch_names, symbols, start, end);
+    let rows = graph_rows(walk_ctx, worktrees, commit_metadata, hidden_branch_names, symbols, start, end);
     let head_alias = head_alias(walk_ctx);
 
     let _ = tx.send(GraphEvent::GraphWindow { generation, request_id, version, start, end, total, head_alias, rows, history });
@@ -335,8 +379,9 @@ fn no_message(symbols: &SymbolTheme) -> String {
     format!("{} {}", symbols.empty_state.mark, empty::NO_MESSAGE())
 }
 
-fn graph_rows(walk_ctx: &Walker, worktrees: &Worktrees, hidden_branch_names: &HashSet<String>, symbols: &SymbolTheme, start: usize, end: usize) -> Vec<GraphRow> {
-    let repo = walk_ctx.repo.borrow();
+fn graph_rows(
+    walk_ctx: &Walker, worktrees: &Worktrees, commit_metadata: &mut CommitMetadataCache, hidden_branch_names: &HashSet<String>, symbols: &SymbolTheme, start: usize, end: usize,
+) -> Vec<GraphRow> {
     let latest_reflogs = latest_reflogs_by_alias(walk_ctx);
     let mut rows = Vec::with_capacity(end.saturating_sub(start));
 
@@ -344,17 +389,7 @@ fn graph_rows(walk_ctx: &Walker, worktrees: &Worktrees, hidden_branch_names: &Ha
         let alias = walk_ctx.oids.get_sorted_aliases().get(index).copied().unwrap_or(NONE);
         let oid = *walk_ctx.oids.get_oid_by_alias(alias);
         let is_uncommitted = alias == NONE || walk_ctx.oids.is_zero(&oid);
-        let (summary, committer_date, committer_name) = if is_uncommitted {
-            (String::new(), String::new(), String::new())
-        } else if let Ok(commit) = repo.find_commit(oid) {
-            let summary = commit.summary().map(str::to_string).unwrap_or_else(|| no_message(symbols));
-            let committer = commit.committer();
-            let committer_date = timestamp_to_utc_date_time(committer.when());
-            let committer_name = committer.name().unwrap_or(common::UNKNOWN()).to_string();
-            (summary, committer_date, committer_name)
-        } else {
-            (no_message(symbols), String::new(), String::new())
-        };
+        let metadata = if is_uncommitted { CommitMetadata::default() } else { load_commit_metadata(walk_ctx, commit_metadata, alias, oid, symbols) };
 
         let local = walk_ctx.branches_local.get(&alias).cloned().unwrap_or_default();
         let remote = walk_ctx.branches_remote.get(&alias).cloned().unwrap_or_default();
@@ -376,18 +411,46 @@ fn graph_rows(walk_ctx: &Walker, worktrees: &Worktrees, hidden_branch_names: &Ha
         let worktrees = worktrees_for_alias(worktrees, walk_ctx, alias);
         let reflog = latest_reflogs.get(&alias).map(|entry| GraphReflogLabel { selector: entry.selector.clone(), message: entry.message.clone(), lane: walk_ctx.reflogs_lanes.get(&alias).copied() });
 
-        rows.push(GraphRow { index, alias, oid, summary, committer_date, committer_name, has_any_branch, branches, tags, is_stash, stash_lane, worktrees, reflog });
+        rows.push(GraphRow {
+            index,
+            alias,
+            oid,
+            summary: metadata.summary,
+            committer_date: metadata.committer_date,
+            committer_name: metadata.committer_name,
+            has_any_branch,
+            branches,
+            tags,
+            is_stash,
+            stash_lane,
+            worktrees,
+            reflog,
+        });
     }
 
     rows
 }
 
-fn graph_row_at(walk_ctx: &Walker, worktrees: &Worktrees, hidden_branch_names: &HashSet<String>, symbols: &SymbolTheme, index: usize) -> Option<GraphRow> {
+fn load_commit_metadata(walk_ctx: &Walker, cache: &mut CommitMetadataCache, alias: u32, oid: Oid, symbols: &SymbolTheme) -> CommitMetadata {
+    cache.get_or_insert_with(alias, || {
+        if let Ok(commit) = walk_ctx.repo.borrow().find_commit(oid) {
+            let summary = commit.summary().map(str::to_string).unwrap_or_else(|| no_message(symbols));
+            let committer = commit.committer();
+            let committer_date = timestamp_to_utc_date_time(committer.when());
+            let committer_name = committer.name().unwrap_or(common::UNKNOWN()).to_string();
+            CommitMetadata { summary, committer_date, committer_name }
+        } else {
+            CommitMetadata { summary: no_message(symbols), ..CommitMetadata::default() }
+        }
+    })
+}
+
+fn graph_row_at(walk_ctx: &Walker, worktrees: &Worktrees, commit_metadata: &mut CommitMetadataCache, hidden_branch_names: &HashSet<String>, symbols: &SymbolTheme, index: usize) -> Option<GraphRow> {
     if index >= walk_ctx.oids.get_commit_count() {
         return None;
     }
 
-    graph_rows(walk_ctx, worktrees, hidden_branch_names, symbols, index, index.saturating_add(1)).into_iter().next()
+    graph_rows(walk_ctx, worktrees, commit_metadata, hidden_branch_names, symbols, index, index.saturating_add(1)).into_iter().next()
 }
 
 fn pane_rows(pane: GraphPane, walk_ctx: &Walker) -> Vec<GraphPaneRow> {
@@ -439,9 +502,11 @@ fn pane_rows(pane: GraphPane, walk_ctx: &Walker) -> Vec<GraphPaneRow> {
     }
 }
 
-fn lookup(kind: GraphLookupKind, walk_ctx: &Walker, worktrees: &Worktrees, hidden_branch_names: &HashSet<String>, symbols: &SymbolTheme) -> GraphLookupResult {
+fn lookup(
+    kind: GraphLookupKind, walk_ctx: &Walker, worktrees: &Worktrees, commit_metadata: &mut CommitMetadataCache, hidden_branch_names: &HashSet<String>, symbols: &SymbolTheme,
+) -> GraphLookupResult {
     match kind {
-        GraphLookupKind::GraphRowAt { index } => GraphLookupResult::GraphRow(graph_row_at(walk_ctx, worktrees, hidden_branch_names, symbols, index)),
+        GraphLookupKind::GraphRowAt { index } => GraphLookupResult::GraphRow(graph_row_at(walk_ctx, worktrees, commit_metadata, hidden_branch_names, symbols, index)),
         GraphLookupKind::PaneRowAt { pane, index } => GraphLookupResult::PaneRow(pane_rows(pane, walk_ctx).get(index).cloned()),
         GraphLookupKind::BranchIndex { from, direction } => GraphLookupResult::Index(branch_index(walk_ctx, hidden_branch_names, from, direction)),
         GraphLookupKind::ShaPrefix { prefix } => {

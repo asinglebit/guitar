@@ -33,7 +33,7 @@ fn sorted_oid_pages(mut fixture: CommitBatchFixture) -> usize {
 
     loop {
         let before = sorted.len();
-        get_sorted_oids(&fixture.batcher, &mut oids, &mut sorted, fixture.amount, &mut fixture.scratch);
+        get_sorted_oids(&mut fixture.batcher, &mut oids, &mut sorted, fixture.amount, &mut fixture.scratch);
         if sorted.len() == before {
             break;
         }

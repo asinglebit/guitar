@@ -44,6 +44,8 @@ pub struct Walker {
     stash_aliases: StdHashSet<u32>,
     reflog_aliases: StdHashSet<u32>,
     stash_parent_aliases: Vec<(u32, u32)>,
+    oid_batch: Vec<git2::Oid>,
+    sorted_batch: Vec<u32>,
 
     // Number of commits requested per walk iteration.
     pub amount: usize,
@@ -52,8 +54,7 @@ pub struct Walker {
 impl Walker {
     // Open the repository and seed all metadata that does not depend on walking commits.
     pub fn new(path: String, amount: usize, hidden_branch_names: HashSet<String>, include_head_reflog_roots: bool, graph_lane_limit: usize) -> Result<Self, git2::Error> {
-        let path = path.clone();
-        let repo = Rc::new(RefCell::new(Repository::open(path).expect("Failed to open repo")));
+        let repo = Rc::new(RefCell::new(Repository::open(path)?));
 
         let buffer = RefCell::new(Buffer::with_lane_limit(graph_lane_limit));
 
@@ -95,7 +96,8 @@ impl Walker {
             }
         }
 
-        let batcher = Batcher::new(repo.clone(), &hidden_branch_names, &head_reflog_roots).expect("Error");
+        let batcher = Batcher::new(repo.clone(), &hidden_branch_names, &head_reflog_roots)?;
+        let sorted_batch_capacity = amount.saturating_add(oids.stashes.len());
 
         Ok(Self {
             repo,
@@ -113,6 +115,8 @@ impl Walker {
             stash_aliases,
             reflog_aliases,
             stash_parent_aliases,
+            oid_batch: Vec::with_capacity(amount),
+            sorted_batch: Vec::with_capacity(sorted_batch_capacity),
             amount,
         })
     }
@@ -131,8 +135,8 @@ impl Walker {
 
         let head_alias = self.oids.get_alias_by_oid(head_oid);
 
-        let mut sorted_batch: Vec<u32> = Vec::new();
-        get_sorted_oids(&self.batcher, &mut self.oids, &mut sorted_batch, self.amount);
+        self.sorted_batch.clear();
+        get_sorted_oids(&mut self.batcher, &mut self.oids, &mut self.sorted_batch, self.amount, &mut self.oid_batch);
 
         // Alias NONE is rendered as the uncommitted row above HEAD.
         if self.oids.get_commit_count() == 1 {
@@ -141,19 +145,21 @@ impl Walker {
 
         // Place each stash near its first parent so it reads as a side snapshot.
         for &(stash_alias, parent_alias) in &self.stash_parent_aliases {
-            if let Some(pos) = sorted_batch.iter().position(|&a| a == parent_alias) {
-                sorted_batch.insert(if pos == 0 { 0 } else { pos - 1 }, stash_alias);
+            if let Some(pos) = self.sorted_batch.iter().position(|&a| a == parent_alias) {
+                self.sorted_batch.insert(if pos == 0 { 0 } else { pos - 1 }, stash_alias);
             }
         }
 
         // Hold one mutable buffer borrow while the page updates topology.
         let mut buffer = self.buffer.borrow_mut();
 
-        for &alias in sorted_batch.iter() {
+        for &alias in self.sorted_batch.iter() {
             let mut merger_alias: u32 = NONE;
             let mut transient_lane: Option<usize> = None;
             let oid = self.oids.get_oid_by_alias(alias);
-            let commit = repo.find_commit(*oid).unwrap();
+            let Ok(commit) = repo.find_commit(*oid) else {
+                continue;
+            };
 
             // Only two parents are modeled because the renderer draws one merge edge.
             let mut parents_iter = commit.parent_ids();
@@ -222,7 +228,7 @@ impl Walker {
         }
 
         // Empty pages mean the worker is done; emit one backup so lane-window reconstruction has a final delta.
-        if sorted_batch.is_empty() {
+        if self.sorted_batch.is_empty() {
             buffer.backup();
             return false;
         }
