@@ -1,3 +1,4 @@
+use crate::git::queries::submodules::submodules_if_present;
 use git2::{Error, Repository, ResetType, StatusOptions, Submodule, SubmoduleIgnore, SubmoduleStatus};
 use std::path::{Path, PathBuf};
 
@@ -8,7 +9,7 @@ pub fn stage_all(repo: &Repository) -> Result<(), Error> {
     opts.include_untracked(true).recurse_untracked_dirs(true).include_ignored(false).include_unmodified(false).exclude_submodules(true);
 
     let statuses = repo.statuses(Some(&mut opts))?;
-    let submodules = repo.submodules().unwrap_or_default();
+    let submodules = submodules_if_present(repo).unwrap_or_default();
     let submodule_paths = submodules.iter().map(|entry| entry.path().to_path_buf()).collect::<Vec<_>>();
 
     for entry in statuses.iter() {

@@ -108,6 +108,23 @@ fn stage_all_stages_submodule_pointer_without_staging_inner_content() {
 }
 
 #[test]
+fn stage_all_stages_regular_changes_without_submodule_metadata() {
+    let dir = TestDir::new("stage-all-no-submodules");
+    let repo = init_repo(&dir.path);
+    fs::write(dir.path.join("file.txt"), "changed\n").unwrap();
+    fs::write(dir.path.join("new.txt"), "new\n").unwrap();
+
+    stage_all(&repo).unwrap();
+
+    let statuses = repo.statuses(None).unwrap();
+    let staged = statuses.iter().map(|entry| (entry.path().unwrap_or("").to_string(), entry.status())).collect::<Vec<_>>();
+
+    assert!(staged.iter().any(|(path, status)| path == "file.txt" && status.is_index_modified()));
+    assert!(staged.iter().any(|(path, status)| path == "new.txt" && status.is_index_new()));
+    assert!(staged.iter().all(|(_, status)| !status.is_wt_modified() && !status.is_wt_new()));
+}
+
+#[test]
 fn sync_submodule_succeeds_for_existing_submodule() {
     let dir = TestDir::new("sync");
     let (parent, _child_path) = parent_with_submodule(&dir);

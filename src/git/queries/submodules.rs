@@ -1,5 +1,5 @@
 use crate::{core::submodules::SubmoduleEntry, git::queries::commits::get_current_branch};
-use git2::{Repository, SubmoduleIgnore, SubmoduleStatus};
+use git2::{Repository, Submodule, SubmoduleIgnore, SubmoduleStatus};
 use std::path::{Path, PathBuf};
 
 fn status_for(repo: &Repository, name: &str, path: &Path) -> SubmoduleStatus {
@@ -8,15 +8,31 @@ fn status_for(repo: &Repository, name: &str, path: &Path) -> SubmoduleStatus {
         .unwrap_or_else(|_| SubmoduleStatus::empty())
 }
 
+pub fn has_submodule_metadata(repo: &Repository) -> bool {
+    let gitmodules = Path::new(".gitmodules");
+    repo.workdir().is_some_and(|workdir| workdir.join(gitmodules).exists())
+        || repo.head().ok().and_then(|head| head.peel_to_tree().ok()).is_some_and(|tree| tree.get_path(gitmodules).is_ok())
+        || repo.index().ok().is_some_and(|index| index.get_path(gitmodules, 0).is_some())
+}
+
+pub fn submodules_if_present(repo: &Repository) -> Result<Vec<Submodule<'_>>, git2::Error> {
+    if !has_submodule_metadata(repo) {
+        return Ok(Vec::new());
+    }
+
+    repo.submodules()
+}
+
 pub fn list_submodules(repo: &Repository) -> Result<Vec<SubmoduleEntry>, git2::Error> {
     let workdir = repo.workdir().map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from("."));
     let mut entries = Vec::new();
 
-    for submodule in repo.submodules()? {
+    for submodule in submodules_if_present(repo)? {
         let path = submodule.path().to_path_buf();
         let name = submodule.name().map(str::to_string).unwrap_or_else(|| path.display().to_string());
         let status = status_for(repo, &name, &path);
-        let sub_repo = submodule.open().ok();
+        let is_initialized_in_workdir = status.is_in_wd() && !status.is_wd_uninitialized();
+        let sub_repo = is_initialized_in_workdir.then(|| submodule.open().ok()).flatten();
         let branch = sub_repo.as_ref().and_then(get_current_branch).or_else(|| submodule.branch().map(str::to_string));
         let absolute_path = workdir.join(&path);
 
