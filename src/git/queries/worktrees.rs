@@ -12,10 +12,6 @@ fn canonical_path(path: &Path) -> PathBuf {
     fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
-fn paths_equal(a: &Path, b: &Path) -> bool {
-    canonical_path(a) == canonical_path(b)
-}
-
 fn gix_path(repo: &Repository) -> PathBuf {
     repo.workdir().map(Path::to_path_buf).unwrap_or_else(|| repo.path().to_path_buf())
 }
@@ -60,6 +56,7 @@ fn main_worktree_path(repo: &Repository) -> Option<PathBuf> {
 }
 
 fn entry_from_gix_repo(repo: &gix::Repository, name: String, path: PathBuf, kind: WorktreeKind, current_path: &Path) -> WorktreeEntry {
+    let canonical_entry_path = canonical_path(&path);
     WorktreeEntry {
         name,
         path: path.clone(),
@@ -67,7 +64,7 @@ fn entry_from_gix_repo(repo: &gix::Repository, name: String, path: PathBuf, kind
         head: head_oid(repo),
         alias: None,
         kind,
-        is_current: paths_equal(&path, current_path),
+        is_current: canonical_entry_path == current_path,
         is_valid: true,
         is_prunable: false,
         locked_reason: None,
@@ -77,6 +74,7 @@ fn entry_from_gix_repo(repo: &gix::Repository, name: String, path: PathBuf, kind
 
 fn linked_entry(proxy: gix::worktree::Proxy<'_>, current_path: &Path) -> Option<WorktreeEntry> {
     let path = proxy.base().ok()?;
+    let canonical_entry_path = canonical_path(&path);
     let name = proxy.id().to_string();
     let is_locked = proxy.is_locked();
     let locked_reason = proxy.lock_reason().map(|reason| reason.to_string());
@@ -89,7 +87,7 @@ fn linked_entry(proxy: gix::worktree::Proxy<'_>, current_path: &Path) -> Option<
         head: repo.as_ref().and_then(head_oid),
         alias: None,
         kind: WorktreeKind::Linked,
-        is_current: paths_equal(&path, current_path),
+        is_current: canonical_entry_path == current_path,
         is_valid: repo.is_some(),
         is_prunable: !is_locked && repo.is_none(),
         locked_reason,
@@ -105,6 +103,7 @@ fn linked_entry(proxy: gix::worktree::Proxy<'_>, current_path: &Path) -> Option<
 
 pub fn list_worktrees(repo: &Repository, current_path: Option<&Path>) -> Result<Vec<WorktreeEntry>, Error> {
     let current = current_path.map(Path::to_path_buf).or_else(|| repo.workdir().map(Path::to_path_buf)).or_else(|| main_worktree_path(repo)).unwrap_or_else(|| PathBuf::from("."));
+    let current = canonical_path(&current);
 
     let current_repo = open_gix_repo(repo)?;
     let owner_repo = current_repo.main_repo().map_err(|err| Error::from_str(&err.to_string()))?;
