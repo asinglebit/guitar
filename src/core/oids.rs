@@ -1,6 +1,6 @@
 use crate::core::chunk::NONE;
 use git2::Oid;
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 pub fn git2_to_gix_oid(oid: Oid) -> gix::ObjectId {
     gix::ObjectId::from_bytes_or_panic(oid.as_bytes())
@@ -20,14 +20,14 @@ pub fn gix_time_to_git2_time(time: gix::date::Time) -> git2::Time {
 pub struct Oids {
     pub zero: Oid,
     pub oids: Vec<Oid>,
-    pub aliases: HashMap<Oid, u32>,
+    pub aliases: FxHashMap<Oid, u32>,
     pub sorted_aliases: Vec<u32>,
     pub stashes: Vec<u32>,
 }
 
 impl Default for Oids {
     fn default() -> Self {
-        Oids { zero: Oid::zero(), oids: Vec::new(), aliases: HashMap::new(), sorted_aliases: vec![NONE], stashes: vec![] }
+        Oids { zero: Oid::zero(), oids: Vec::new(), aliases: FxHashMap::default(), sorted_aliases: vec![NONE], stashes: vec![] }
     }
 }
 
