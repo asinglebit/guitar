@@ -55,6 +55,7 @@ Status and diff details are tracked in [docs/gitoxide-status-diff.md](gitoxide-s
 Rename and copy fidelity details are tracked in [docs/gitoxide-diff-fidelity.md](gitoxide-diff-fidelity.md).
 Refs, remotes, and tag details are tracked in [docs/gitoxide-refs-remotes-tags.md](gitoxide-refs-remotes-tags.md).
 Stash details are tracked in [docs/gitoxide-stash.md](gitoxide-stash.md).
+Submodule details are tracked in [docs/gitoxide-submodules.md](gitoxide-submodules.md).
 Network and auth details are tracked in [docs/gitoxide-network.md](gitoxide-network.md).
 
 ## Test Gate

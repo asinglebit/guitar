@@ -186,3 +186,36 @@ fn detects_submodule_untracked_content() {
     assert!(entry.has_untracked_content);
     assert!(entry.is_dirty());
 }
+
+#[test]
+fn lists_only_immediate_submodules_without_recursing() {
+    let dir = TestDir::new("non-recursive");
+    let grandchild_path = dir.path.join("grandchild");
+    let child_path = dir.path.join("child");
+    let child = init_repo(&child_path);
+    let grandchild = init_repo(&grandchild_path);
+    drop(grandchild);
+
+    let mut nested = child.submodule(grandchild_path.to_str().unwrap(), Path::new("vendor/grandchild"), true).unwrap();
+    nested.clone(None).unwrap();
+    nested.add_finalize().unwrap();
+    commit_index(&child, "add nested submodule");
+    drop(nested);
+
+    let child_entries = list_submodules(&child).unwrap();
+    assert_eq!(child_entries.len(), 1);
+    assert_eq!(child_entries[0].name, "vendor/grandchild");
+
+    let parent_path = dir.path.join("parent");
+    let parent = init_repo(&parent_path);
+    let mut submodule = parent.submodule(child_path.to_str().unwrap(), Path::new("deps/child"), true).unwrap();
+    submodule.clone(None).unwrap();
+    submodule.add_finalize().unwrap();
+    commit_index(&parent, "add submodule");
+    drop(submodule);
+
+    let entries = list_submodules(&parent).unwrap();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].name, "deps/child");
+    assert_eq!(entries[0].path, PathBuf::from("deps/child"));
+}
