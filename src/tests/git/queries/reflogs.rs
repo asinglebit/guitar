@@ -56,8 +56,8 @@ fn head_reflog_keeps_commit_after_reset() {
 }
 
 #[test]
-fn gitoxide_matches_libgit2_head_reflog_entries_and_skips_missing_commits() {
-    let (_path, repo) = temp_repo("parity");
+fn head_reflog_skips_entries_that_no_longer_point_to_commits() {
+    let (_path, repo) = temp_repo("skip-non-commit");
     let base = commit(&repo, "file.txt", "base");
     let lost = commit(&repo, "file.txt", "lost");
     let base_commit = repo.find_commit(base).unwrap();
@@ -66,20 +66,16 @@ fn gitoxide_matches_libgit2_head_reflog_entries_and_skips_missing_commits() {
     let skipped_oid = repo.blob(b"skip-me").unwrap();
     append_reflog_entry(&repo, skipped_oid, "skip-me");
 
-    let git2_entries = super::get_head_reflog_entries_git2(&repo).unwrap();
-    let gix_entries = get_head_reflog_entries(&repo).unwrap();
+    let entries = get_head_reflog_entries(&repo).unwrap();
 
-    assert_eq!(git2_entries, gix_entries);
-    assert!(git2_entries.iter().any(|entry| entry.new_oid == lost));
-    assert!(!git2_entries.iter().any(|entry| entry.message == "skip-me"));
-    assert_eq!(git2_entries.first().map(|entry| entry.selector.as_str()), Some("HEAD@{1}"));
+    assert!(entries.iter().any(|entry| entry.new_oid == lost));
+    assert!(!entries.iter().any(|entry| entry.message == "skip-me"));
+    assert_eq!(entries.first().map(|entry| entry.selector.as_str()), Some("HEAD@{1}"));
 }
 
 #[test]
-fn missing_head_reflog_behavior_matches_libgit2() {
+fn missing_head_reflog_returns_an_error() {
     let (_path, repo) = temp_repo("missing");
-    let git2_result = super::get_head_reflog_entries_git2(&repo);
-    let gix_result = get_head_reflog_entries(&repo);
 
-    assert_eq!(git2_result.is_err(), gix_result.is_err());
+    assert!(get_head_reflog_entries(&repo).is_err());
 }

@@ -5,7 +5,7 @@ use crate::{
     },
     helpers::text::{decode, sanitize},
 };
-use git2::{Delta, DiffOptions, Error, Oid, Repository, Status, StatusOptions, Submodule, SubmoduleIgnore, SubmoduleStatus};
+use git2::{Delta, DiffOptions, Error, Oid, Repository, Submodule, SubmoduleIgnore, SubmoduleStatus};
 use gix::bstr::{BStr, ByteSlice};
 use std::path::{Path, PathBuf};
 
@@ -67,57 +67,6 @@ pub fn get_filenames_diff_at_workdir_gix(repo: &Repository) -> Result<Uncommitte
     }
 
     add_submodule_pointer_changes(repo, &submodules, &mut changes);
-    finalize_uncommitted_changes(&mut changes);
-
-    Ok(changes)
-}
-
-pub fn get_filenames_diff_at_workdir_git2(repo: &Repository) -> Result<UncommittedChanges, Error> {
-    let mut options = StatusOptions::new();
-    options.include_untracked(true).recurse_untracked_dirs(true).exclude_submodules(true).show(git2::StatusShow::IndexAndWorkdir).renames_head_to_index(false).renames_index_to_workdir(false);
-
-    let statuses = repo.statuses(Some(&mut options))?;
-    let mut changes = UncommittedChanges::default();
-    let workdir = repo.workdir().expect("Bare repo not supported");
-    let submodules = submodules_if_present(repo).unwrap_or_default();
-    let submodule_paths = submodules.iter().map(|entry| entry.path().to_path_buf()).collect::<Vec<_>>();
-
-    for entry in statuses.iter() {
-        let rel_path = entry.path().unwrap_or("");
-        if is_submodule_status_path(rel_path, &submodule_paths) {
-            continue;
-        }
-
-        let full_path = workdir.join(rel_path);
-
-        if full_path.is_dir() {
-            // Directory statuses are expanded so the UI can show actionable file rows.
-            for file in collect_files_for_status(repo, workdir, rel_path) {
-                if is_submodule_status_path(&file, &submodule_paths) {
-                    continue;
-                }
-
-                // Query expanded children because the directory status is not specific enough.
-                push_status_changes(&mut changes, file.clone(), repo.status_file(Path::new(&file))?);
-            }
-        } else {
-            push_status_changes(&mut changes, rel_path.to_string(), entry.status());
-        }
-    }
-
-    if let Ok(index) = repo.index()
-        && let Ok(conflicts) = index.conflicts()
-    {
-        for conflict in conflicts.flatten() {
-            let path = conflict.our.as_ref().and_then(conflict_path).or_else(|| conflict.their.as_ref().and_then(conflict_path)).or_else(|| conflict.ancestor.as_ref().and_then(conflict_path));
-            if let Some(path) = path {
-                push_unique(&mut changes.conflicts, path);
-            }
-        }
-    }
-
-    add_submodule_pointer_changes(repo, &submodules, &mut changes);
-
     finalize_uncommitted_changes(&mut changes);
 
     Ok(changes)
@@ -186,10 +135,6 @@ fn is_submodule_status_path(path: &str, submodule_paths: &[PathBuf]) -> bool {
     submodule_paths.iter().any(|submodule_path| path == submodule_path || path.starts_with(submodule_path))
 }
 
-fn conflict_path(entry: &git2::IndexEntry) -> Option<String> {
-    std::str::from_utf8(&entry.path).ok().map(|path| path.to_string())
-}
-
 fn gix_error(error: impl std::fmt::Display) -> Error {
     Error::from_str(&error.to_string())
 }
@@ -202,69 +147,6 @@ fn push_unique(paths: &mut Vec<String>, path: String) {
     if !paths.iter().any(|existing| existing == &path) {
         paths.push(path);
     }
-}
-
-fn push_status_changes(changes: &mut UncommittedChanges, file: String, status: Status) {
-    if status.is_conflicted() {
-        push_unique(&mut changes.conflicts, file);
-        return;
-    }
-
-    if status.is_index_modified() {
-        changes.staged.modified.push(file.clone());
-    }
-    if status.is_index_new() {
-        changes.staged.added.push(file.clone());
-    }
-    if status.is_index_deleted() {
-        changes.staged.deleted.push(file.clone());
-    }
-
-    if status.is_wt_modified() {
-        changes.unstaged.modified.push(file.clone());
-    }
-    if status.is_wt_new() {
-        changes.unstaged.added.push(file.clone());
-    }
-    if status.is_wt_deleted() {
-        changes.unstaged.deleted.push(file);
-    }
-}
-
-fn collect_files_for_status(repo: &Repository, workdir: &Path, rel_path: &str) -> Vec<String> {
-    let full_path = workdir.join(rel_path);
-
-    if full_path.exists() {
-        if full_path.is_file() {
-            return vec![rel_path.to_string()];
-        } else if full_path.is_dir() {
-            let mut result = Vec::new();
-            if let Ok(entries) = std::fs::read_dir(&full_path) {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    let child_rel = match path.strip_prefix(workdir) {
-                        Ok(p) => p.to_string_lossy().to_string(),
-                        Err(_) => continue,
-                    };
-
-                    // Respect gitignore while recursively expanding untracked directories.
-                    if repo.status_should_ignore(Path::new(&child_rel)).unwrap_or(false) {
-                        continue;
-                    }
-
-                    if path.is_file() {
-                        result.push(child_rel);
-                    } else if path.is_dir() {
-                        result.extend(collect_files_for_status(repo, workdir, &child_rel));
-                    }
-                }
-            }
-            return result;
-        }
-    }
-
-    // Deleted paths no longer exist on disk, but git still reports them by relative path.
-    vec![rel_path.to_string()]
 }
 
 // List files changed by a commit compared with its first parent.

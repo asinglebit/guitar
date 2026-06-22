@@ -62,38 +62,6 @@ fn tracked_file_paths_gix(repo: &gix::Repository) -> Result<Vec<String>, git2::E
     Ok(paths)
 }
 
-#[cfg(test)]
-fn tracked_file_paths_git2(repo: &Repository) -> Result<Vec<String>, git2::Error> {
-    let Some(workdir) = repo.workdir() else {
-        return Ok(Vec::new());
-    };
-
-    let index = repo.index()?;
-    let mut seen = HashSet::new();
-    let mut paths = Vec::new();
-
-    for entry in index.iter() {
-        let Ok(path) = std::str::from_utf8(&entry.path) else {
-            continue;
-        };
-
-        let path = normalize_path(path);
-        if path.is_empty() || is_git_internal_path(&path) || !seen.insert(path.clone()) {
-            continue;
-        }
-
-        if repo.status_should_ignore(Path::new(&path)).unwrap_or(false) {
-            continue;
-        }
-
-        if workdir.join(Path::new(&path)).is_file() {
-            paths.push(path);
-        }
-    }
-
-    Ok(paths)
-}
-
 pub fn rank_file_paths(paths: &[String], query: &str, limit: usize) -> Vec<FileSearchResult> {
     let terms = normalize_query(query);
     if terms.is_empty() || limit == 0 {

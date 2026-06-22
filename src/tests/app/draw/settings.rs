@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     app::app::{SettingsTab, Viewport},
-    git::queries::remotes::GUITAR_DEFAULT_REMOTE_CONFIG,
+    git::queries::remotes::{GUITAR_DEFAULT_REMOTE_CONFIG, list_remotes},
     helpers::{
         keymap::{Command, InputMode, KeyBinding},
         layout::GRAPH_LANE_LIMIT_DEFAULT,
@@ -77,6 +77,10 @@ fn remote_selection_lines(app: &App, remote_name: &str) -> Vec<usize> {
             _ => None,
         })
         .collect()
+}
+
+fn populate_remotes(app: &mut App, repo: &Repository) {
+    app.remotes = list_remotes(repo).unwrap();
 }
 
 #[test]
@@ -495,6 +499,7 @@ fn settings_empty_recent_repositories_row_is_not_selectable() {
 fn settings_renders_remotes_section_with_add_and_empty_state() {
     let (_path, repo) = temp_repo("empty-remotes-section");
     let mut app = settings_app();
+    populate_remotes(&mut app, &repo);
     app.settings_tab = SettingsTab::Repo;
     app.layout.graph = Rect::new(0, 0, 140, 120);
     app.layout.app = Rect::new(0, 0, 140, 120);
@@ -513,6 +518,7 @@ fn settings_renders_remote_rows_with_fetch_and_push_urls() {
     let (_path, repo) = temp_repo("remote-rows");
     repo.remote("origin", "https://example.com/repo.git").unwrap();
     let mut app = settings_app();
+    populate_remotes(&mut app, &repo);
     app.settings_tab = SettingsTab::Repo;
     app.layout.graph = Rect::new(0, 0, 180, 140);
     app.layout.app = Rect::new(0, 0, 180, 140);
@@ -536,6 +542,7 @@ fn settings_renders_remote_rows_with_explicit_push_url() {
     repo.remote("origin", "https://example.com/repo.git").unwrap();
     repo.remote_set_pushurl("origin", Some("ssh://example.com/repo.git")).unwrap();
     let mut app = settings_app();
+    populate_remotes(&mut app, &repo);
     app.settings_tab = SettingsTab::Repo;
     app.layout.graph = Rect::new(0, 0, 180, 140);
     app.layout.app = Rect::new(0, 0, 180, 140);
@@ -558,6 +565,7 @@ fn settings_marks_effective_default_remote() {
     repo.remote("upstream", "https://example.com/upstream.git").unwrap();
     repo.config().unwrap().set_str(GUITAR_DEFAULT_REMOTE_CONFIG, "upstream").unwrap();
     let mut app = settings_app();
+    populate_remotes(&mut app, &repo);
     app.settings_tab = SettingsTab::Repo;
     app.layout.graph = Rect::new(0, 0, 180, 140);
     app.layout.app = Rect::new(0, 0, 180, 140);
@@ -579,6 +587,7 @@ fn settings_truncates_long_remote_urls() {
     let long_url = "https://example.com/this/is/a/very/long/path/that/should/not/overflow/the/settings/row/repository.git";
     repo.remote("origin", long_url).unwrap();
     let mut app = settings_app();
+    populate_remotes(&mut app, &repo);
     app.settings_tab = SettingsTab::Repo;
     app.layout.graph = Rect::new(0, 0, 80, 120);
     app.layout.app = Rect::new(0, 0, 80, 120);

@@ -27,19 +27,21 @@ pub fn branch_visibility_config_path() -> PathBuf {
 }
 
 pub fn current_branch_names(repo: &Repository) -> HashSet<String> {
+    let path = repo.workdir().unwrap_or(repo.path());
+    let Ok(repo) = gix::open(path) else {
+        return HashSet::new();
+    };
+    current_branch_names_gix(&repo)
+}
+
+pub fn current_branch_names_gix(repo: &gix::Repository) -> HashSet<String> {
     let mut names = HashSet::new();
     let Ok(references) = repo.references() else {
         return names;
     };
 
-    for reference in references.flatten() {
-        if reference.target().is_none() {
-            continue;
-        }
-
-        let Some(name) = reference.name() else {
-            continue;
-        };
+    for reference in references.all().into_iter().flatten().flatten() {
+        let name = reference.name().as_bstr().to_string();
 
         let branch_name = name.strip_prefix("refs/heads/").or_else(|| name.strip_prefix("refs/remotes/"));
         if let Some(branch_name) = branch_name

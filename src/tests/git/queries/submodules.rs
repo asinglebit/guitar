@@ -88,6 +88,43 @@ fn returns_empty_when_repo_has_no_submodule_metadata() {
     assert!(entries.is_empty());
 }
 
+#[test]
+fn detects_staged_gitmodules_without_workdir_or_head_entry() {
+    let dir = TestDir::new("staged-gitmodules");
+    let repo = init_repo(&dir.path.join("repo"));
+    let gitmodules = repo.workdir().unwrap().join(".gitmodules");
+    fs::write(&gitmodules, "[submodule \"deps/child\"]\n\tpath = deps/child\n\turl = ../child\n").unwrap();
+    let mut index = repo.index().unwrap();
+    index.add_path(Path::new(".gitmodules")).unwrap();
+    index.write().unwrap();
+    fs::remove_file(gitmodules).unwrap();
+
+    assert!(has_submodule_metadata(&repo));
+    assert!(!has_committed_or_workdir_submodule_metadata(&repo));
+    assert!(list_submodules(&repo).unwrap().is_empty());
+}
+
+#[test]
+fn gitmodules_index_scan_matches_across_buffer_boundary() {
+    let dir = TestDir::new("gitmodules-scan-boundary");
+    let path = dir.path.join("index");
+    let split = INDEX_SCAN_BUFFER - 4;
+    let mut bytes = vec![b'x'; split];
+    bytes.extend_from_slice(GITMODULES_PATH);
+    fs::write(&path, bytes).unwrap();
+
+    assert!(file_contains_gitmodules_path(&path));
+}
+
+#[test]
+fn gitmodules_index_scan_returns_false_without_path() {
+    let dir = TestDir::new("gitmodules-scan-missing");
+    let path = dir.path.join("index");
+    fs::write(&path, vec![b'x'; INDEX_SCAN_BUFFER + 64]).unwrap();
+
+    assert!(!file_contains_gitmodules_path(&path));
+}
+
 fn assert_clean_submodule(entry: &crate::core::submodules::SubmoduleEntry) {
     assert!(entry.is_open);
     assert!(!entry.is_uninitialized);

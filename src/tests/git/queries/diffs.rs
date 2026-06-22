@@ -129,30 +129,6 @@ fn assert_contains_path(paths: &[String], expected: &str) {
     assert!(paths.iter().any(|path| path == expected), "expected {expected} in {paths:?}");
 }
 
-fn sorted(paths: &[String]) -> Vec<String> {
-    let mut paths = paths.to_vec();
-    paths.sort();
-    paths
-}
-
-fn assert_same_uncommitted_changes(left: &UncommittedChanges, right: &UncommittedChanges) {
-    assert_eq!(sorted(&left.staged.modified), sorted(&right.staged.modified));
-    assert_eq!(sorted(&left.staged.added), sorted(&right.staged.added));
-    assert_eq!(sorted(&left.staged.deleted), sorted(&right.staged.deleted));
-    assert_eq!(sorted(&left.unstaged.modified), sorted(&right.unstaged.modified));
-    assert_eq!(sorted(&left.unstaged.added), sorted(&right.unstaged.added));
-    assert_eq!(sorted(&left.unstaged.deleted), sorted(&right.unstaged.deleted));
-    assert_eq!(sorted(&left.conflicts), sorted(&right.conflicts));
-    assert_eq!(left.modified_count, right.modified_count);
-    assert_eq!(left.added_count, right.added_count);
-    assert_eq!(left.deleted_count, right.deleted_count);
-    assert_eq!(left.conflict_count, right.conflict_count);
-    assert_eq!(left.is_clean, right.is_clean);
-    assert_eq!(left.is_staged, right.is_staged);
-    assert_eq!(left.is_unstaged, right.is_unstaged);
-    assert_eq!(left.has_conflicts, right.has_conflicts);
-}
-
 #[test]
 fn workdir_diff_marks_conflicted_paths() {
     let (path, repo) = temp_repo("conflict");
@@ -235,30 +211,6 @@ fn workdir_diff_lists_file_statuses_without_requerying_paths() {
 }
 
 #[test]
-fn gitoxide_matches_libgit2_workdir_status_for_ordinary_paths() {
-    let (path, repo) = temp_repo("ordinary-statuses-parity");
-    write(&path, "staged.txt", "base\n");
-    commit(&repo, "staged.txt", "staged base");
-    write(&path, "unstaged.txt", "base\n");
-    commit(&repo, "unstaged.txt", "unstaged base");
-    write(&path, "deleted.txt", "base\n");
-    commit(&repo, "deleted.txt", "deleted base");
-
-    write(&path, "staged.txt", "staged\n");
-    stage(&repo, "staged.txt");
-    write(&path, "unstaged.txt", "unstaged\n");
-    fs::remove_file(path.join("deleted.txt")).unwrap();
-    write(&path, "new.txt", "new\n");
-
-    let git2_changes = get_filenames_diff_at_workdir_git2(&repo).unwrap();
-    let gix_changes = get_filenames_diff_at_workdir_gix(&repo).unwrap();
-
-    assert_same_uncommitted_changes(&git2_changes, &gix_changes);
-
-    let _ = fs::remove_dir_all(path);
-}
-
-#[test]
 fn workdir_diff_expands_untracked_directories_to_file_rows() {
     let (path, repo) = temp_repo("untracked-directory-expansion");
     write(&path, "tracked.txt", "base\n");
@@ -289,23 +241,6 @@ fn workdir_diff_expands_untracked_directories_without_ignored_files() {
     assert_contains_path(&changes.unstaged.added, "scratch/one.txt");
     assert_contains_path(&changes.unstaged.added, "scratch/nested/two.txt");
     assert!(!changes.unstaged.added.iter().any(|path| path.ends_with("skip.ignored")));
-
-    let _ = fs::remove_dir_all(path);
-}
-
-#[test]
-fn gitoxide_matches_libgit2_untracked_tree_expansion_and_ignores() {
-    let (path, repo) = temp_repo("untracked-directory-parity");
-    write(&path, ".gitignore", "*.ignored\n");
-    commit(&repo, ".gitignore", "ignore generated files");
-    write(&path, "scratch/one.txt", "one\n");
-    write(&path, "scratch/nested/two.txt", "two\n");
-    write(&path, "scratch/nested/skip.ignored", "ignored\n");
-
-    let git2_changes = get_filenames_diff_at_workdir_git2(&repo).unwrap();
-    let gix_changes = get_filenames_diff_at_workdir_gix(&repo).unwrap();
-
-    assert_same_uncommitted_changes(&git2_changes, &gix_changes);
 
     let _ = fs::remove_dir_all(path);
 }

@@ -73,17 +73,6 @@ fn workdir_status_many(fixture: &WorkdirStatusFixture) -> usize {
         + changes.conflicts.len()
 }
 
-fn workdir_status_many_git2(fixture: &WorkdirStatusFixture) -> usize {
-    let changes = guitar::git::queries::diffs::get_filenames_diff_at_workdir_git2(&fixture.repo).unwrap();
-    changes.staged.modified.len()
-        + changes.staged.added.len()
-        + changes.staged.deleted.len()
-        + changes.unstaged.modified.len()
-        + changes.unstaged.added.len()
-        + changes.unstaged.deleted.len()
-        + changes.conflicts.len()
-}
-
 fn workdir_status_many_gix(fixture: &WorkdirStatusFixture) -> usize {
     let changes = guitar::git::queries::diffs::get_filenames_diff_at_workdir_gix(&fixture.repo).unwrap();
     changes.staged.modified.len()
@@ -137,13 +126,6 @@ fn get_filenames_diff_at_workdir_many_changes(bencher: divan::Bencher) {
 }
 
 #[divan::bench(sample_count = 30, sample_size = 10)]
-fn get_filenames_diff_at_workdir_git2_many_changes(bencher: divan::Bencher) {
-    let fixture = build_workdir_status_fixture(96, 48);
-
-    bencher.counter(divan::counter::ItemsCount::new(fixture.expected_changes)).bench_local(|| divan::black_box(workdir_status_many_git2(&fixture)));
-}
-
-#[divan::bench(sample_count = 30, sample_size = 10)]
 fn get_filenames_diff_at_workdir_gix_many_changes(bencher: divan::Bencher) {
     let fixture = build_workdir_status_fixture(96, 48);
 
@@ -155,13 +137,6 @@ fn get_filenames_diff_at_workdir_untracked_tree(bencher: divan::Bencher) {
     let fixture = build_untracked_tree_fixture(8, 16, 4);
 
     bencher.counter(divan::counter::ItemsCount::new(fixture.expected_changes)).bench_local(|| divan::black_box(workdir_status_many(&fixture)));
-}
-
-#[divan::bench(sample_count = 30, sample_size = 5)]
-fn get_filenames_diff_at_workdir_git2_untracked_tree(bencher: divan::Bencher) {
-    let fixture = build_untracked_tree_fixture(8, 16, 4);
-
-    bencher.counter(divan::counter::ItemsCount::new(fixture.expected_changes)).bench_local(|| divan::black_box(workdir_status_many_git2(&fixture)));
 }
 
 #[divan::bench(sample_count = 30, sample_size = 5)]

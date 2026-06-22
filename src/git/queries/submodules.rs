@@ -1,7 +1,13 @@
 use crate::core::{oids::gix_to_git2_oid, submodules::SubmoduleEntry};
 use git2::Repository;
 use gix::bstr::ByteSlice;
+use std::fs::File;
+use std::io::Read;
 use std::path::{Path, PathBuf};
+
+const GITMODULES_PATH: &[u8] = b".gitmodules";
+const INDEX_SCAN_BUFFER: usize = 64 * 1024;
+const GITMODULES_OVERLAP: usize = 10;
 
 fn open_gix_repo(repo: &Repository) -> Result<gix::Repository, git2::Error> {
     let path = repo.workdir().unwrap_or(repo.path());
@@ -59,11 +65,55 @@ fn changed_content_flags(changes: &[gix::status::Item]) -> (bool, bool) {
     (has_modified_content, has_untracked_content)
 }
 
-pub fn has_submodule_metadata(repo: &Repository) -> bool {
+fn has_committed_or_workdir_submodule_metadata(repo: &Repository) -> bool {
     let gitmodules = Path::new(".gitmodules");
-    repo.workdir().is_some_and(|workdir| workdir.join(gitmodules).exists())
-        || repo.head().ok().and_then(|head| head.peel_to_tree().ok()).is_some_and(|tree| tree.get_path(gitmodules).is_ok())
-        || repo.index().ok().is_some_and(|index| index.get_path(gitmodules, 0).is_some())
+    repo.workdir().is_some_and(|workdir| workdir.join(gitmodules).exists()) || repo.head().ok().and_then(|head| head.peel_to_tree().ok()).is_some_and(|tree| tree.get_path(gitmodules).is_ok())
+}
+
+pub fn has_submodule_metadata(repo: &Repository) -> bool {
+    has_committed_or_workdir_submodule_metadata(repo) || index_contains_gitmodules_path(repo)
+}
+
+fn index_contains_gitmodules_path(repo: &Repository) -> bool {
+    let path = repo.path().join("index");
+    file_contains_gitmodules_path(&path)
+}
+
+fn file_contains_gitmodules_path(path: &Path) -> bool {
+    let Ok(mut file) = File::open(path) else {
+        return false;
+    };
+
+    let mut buffer = [0u8; INDEX_SCAN_BUFFER];
+    let mut overlap = [0u8; GITMODULES_OVERLAP];
+    let mut overlap_len = 0;
+
+    loop {
+        let Ok(read) = file.read(&mut buffer) else {
+            return false;
+        };
+        if read == 0 {
+            return false;
+        }
+
+        if overlap_len > 0 {
+            let prefix_len = (GITMODULES_PATH.len() - 1).min(read);
+            let mut boundary = [0u8; GITMODULES_OVERLAP * 2 + 1];
+            boundary[..overlap_len].copy_from_slice(&overlap[..overlap_len]);
+            boundary[overlap_len..overlap_len + prefix_len].copy_from_slice(&buffer[..prefix_len]);
+            if boundary[..overlap_len + prefix_len].windows(GITMODULES_PATH.len()).any(|window| window == GITMODULES_PATH) {
+                return true;
+            }
+        }
+
+        if buffer[..read].windows(GITMODULES_PATH.len()).any(|window| window == GITMODULES_PATH) {
+            return true;
+        }
+
+        let keep = GITMODULES_PATH.len().saturating_sub(1).min(read);
+        overlap[..keep].copy_from_slice(&buffer[read - keep..read]);
+        overlap_len = keep;
+    }
 }
 
 pub fn submodules_if_present(repo: &Repository) -> Result<Vec<git2::Submodule<'_>>, git2::Error> {
@@ -75,7 +125,7 @@ pub fn submodules_if_present(repo: &Repository) -> Result<Vec<git2::Submodule<'_
 }
 
 pub fn list_submodules(repo: &Repository) -> Result<Vec<SubmoduleEntry>, git2::Error> {
-    if !has_submodule_metadata(repo) {
+    if !has_committed_or_workdir_submodule_metadata(repo) {
         return Ok(Vec::new());
     }
 
