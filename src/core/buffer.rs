@@ -1,5 +1,6 @@
 use crate::core::chunk::{Chunk, LaneRef, NONE};
-use im::Vector;
+use crate::core::graph_service::{GraphHistory, LaneSnapshot};
+use smallvec::{SmallVec, smallvec};
 
 const DELTA_CHUNK_SIZE: usize = 8_192;
 const DELTA_OP_CHUNK_SIZE: usize = 131_072;
@@ -25,7 +26,7 @@ pub enum DeltaOps {
     Empty,
     One(DeltaOp),
     Two(DeltaOp, DeltaOp),
-    Many(Vec<DeltaOp>),
+    Many(SmallVec<[DeltaOp; 8]>),
 }
 
 impl DeltaOps {
@@ -33,7 +34,7 @@ impl DeltaOps {
         match std::mem::take(self) {
             DeltaOps::Empty => *self = DeltaOps::One(op),
             DeltaOps::One(first) => *self = DeltaOps::Two(first, op),
-            DeltaOps::Two(first, second) => *self = DeltaOps::Many(vec![first, second, op]),
+            DeltaOps::Two(first, second) => *self = DeltaOps::Many(smallvec![first, second, op]),
             DeltaOps::Many(mut ops) => {
                 ops.push(op);
                 *self = DeltaOps::Many(ops);
@@ -209,7 +210,7 @@ pub struct UpdateOutcome {
 
 #[derive(Default, Clone)]
 pub struct Buffer {
-    pub curr: Vector<Chunk>,
+    pub curr: LaneSnapshot,
     // Deltas are append-only; chunking avoids giant realloc/copy spikes while loading huge repos.
     pub deltas: DeltaLog,
     pub checkpoints: Vec<Checkpoint>,
@@ -222,7 +223,7 @@ pub struct Buffer {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Checkpoint {
     pub idx: usize,
-    pub curr: Vector<Chunk>,
+    pub curr: LaneSnapshot,
 }
 
 impl Buffer {
@@ -265,7 +266,7 @@ impl Buffer {
             if !self.curr[last_idx].is_dummy() {
                 break;
             }
-            self.curr.pop_back();
+            self.curr.pop();
             self.delta.ops.push(DeltaOp::Remove { index: delta_index(last_idx) });
         }
 
@@ -279,7 +280,7 @@ impl Buffer {
             clone.parent_a = clone.parent_b;
             clone.parent_b = NONE;
             self.curr[merger_idx].parent_b = NONE;
-            self.curr.push_back(clone);
+            self.curr.push(clone);
 
             self.delta.ops.push(DeltaOp::Replace { index: delta_index(merger_idx), new: self.curr[merger_idx] });
 
@@ -323,7 +324,7 @@ impl Buffer {
             self.enforce_lane_limit(Some(first_idx));
             UpdateOutcome { lane: self.lane_ref_for_original_index(first_idx), started_lane: false }
         } else {
-            self.curr.push_back(chunk);
+            self.curr.push(chunk);
             self.delta.ops.push(DeltaOp::Insert { index: delta_index(self.curr.len() - 1), item: chunk });
             let lane_idx = self.curr.len() - 1;
             self.enforce_lane_limit(Some(lane_idx));
@@ -352,7 +353,7 @@ impl Buffer {
         }
 
         while self.curr.len() > limit {
-            self.curr.pop_back();
+            self.curr.pop();
         }
 
         self.purge_unstored_mergers();
@@ -396,8 +397,8 @@ impl Buffer {
         self.transient_lanes.shrink_to_fit();
     }
 
-    pub fn window(&self, start: usize, end: usize) -> Vector<Vector<Chunk>> {
-        let mut history = Vector::new();
+    pub fn window(&self, start: usize, end: usize) -> GraphHistory {
+        let mut history = GraphHistory::new();
 
         // Start from the nearest checkpoint before the requested range.
         let checkpoint = self.checkpoints.get(self.checkpoints.partition_point(|checkpoint| checkpoint.idx <= start).saturating_sub(1));
@@ -422,19 +423,19 @@ impl Buffer {
                     },
                     DeltaOp::Truncate { len } => {
                         while curr.len() > *len as usize {
-                            curr.pop_back();
+                            curr.pop();
                         }
                     },
                     DeltaOp::ReplaceAndTruncate { index, new, len } => {
                         curr[*index as usize] = *new;
                         while curr.len() > *len as usize {
-                            curr.pop_back();
+                            curr.pop();
                         }
                     },
                 }
             }
             if idx >= start {
-                history.push_back(curr.clone());
+                history.push(curr.clone());
             }
         }
 

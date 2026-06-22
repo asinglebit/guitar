@@ -124,6 +124,14 @@ pub fn submodules_if_present(repo: &Repository) -> Result<Vec<git2::Submodule<'_
     repo.submodules()
 }
 
+pub fn committed_or_workdir_submodules(repo: &Repository) -> Result<Vec<git2::Submodule<'_>>, git2::Error> {
+    if !has_committed_or_workdir_submodule_metadata(repo) {
+        return Ok(Vec::new());
+    }
+
+    repo.submodules()
+}
+
 pub fn list_submodules(repo: &Repository) -> Result<Vec<SubmoduleEntry>, git2::Error> {
     if !has_committed_or_workdir_submodule_metadata(repo) {
         return Ok(Vec::new());

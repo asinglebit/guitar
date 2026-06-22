@@ -17,7 +17,6 @@ use crate::{
         text::{modifiers_to_string, pascal_to_spaced},
     },
 };
-use im::Vector;
 use indexmap::IndexMap;
 use ratatui::{
     style::Style,
@@ -346,7 +345,7 @@ fn branch_up_symbol(graph: &GraphSymbols, lane_idx: usize, current_row_lane_idx:
     if current_row_lane_idx.is_some_and(|row_lane_idx| lane_idx < row_lane_idx) { &graph.branch_up_right } else { &graph.branch_up }
 }
 
-fn fill_flattened_lanes(out: &mut Vec<u8>, last: &Vector<Chunk>, prev: Option<&Vector<Chunk>>) {
+fn fill_flattened_lanes(out: &mut Vec<u8>, last: &[Chunk], prev: Option<&[Chunk]>) {
     let len = last.len().max(prev.map_or(0, |snapshot| snapshot.len()));
     out.clear();
     out.reserve(len);
@@ -355,7 +354,7 @@ fn fill_flattened_lanes(out: &mut Vec<u8>, last: &Vector<Chunk>, prev: Option<&V
     );
 }
 
-fn fill_flattened_lanes_around_closeout(out: &mut Vec<u8>, last: &Vector<Chunk>, prev: Option<&Vector<Chunk>>, next: Option<&Vector<Chunk>>) {
+fn fill_flattened_lanes_around_closeout(out: &mut Vec<u8>, last: &[Chunk], prev: Option<&[Chunk]>, next: Option<&[Chunk]>) {
     let len = last.len().max(prev.map_or(0, |snapshot| snapshot.len())).max(next.map_or(0, |snapshot| snapshot.len()));
     out.clear();
     out.reserve(len);
@@ -368,11 +367,11 @@ fn fill_flattened_lanes_around_closeout(out: &mut Vec<u8>, last: &Vector<Chunk>,
     }));
 }
 
-fn flattened_lane_idx(snapshot: &Vector<Chunk>) -> Option<usize> {
+fn flattened_lane_idx(snapshot: &[Chunk]) -> Option<usize> {
     snapshot.iter().position(|chunk| chunk.is_flattened)
 }
 
-fn merge_closeout_lane(snapshot: &Vector<Chunk>, flattened_lanes: &[u8], current_lane_idx: usize, candidate_lane_idx: usize) -> Option<usize> {
+fn merge_closeout_lane(snapshot: &[Chunk], flattened_lanes: &[u8], current_lane_idx: usize, candidate_lane_idx: usize) -> Option<usize> {
     let lane_idx = if let Some(flattened_idx) = flattened_lanes.iter().position(|is_flattened| *is_flattened != 0).filter(|flattened_idx| candidate_lane_idx >= *flattened_idx) {
         flattened_idx
     } else if draws_past_flattened_cap(snapshot, candidate_lane_idx) {
@@ -384,8 +383,8 @@ fn merge_closeout_lane(snapshot: &Vector<Chunk>, flattened_lanes: &[u8], current
     (lane_idx > current_lane_idx).then_some(lane_idx)
 }
 
-fn draws_past_flattened_cap(snapshot: &Vector<Chunk>, lane_idx: usize) -> bool {
-    lane_idx >= snapshot.len() && snapshot.back().is_some_and(|chunk| chunk.is_flattened)
+fn draws_past_flattened_cap(snapshot: &[Chunk], lane_idx: usize) -> bool {
+    lane_idx >= snapshot.len() && snapshot.last().is_some_and(|chunk| chunk.is_flattened)
 }
 
 fn pipe_symbol<'a>(graph: &'a GraphSymbols, flattened_lanes: &[u8], lane_idx: usize, symbol: &'a str) -> &'a str {
@@ -437,7 +436,7 @@ fn dummy_lane_closes_to_row(prev: &Chunk, row_alias: u32) -> bool {
     single_active_parent(prev).is_some_and(|parent| parent == row_alias) || (prev.parent_a != NONE && prev.parent_b != NONE && prev.parent_a == row_alias)
 }
 
-fn previous_scanline_carries_parent(prev: Option<&Vector<Chunk>>, lane_idx: usize, chunk: &Chunk) -> bool {
+fn previous_scanline_carries_parent(prev: Option<&[Chunk]>, lane_idx: usize, chunk: &Chunk) -> bool {
     let Some(parent) = single_active_parent(chunk) else {
         return false;
     };
@@ -562,14 +561,20 @@ pub fn render_message_projection(
     let graph = &symbols.graph;
     let status = &symbols.status;
     let worktree_symbols = &symbols.worktree;
-    let mut lines = Vec::new();
+    let mut lines = Vec::with_capacity(rows.len());
 
     for row in rows {
-        let mut spans = Vec::new();
-
         if row.alias == NONE && !render_uncommitted_row {
             lines.push(Line::default());
         } else if row.alias != NONE {
+            let mut span_capacity = 1;
+            if show_ref_labels {
+                span_capacity += row.worktrees.len() + row.branches.len() + row.tags.len() + usize::from(row.is_stash);
+            } else if show_reflog_labels && row.reflog.is_some() {
+                span_capacity += 1;
+            }
+            let mut spans = Vec::with_capacity(span_capacity);
+
             if show_ref_labels {
                 for worktree in &row.worktrees {
                     let color = if !worktree.is_valid || worktree.locked_reason.is_some() {
@@ -623,6 +628,9 @@ pub fn render_message_projection(
             spans.push(Span::styled(row.summary.clone(), Style::default().fg(if row.index == selected { theme.COLOR_HIGHLIGHTED } else { theme.COLOR_TEXT })));
             lines.push(Line::from(spans));
         } else {
+            let status_kinds =
+                usize::from(uncommitted.conflict_count > 0) + usize::from(uncommitted.modified_count > 0) + usize::from(uncommitted.added_count > 0) + usize::from(uncommitted.deleted_count > 0);
+            let mut spans = Vec::with_capacity(status_kinds * 2);
             let color = if row.index == selected { theme.COLOR_HIGHLIGHTED } else { theme.COLOR_TEXT };
             if uncommitted.conflict_count > 0 {
                 spans.push(Span::styled(status.conflict_spaced.clone(), Style::default().fg(theme.COLOR_ORANGE)));

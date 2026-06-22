@@ -211,6 +211,37 @@ fn workdir_diff_lists_file_statuses_without_requerying_paths() {
 }
 
 #[test]
+fn staged_diff_lists_only_index_changes_without_worktree_rows() {
+    let (path, repo) = temp_repo("staged-only-status");
+    write(&path, "staged.txt", "base\n");
+    commit(&repo, "staged.txt", "staged base");
+    write(&path, "unstaged.txt", "base\n");
+    commit(&repo, "unstaged.txt", "unstaged base");
+    write(&path, "deleted.txt", "base\n");
+    commit(&repo, "deleted.txt", "deleted base");
+
+    write(&path, "staged.txt", "staged\n");
+    stage(&repo, "staged.txt");
+    write(&path, "unstaged.txt", "unstaged\n");
+    fs::remove_file(path.join("deleted.txt")).unwrap();
+    write(&path, "new.txt", "new\n");
+
+    let changes = get_staged_filenames_diff(&repo).unwrap();
+
+    assert_contains_path(&changes.staged.modified, "staged.txt");
+    assert!(changes.unstaged.modified.is_empty());
+    assert!(changes.unstaged.deleted.is_empty());
+    assert!(changes.unstaged.added.is_empty());
+    assert_eq!(changes.modified_count, 1);
+    assert_eq!(changes.added_count, 0);
+    assert_eq!(changes.deleted_count, 0);
+    assert!(changes.is_staged);
+    assert!(!changes.is_unstaged);
+
+    let _ = fs::remove_dir_all(path);
+}
+
+#[test]
 fn workdir_diff_expands_untracked_directories_to_file_rows() {
     let (path, repo) = temp_repo("untracked-directory-expansion");
     write(&path, "tracked.txt", "base\n");

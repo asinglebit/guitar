@@ -1,7 +1,7 @@
 use crate::{
     git::queries::{
         helpers::{ConflictFile, FileChange, FileStatus, Hunk, UncommittedChanges, deduplicate, diff_to_hunks, walk_tree},
-        submodules::submodules_if_present,
+        submodules::committed_or_workdir_submodules,
     },
     helpers::text::{decode, sanitize},
 };
@@ -14,10 +14,35 @@ pub fn get_filenames_diff_at_workdir(repo: &Repository) -> Result<UncommittedCha
     get_filenames_diff_at_workdir_gix(repo)
 }
 
+pub fn get_staged_filenames_diff(repo: &Repository) -> Result<UncommittedChanges, Error> {
+    let workdir = repo.workdir().ok_or_else(|| Error::from_str("bare repositories are not supported"))?;
+    let gix_repo = gix::open(workdir).map_err(gix_error)?;
+    let Ok(head_tree_id) = gix_repo.head_tree_id() else {
+        return Ok(UncommittedChanges::default());
+    };
+    let index = gix_repo.index_or_empty().map_err(gix_error)?;
+    let mut changes = UncommittedChanges::default();
+
+    gix_repo
+        .tree_index_status(&head_tree_id, &index, None, gix::status::tree_index::TrackRenames::Disabled, |change, _, _| {
+            let path = gix_path(change.location());
+            match change {
+                gix::diff::index::ChangeRef::Addition { .. } => push_unique(&mut changes.staged.added, path),
+                gix::diff::index::ChangeRef::Deletion { .. } => push_unique(&mut changes.staged.deleted, path),
+                gix::diff::index::ChangeRef::Modification { .. } | gix::diff::index::ChangeRef::Rewrite { .. } => push_unique(&mut changes.staged.modified, path),
+            }
+            Ok::<_, std::convert::Infallible>(gix::diff::index::Action::Continue(()))
+        })
+        .map_err(gix_error)?;
+
+    finalize_uncommitted_changes(&mut changes);
+    Ok(changes)
+}
+
 pub fn get_filenames_diff_at_workdir_gix(repo: &Repository) -> Result<UncommittedChanges, Error> {
     let workdir = repo.workdir().ok_or_else(|| Error::from_str("bare repositories are not supported"))?;
     let gix_repo = gix::open(workdir).map_err(gix_error)?;
-    let submodules = submodules_if_present(repo).unwrap_or_default();
+    let submodules = committed_or_workdir_submodules(repo).unwrap_or_default();
     let submodule_paths = submodules.iter().map(|entry| entry.path().to_path_buf()).collect::<Vec<_>>();
     let mut changes = UncommittedChanges::default();
     let status = gix_repo
@@ -199,7 +224,7 @@ pub fn get_filenames_diff_at_oid(repo: &Repository, oid: Oid) -> Vec<FileChange>
 }
 
 fn add_committed_submodule_pointer_changes(repo: &Repository, parent_tree: &git2::Tree, tree: &git2::Tree, changes: &mut Vec<FileChange>) {
-    let Ok(submodules) = submodules_if_present(repo) else {
+    let Ok(submodules) = committed_or_workdir_submodules(repo) else {
         return;
     };
 

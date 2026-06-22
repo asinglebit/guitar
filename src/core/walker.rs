@@ -13,7 +13,7 @@ use crate::{
     helpers::heatmap::HeatmapCounts,
 };
 use git2::Repository;
-use im::{HashSet, Vector};
+use im::HashSet;
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet as StdHashSet},
@@ -255,7 +255,7 @@ impl Walker {
     }
 }
 
-fn parent_is_on_prior_lane(lanes: &Vector<Chunk>, parent: u32, before_lane: usize) -> bool {
+fn parent_is_on_prior_lane(lanes: &[Chunk], parent: u32, before_lane: usize) -> bool {
     parent != NONE && lanes.iter().take(before_lane).any(|chunk| is_single_parent_lane_for(chunk, parent))
 }
 

@@ -45,7 +45,7 @@ use crate::{
         actions::network::NetworkRequest,
         queries::{
             commits::get_git_user_info,
-            diffs::get_filenames_diff_at_workdir,
+            diffs::{get_filenames_diff_at_workdir, get_staged_filenames_diff},
             helpers::{FileChange, UncommittedChanges},
             remotes::list_remotes,
         },
@@ -1033,6 +1033,13 @@ impl App {
 
         std::thread::spawn(move || {
             let result = open(&path).map_err(|error| error.to_string()).and_then(|repo| {
+                if let Ok(staged) = get_staged_filenames_diff(&repo).map_err(|error| error.to_string()) {
+                    if let Ok(worktrees) = list_worktrees_metadata_with_current_dirty(&repo, Some(path.as_path()), &staged) {
+                        let _ = reload_metadata_tx.send(GraphCommand::UpdateWorktrees { generation, worktrees });
+                    }
+                    let _ = reload_uncommitted_tx.send(GraphEvent::Uncommitted { generation, result: Ok(staged) });
+                }
+
                 let uncommitted = get_filenames_diff_at_workdir(&repo).map_err(|error| error.to_string())?;
                 if let Ok(worktrees) = list_worktrees_metadata_with_current_dirty(&repo, Some(path.as_path()), &uncommitted) {
                     let _ = reload_metadata_tx.send(GraphCommand::UpdateWorktrees { generation, worktrees });

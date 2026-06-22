@@ -1824,6 +1824,7 @@ dependencies = [
  "rand 0.10.1",
  "ratatui",
  "rustc-hash",
+ "smallvec",
  "tempfile",
  "toml",
  "walkdir",

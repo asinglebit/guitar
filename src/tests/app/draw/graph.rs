@@ -12,7 +12,6 @@ use crate::{
     helpers::symbols::SymbolTheme,
 };
 use git2::{Oid, Repository, Signature};
-use im::Vector;
 use ratatui::{Terminal, backend::TestBackend, layout::Rect};
 use std::{
     fs,
@@ -85,17 +84,13 @@ fn app_with_cached_window(start: usize, summaries: &[&str], oid: Oid) -> App {
         end: start + summaries.len(),
         head_alias: 1,
         rows: summaries.iter().enumerate().map(|(offset, summary)| graph_row(start + offset, (start + offset + 1) as u32, oid, summary)).collect(),
-        history: GraphHistory::from(Vector::new()),
+        history: GraphHistory::new(),
     });
     app
 }
 
 fn graph_history(len: usize) -> GraphHistory {
-    let mut history = Vector::new();
-    for _ in 0..len {
-        history.push_back(Vector::new());
-    }
-    history
+    GraphHistory::from_rows((0..len).map(|_| Vec::new()))
 }
 
 fn app_with_uncommitted_window(window_end: usize, history_len: usize, oid: Oid) -> App {

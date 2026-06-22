@@ -13,12 +13,12 @@ fn window_rebuilds_visible_range_from_delta_history() {
     let history = buffer.window(1, buffer.deltas.len());
 
     assert_eq!(history.len(), 2);
-    assert_eq!(history[0].len(), 1);
-    assert_eq!(history[0][0].alias, 2);
-    assert_eq!(history[0][0].parent_a, 1);
-    assert_eq!(history[1].len(), 1);
-    assert_eq!(history[1][0].alias, 1);
-    assert_eq!(history[1][0].parent_a, NONE);
+    assert_eq!(history.get(0).unwrap().len(), 1);
+    assert_eq!(history.get(0).unwrap()[0].alias, 2);
+    assert_eq!(history.get(0).unwrap()[0].parent_a, 1);
+    assert_eq!(history.get(1).unwrap().len(), 1);
+    assert_eq!(history.get(1).unwrap()[0].alias, 1);
+    assert_eq!(history.get(1).unwrap()[0].parent_a, NONE);
 }
 
 #[test]
@@ -35,9 +35,9 @@ fn window_does_not_mutate_current_graph_state() {
 
     assert_eq!(buffer.curr, before);
     assert_eq!(window.len(), 3);
-    assert_eq!(window[0][0].alias, 3);
-    assert_eq!(window[1][0].alias, 2);
-    assert_eq!(window[2][0].alias, 1);
+    assert_eq!(window.get(0).unwrap()[0].alias, 3);
+    assert_eq!(window.get(1).unwrap()[0].alias, 2);
+    assert_eq!(window.get(2).unwrap()[0].alias, 1);
 }
 
 #[test]
@@ -70,10 +70,10 @@ fn transient_lane_survives_one_snapshot_then_expires() {
 
     let history = buffer.window(1, buffer.deltas.len());
 
-    assert_eq!(history[2].len(), 3);
-    assert_eq!(history[2][merge.lane.index].alias, 6);
-    assert_eq!(history[3].len(), 2);
-    assert!(history[3].iter().all(|chunk| chunk.alias != 6));
+    assert_eq!(history.get(2).unwrap().len(), 3);
+    assert_eq!(history.get(2).unwrap()[merge.lane.index].alias, 6);
+    assert_eq!(history.get(3).unwrap().len(), 2);
+    assert!(history.get(3).unwrap().iter().all(|chunk| chunk.alias != 6));
 }
 
 #[test]
@@ -91,7 +91,7 @@ fn update_records_only_changed_parent_lanes() {
 
     buffer.backup();
     let history = buffer.window(1, buffer.deltas.len());
-    let latest = history.back().unwrap();
+    let latest = history.last().unwrap();
 
     assert_eq!(latest[0], Chunk::commit(2, NONE, NONE));
     assert_eq!(latest[1], untouched);
@@ -112,8 +112,8 @@ fn capped_buffer_never_returns_snapshots_wider_than_lane_limit() {
 
     let history = buffer.window(1, buffer.deltas.len());
 
-    assert!(history.iter().all(|snapshot| snapshot.len() <= 5));
-    let latest = history.back().unwrap();
+    assert!(history.rows().iter().all(|snapshot| snapshot.len() <= 5));
+    let latest = history.last().unwrap();
     assert_eq!(latest.len(), 5);
     assert_eq!(latest[4].alias, 7);
     assert!(latest[4].is_flattened);
@@ -134,8 +134,8 @@ fn capped_buffer_records_overflow_as_single_truncate_delta() {
     buffer.backup();
     let history = buffer.window(1, buffer.deltas.len());
 
-    assert!(history.iter().all(|snapshot| snapshot.len() <= 3));
-    assert_eq!(history.back().unwrap().len(), 3);
+    assert!(history.rows().iter().all(|snapshot| snapshot.len() <= 3));
+    assert_eq!(history.last().unwrap().len(), 3);
 }
 
 #[test]
@@ -148,14 +148,31 @@ fn window_replays_many_op_delta_from_compacted_history() {
     buffer.delta.ops.push(DeltaOp::Replace { index: 0, new: Chunk::commit(3, NONE, NONE) });
     buffer.delta.ops.push(DeltaOp::Remove { index: 1 });
     buffer.delta.ops.push(DeltaOp::Truncate { len: 1 });
-    buffer.curr.push_back(Chunk::commit(3, NONE, NONE));
+    buffer.curr.push(Chunk::commit(3, NONE, NONE));
     buffer.backup();
 
     let history = buffer.window(1, buffer.deltas.len());
 
     assert_eq!(history.len(), 1);
-    assert_eq!(history[0].len(), 1);
-    assert_eq!(history[0][0], Chunk::commit(3, NONE, NONE));
+    assert_eq!(history.get(0).unwrap().len(), 1);
+    assert_eq!(history.get(0).unwrap()[0], Chunk::commit(3, NONE, NONE));
+}
+
+#[test]
+fn common_many_op_delta_stays_inline() {
+    let mut ops = DeltaOps::default();
+
+    ops.push(DeltaOp::Insert { index: 0, item: Chunk::commit(1, NONE, NONE) });
+    ops.push(DeltaOp::Replace { index: 0, new: Chunk::commit(2, NONE, NONE) });
+    ops.push(DeltaOp::Truncate { len: 1 });
+
+    match ops {
+        DeltaOps::Many(ops) => {
+            assert_eq!(ops.len(), 3);
+            assert!(!ops.spilled());
+        },
+        _ => panic!("third delta op should use compact many-op storage"),
+    }
 }
 
 #[test]
@@ -201,7 +218,7 @@ fn window_replays_late_range_from_nearest_checkpoint() {
     let start = 16_001;
     let full = buffer.window(1, buffer.deltas.len());
     let history = buffer.window(start, buffer.deltas.len());
-    let expected = full.iter().skip(start - 1).cloned().collect::<Vector<_>>();
+    let expected = GraphHistory::from_rows(full.rows().iter().skip(start - 1).cloned());
 
     assert_eq!(history.len(), 500);
     assert_eq!(history, expected);

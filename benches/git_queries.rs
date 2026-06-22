@@ -73,6 +73,11 @@ fn workdir_status_many(fixture: &WorkdirStatusFixture) -> usize {
         + changes.conflicts.len()
 }
 
+fn staged_status_many(fixture: &WorkdirStatusFixture) -> usize {
+    let changes = guitar::git::queries::diffs::get_staged_filenames_diff(&fixture.repo).unwrap();
+    changes.staged.modified.len() + changes.staged.added.len() + changes.staged.deleted.len() + changes.conflicts.len()
+}
+
 fn workdir_status_many_gix(fixture: &WorkdirStatusFixture) -> usize {
     let changes = guitar::git::queries::diffs::get_filenames_diff_at_workdir_gix(&fixture.repo).unwrap();
     changes.staged.modified.len()
@@ -123,6 +128,13 @@ fn get_filenames_diff_at_workdir_many_changes(bencher: divan::Bencher) {
     let fixture = build_workdir_status_fixture(96, 48);
 
     bencher.counter(divan::counter::ItemsCount::new(fixture.expected_changes)).bench_local(|| divan::black_box(workdir_status_many(&fixture)));
+}
+
+#[divan::bench(sample_count = 30, sample_size = 10)]
+fn get_staged_filenames_diff_many_changes(bencher: divan::Bencher) {
+    let fixture = build_workdir_status_fixture(96, 48);
+
+    bencher.counter(divan::counter::ItemsCount::new(fixture.expected_changes)).bench_local(|| divan::black_box(staged_status_many(&fixture)));
 }
 
 #[divan::bench(sample_count = 30, sample_size = 10)]

@@ -108,7 +108,7 @@ fn commit_metadata_from_git2(repo: &Repository, oid: Oid) -> CommitMetadata {
     CommitMetadata { summary: commit.summary().unwrap_or_default().to_string(), committer_name: committer.name().unwrap_or_default().to_string(), committer_seconds: committer.when().seconds() }
 }
 
-fn commit_metadata_from_gix(repo: &gix::Repository, oid: gix::ObjectId) -> CommitMetadata {
+fn commit_metadata_from_repo(repo: &gix::Repository, oid: gix::ObjectId) -> CommitMetadata {
     let commit = repo.find_commit(oid).unwrap();
     let message = commit.message().unwrap();
     let committer = commit.committer().unwrap();
@@ -195,7 +195,7 @@ fn graph_metadata_from_gitoxide(path: &Path, roots: &[Oid]) -> HashMap<Oid, Comm
     topo.map(|result| {
         let info = result.unwrap();
         let oid = Oid::from_bytes(info.id.as_slice()).unwrap();
-        (oid, commit_metadata_from_gix(&repo, info.id))
+        (oid, commit_metadata_from_repo(&repo, info.id))
     })
     .collect()
 }
@@ -279,10 +279,10 @@ fn walker_expires_new_right_merge_lane_before_next_rendered_row() {
 
     let history = walker.buffer.borrow().window(0, aliases.len().saturating_add(1));
     let merge_history_idx = merge_idx;
-    let merge_lane = history[merge_history_idx].iter().position(|chunk| chunk.alias == merge_alias).unwrap();
+    let merge_lane = history.get(merge_history_idx).unwrap().iter().position(|chunk| chunk.alias == merge_alias).unwrap();
 
-    assert_eq!(merge_lane + 1, history[merge_history_idx].len());
-    assert!(history[merge_history_idx + 1].get(merge_lane).is_none());
+    assert_eq!(merge_lane + 1, history.get(merge_history_idx).unwrap().len());
+    assert!(history.get(merge_history_idx + 1).unwrap().get(merge_lane).is_none());
 
     let rows: Vec<_> = aliases.iter().enumerate().map(|(index, &alias)| graph_row(index, alias, *walker.oids.get_oid_by_alias(alias))).collect();
     let symbols = SymbolTheme::main();
