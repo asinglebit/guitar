@@ -106,7 +106,7 @@ impl Batcher {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use git2::Signature;
+    use git2::{BranchType, Commit, Signature};
     use std::{
         fs,
         path::{Path, PathBuf},
@@ -127,6 +127,12 @@ mod tests {
     }
 
     fn commit(repo: &Repository, file: &str, message: &str) -> Oid {
+        let parent = repo.head().ok().and_then(|head| head.peel_to_commit().ok());
+        let parents: Vec<&Commit<'_>> = parent.iter().collect();
+        commit_with_parents(repo, file, message, &parents)
+    }
+
+    fn commit_with_parents(repo: &Repository, file: &str, message: &str, parents: &[&Commit<'_>]) -> Oid {
         let workdir = repo.workdir().unwrap().to_path_buf();
         fs::write(workdir.join(file), message).unwrap();
 
@@ -136,9 +142,15 @@ mod tests {
         let tree_oid = index.write_tree().unwrap();
         let tree = repo.find_tree(tree_oid).unwrap();
         let sig = Signature::now("Test User", "test@example.com").unwrap();
-        let parent = repo.head().ok().and_then(|head| head.peel_to_commit().ok());
-        let parents: Vec<&git2::Commit<'_>> = parent.iter().collect();
-        repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents).unwrap()
+        repo.commit(Some("HEAD"), &sig, &sig, message, &tree, parents).unwrap()
+    }
+
+    fn branch_tip(repo: &Repository, name: &str) -> Oid {
+        repo.find_branch(name, BranchType::Local).unwrap().get().target().unwrap()
+    }
+
+    fn head_refname(repo: &Repository) -> String {
+        repo.head().unwrap().name().unwrap().to_string()
     }
 
     #[test]
@@ -160,6 +172,63 @@ mod tests {
         assert_eq!(out[1].parent_ids.iter().map(|id| Oid::from_bytes(id.as_slice()).unwrap()).collect::<Vec<_>>(), vec![second]);
         assert_eq!(out[2].parent_ids.iter().map(|id| Oid::from_bytes(id.as_slice()).unwrap()).collect::<Vec<_>>(), vec![first]);
         assert!(out[3].parent_ids.is_empty());
+    }
+
+    #[test]
+    fn duplicate_branch_tips_are_returned_once() {
+        let (path, repo) = temp_repo("duplicate-tips");
+        let first = commit(&repo.borrow(), "first.txt", "first");
+        let second = commit(&repo.borrow(), "second.txt", "second");
+        repo.borrow().branch("duplicate", &repo.borrow().find_commit(second).unwrap(), false).unwrap();
+        let mut batcher = Batcher::new(repo.clone(), path.clone(), &HashSet::new(), &[second]).unwrap();
+
+        assert_eq!(batcher.next(10).iter().map(|commit| commit.oid).collect::<Vec<_>>(), vec![second, first]);
+    }
+
+    #[test]
+    fn hidden_branch_tip_is_not_used_as_a_walk_root() {
+        let (path, repo) = temp_repo("hidden-tip");
+        let main = commit(&repo.borrow(), "main.txt", "main");
+        let main_ref = head_refname(&repo.borrow());
+        repo.borrow().branch("hidden", &repo.borrow().find_commit(main).unwrap(), false).unwrap();
+        repo.borrow().set_head("refs/heads/hidden").unwrap();
+        repo.borrow().checkout_head(None).unwrap();
+        let hidden = commit(&repo.borrow(), "hidden.txt", "hidden");
+        repo.borrow().set_head(&main_ref).unwrap();
+        repo.borrow().checkout_head(None).unwrap();
+
+        let mut hidden_names = HashSet::new();
+        hidden_names.insert("hidden".to_string());
+        let mut batcher = Batcher::new(repo.clone(), path.clone(), &hidden_names, &[]).unwrap();
+
+        assert_eq!(branch_tip(&repo.borrow(), "hidden"), hidden);
+        assert_eq!(batcher.next(10).iter().map(|commit| commit.oid).collect::<Vec<_>>(), vec![main]);
+    }
+
+    #[test]
+    fn merge_commit_preserves_first_two_parent_ids() {
+        let (path, repo) = temp_repo("merge-parents");
+        let first = commit(&repo.borrow(), "first.txt", "first");
+        let main_ref = head_refname(&repo.borrow());
+        repo.borrow().branch("side", &repo.borrow().find_commit(first).unwrap(), false).unwrap();
+        let main = commit(&repo.borrow(), "main.txt", "main");
+        repo.borrow().set_head("refs/heads/side").unwrap();
+        repo.borrow().checkout_head(None).unwrap();
+        let side = commit(&repo.borrow(), "side.txt", "side");
+        repo.borrow().set_head(&main_ref).unwrap();
+        repo.borrow().checkout_head(None).unwrap();
+        let merge = {
+            let repo_ref = repo.borrow();
+            let main_commit = repo_ref.find_commit(main).unwrap();
+            let side_commit = repo_ref.find_commit(side).unwrap();
+            commit_with_parents(&repo_ref, "merge.txt", "merge", &[&main_commit, &side_commit])
+        };
+        let mut batcher = Batcher::new(repo.clone(), path.clone(), &HashSet::new(), &[merge]).unwrap();
+
+        let page = batcher.next(10);
+        let merge_commit = page.iter().find(|commit| commit.oid == merge).expect("merge commit is returned");
+
+        assert_eq!(merge_commit.parent_ids.iter().map(|id| Oid::from_bytes(id.as_slice()).unwrap()).collect::<Vec<_>>(), vec![main, side]);
     }
 
     #[test]

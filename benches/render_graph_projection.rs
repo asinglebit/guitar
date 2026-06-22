@@ -10,8 +10,9 @@ use guitar::{
     core::{
         chunk::NONE,
         graph_service::{GraphHistory, GraphRow},
-        renderers::render_graph_projection as render_graph_projection_lines,
+        renderers::{render_graph_projection as render_graph_projection_lines, render_message_projection},
     },
+    git::queries::helpers::UncommittedChanges,
     helpers::{palette::Theme, symbols::SymbolTheme},
 };
 use ratatui::style::Color;
@@ -33,6 +34,18 @@ fn bench_render(bencher: Bencher, theme: &Theme, symbols: &SymbolTheme, rows: &[
         .counter(ItemsCount::new(end.saturating_sub(start)))
         .counter(BytesCount::new(rendered.1))
         .bench(|| black_box(render_case(theme, symbols, rows, history, head_alias, start, end, render_uncommitted_row)));
+}
+
+fn message_case(theme: &Theme, symbols: &SymbolTheme, rows: &[GraphRow], selected: usize, show_refs: bool) -> (usize, usize) {
+    let lines = black_box(render_message_projection(theme, symbols, rows, true, show_refs, selected, &UncommittedChanges::default(), true));
+    let bytes = lines.iter().map(|line| line.width()).sum();
+    (lines.len(), bytes)
+}
+
+fn bench_message(bencher: Bencher, theme: &Theme, symbols: &SymbolTheme, rows: &[GraphRow], selected: usize, show_refs: bool) {
+    let rendered = message_case(theme, symbols, rows, selected, show_refs);
+
+    bencher.counter(ItemsCount::new(rows.len())).counter(BytesCount::new(rendered.1)).bench(|| black_box(message_case(theme, symbols, rows, selected, show_refs)));
 }
 
 fn accent_theme(mut theme: Theme) -> Theme {
@@ -63,6 +76,18 @@ fn render_graph_projection_large(bencher: Bencher) {
         .counter(ItemsCount::new(fixture.rows.len()))
         .counter(BytesCount::new(rendered.1))
         .bench(|| black_box(render_case(&fixture.theme, &fixture.symbols, &fixture.rows, &fixture.history, fixture.head_alias, 0, fixture.rows.len(), false)));
+}
+
+#[divan::bench(sample_count = 30, sample_size = 20)]
+fn render_message_projection_large_with_refs(bencher: Bencher) {
+    let fixture = graph_fixture(256);
+    bench_message(bencher, &fixture.theme, &fixture.symbols, &fixture.rows, 0, true);
+}
+
+#[divan::bench(sample_count = 30, sample_size = 20)]
+fn render_message_projection_large_without_refs(bencher: Bencher) {
+    let fixture = graph_fixture(256);
+    bench_message(bencher, &fixture.theme, &fixture.symbols, &fixture.rows, 0, false);
 }
 
 #[divan::bench(sample_count = 80, sample_size = 100)]
