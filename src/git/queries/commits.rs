@@ -134,20 +134,6 @@ pub fn get_git_user_info(repo: &Repository) -> Result<(Option<String>, Option<St
     Ok((name, email))
 }
 
-pub fn get_stashed_commits(repo: &mut Repository, oids: &mut Oids) -> Vec<u32> {
-    let mut stashes = Vec::new();
-
-    // Stashes are real commits; assigning aliases lets them render beside normal history.
-    repo.stash_foreach(|_, _, oid| {
-        let alias = oids.get_alias_by_oid(*oid);
-        stashes.push(alias);
-        true
-    })
-    .unwrap();
-
-    stashes
-}
-
 // Enumerate stash roots from a gitoxide repo, keeping the newest stash first.
 pub fn get_stashed_commits_from_gix(repo: &gix::Repository, oids: &mut Oids) -> Vec<u32> {
     let mut stashes = Vec::new();

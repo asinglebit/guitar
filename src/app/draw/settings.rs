@@ -319,7 +319,7 @@ impl App {
                 lines.push(self.settings_filled_line(&format!(" {}", empty::NO_REMOTES()), "", width, Style::default().fg(self.theme.COLOR_TEXT)));
             },
             remotes => {
-                let default_remote = effective_default_remote_from_remotes(repo, remotes);
+                let default_remote = effective_default_remote_from_remotes(repo.workdir().unwrap_or(repo.path()), remotes);
                 let default_label = default_remote.as_deref().unwrap_or(common::NONE());
                 lines.push(self.settings_filled_line(settings_text::DEFAULT_REMOTE(), format!(" {default_label} ").as_str(), width, Style::default().fg(self.theme.COLOR_GRASS)));
                 lines.push(Line::default());

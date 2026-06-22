@@ -3,7 +3,7 @@ use crate::{
     core::submodules::SubmoduleEntry,
     git::queries::{
         helpers::{ConflictFile, FileChange, FileStatus, Hunk, UncommittedChanges, deduplicate, diff_to_hunks, walk_tree},
-        submodules::{committed_or_workdir_submodules, list_submodules},
+        submodules::list_submodules,
     },
     helpers::text::{decode, sanitize},
 };
@@ -220,14 +220,10 @@ pub fn get_filenames_diff_at_oid(repo: &Repository, oid: Oid) -> Vec<FileChange>
 }
 
 fn add_committed_submodule_pointer_changes(repo: &Repository, parent_tree: &git2::Tree, tree: &git2::Tree, changes: &mut Vec<FileChange>) {
-    let Ok(submodules) = committed_or_workdir_submodules(repo) else {
-        return;
-    };
+    let submodules = list_submodules(repo).unwrap_or_default();
 
     for submodule in submodules {
-        let Some(path) = submodule.path().to_str().map(str::to_string) else {
-            continue;
-        };
+        let path = submodule.path.to_string_lossy().to_string();
 
         let parent_entry = parent_tree.get_path(Path::new(&path)).ok();
         let new_entry = tree.get_path(Path::new(&path)).ok();

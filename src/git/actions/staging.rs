@@ -1,5 +1,5 @@
-use crate::git::queries::submodules::submodules_if_present;
-use git2::{Error, Repository, ResetType, StatusOptions, Submodule, SubmoduleIgnore, SubmoduleStatus};
+use crate::git::queries::submodules::list_submodules;
+use git2::{Error, Repository, ResetType, StatusOptions, SubmoduleIgnore, SubmoduleStatus};
 use std::path::{Path, PathBuf};
 
 use crate::git::actions::submodules::stage_submodule_head;
@@ -11,8 +11,8 @@ pub fn stage_all(repo: &Repository) -> Result<(), Error> {
     opts.include_untracked(true).recurse_untracked_dirs(true).include_ignored(false).include_unmodified(false).exclude_submodules(true);
 
     let statuses = repo.statuses(Some(&mut opts))?;
-    let submodules = submodules_if_present(repo).unwrap_or_default();
-    let submodule_paths = submodules.iter().map(|entry| entry.path().to_path_buf()).collect::<Vec<_>>();
+    let submodules = list_submodules(repo).unwrap_or_default();
+    let submodule_paths = submodules.iter().map(|entry| entry.path.clone()).collect::<Vec<_>>();
 
     for entry in statuses.iter() {
         if let Some(path) = entry.path() {
@@ -41,19 +41,18 @@ pub fn stage_all(repo: &Repository) -> Result<(), Error> {
     drop(index);
 
     for submodule in submodules {
-        stage_submodule_pointer_change(repo, submodule)?;
+        stage_submodule_pointer_change(repo, &submodule)?;
     }
 
     Ok(())
 }
 
-fn stage_submodule_pointer_change(repo: &Repository, submodule: Submodule<'_>) -> Result<(), Error> {
-    let path = submodule.path().to_path_buf();
-    let path_text = path.to_string_lossy().to_string();
-    let name = submodule.name().unwrap_or(path_text.as_str());
-    let status = submodule_status_for(repo, name, path.as_path());
+fn stage_submodule_pointer_change(repo: &Repository, submodule: &crate::core::submodules::SubmoduleEntry) -> Result<(), Error> {
+    let path = submodule.path.as_path();
+    let name = submodule.name.as_str();
+    let status = submodule_status_for(repo, name, path);
     let has_pointer_change =
-        status.is_wd_added() || status.is_wd_deleted() || status.is_wd_modified() || submodule.workdir_id().zip(submodule.index_id()).is_some_and(|(workdir, index)| workdir != index);
+        status.is_wd_added() || status.is_wd_deleted() || status.is_wd_modified() || submodule.workdir.zip(submodule.index).is_some_and(|(workdir, index)| workdir != index);
 
     if !has_pointer_change {
         return Ok(());
@@ -61,14 +60,13 @@ fn stage_submodule_pointer_change(repo: &Repository, submodule: Submodule<'_>) -
 
     if status.is_wd_deleted() {
         let mut index = repo.index()?;
-        if index.get_path(path.as_path(), 0).is_some() {
-            index.remove_path(path.as_path())?;
+        if index.get_path(path, 0).is_some() {
+            index.remove_path(path)?;
             index.write()?;
         }
         return Ok(());
     }
 
-    let name = submodule.name().unwrap_or(path_text.as_str());
     stage_submodule_head(repo, name)
 }
 

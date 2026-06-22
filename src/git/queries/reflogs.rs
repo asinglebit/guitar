@@ -1,5 +1,5 @@
 use crate::core::oids::{gix_time_to_git2_time, gix_to_git2_oid};
-use git2::{Oid, Repository, Time};
+use git2::{Oid, Time};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HeadReflogEntry {
@@ -10,18 +10,8 @@ pub struct HeadReflogEntry {
     pub time: Time,
 }
 
-pub fn get_head_reflog_entries(repo: &Repository) -> Result<Vec<HeadReflogEntry>, git2::Error> {
-    let gix_repo = open_gix_repo(repo)?;
-    get_head_reflog_entries_from_repo(&gix_repo)
-}
-
 pub fn get_head_reflog_entries_from_gix(repo: &gix::Repository) -> Result<Vec<HeadReflogEntry>, git2::Error> {
     get_head_reflog_entries_from_repo(repo)
-}
-
-fn open_gix_repo(repo: &Repository) -> Result<gix::Repository, git2::Error> {
-    let path = repo.workdir().unwrap_or(repo.path());
-    gix::open(path).map_err(|error| git2::Error::from_str(&error.to_string()))
 }
 
 fn get_head_reflog_entries_from_repo(repo: &gix::Repository) -> Result<Vec<HeadReflogEntry>, git2::Error> {

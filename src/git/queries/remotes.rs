@@ -1,5 +1,5 @@
-use git2::Repository;
 use gix::{bstr::ByteSlice, remote};
+use std::path::Path;
 
 pub const GUITAR_DEFAULT_REMOTE_CONFIG: &str = "guitar.defaultRemote";
 pub const PUSH_DEFAULT_CONFIG: &str = "remote.pushDefault";
@@ -11,27 +11,23 @@ pub struct RemoteEntry {
     pub push_url: Option<String>,
 }
 
-pub fn list_remotes(repo: &Repository) -> Result<Vec<RemoteEntry>, git2::Error> {
-    let gix_repo = open_gix_repo(repo)?;
+pub fn list_remotes(path: impl AsRef<Path>) -> Result<Vec<RemoteEntry>, git2::Error> {
+    let gix_repo = open_gix_repo(path)?;
     list_remotes_from_repo(&gix_repo)
 }
 
-pub fn effective_default_remote(repo: &Repository) -> Option<String> {
-    let gix_repo = open_gix_repo(repo).ok()?;
+pub fn effective_default_remote(path: impl AsRef<Path>) -> Option<String> {
+    let gix_repo = open_gix_repo(path).ok()?;
     let remotes = list_remotes_from_repo(&gix_repo).ok()?;
-    effective_default_remote_from_repo_remotes(&gix_repo, &remotes)
+    resolve_effective_default_remote(&gix_repo, &remotes)
 }
 
-pub fn effective_default_remote_from_remotes(repo: &Repository, remotes: &[RemoteEntry]) -> Option<String> {
-    let gix_repo = open_gix_repo(repo).ok()?;
-    effective_default_remote_from_repo_remotes(&gix_repo, remotes)
+pub fn effective_default_remote_from_remotes(path: impl AsRef<Path>, remotes: &[RemoteEntry]) -> Option<String> {
+    let gix_repo = open_gix_repo(path).ok()?;
+    resolve_effective_default_remote(&gix_repo, remotes)
 }
 
-pub fn list_remotes_from_open_repo(repo: &gix::Repository) -> Result<Vec<RemoteEntry>, git2::Error> {
-    list_remotes_from_repo(repo)
-}
-
-pub fn effective_default_remote_from_repo_remotes(repo: &gix::Repository, remotes: &[RemoteEntry]) -> Option<String> {
+fn resolve_effective_default_remote(repo: &gix::Repository, remotes: &[RemoteEntry]) -> Option<String> {
     if remotes.is_empty() {
         return None;
     }
@@ -55,9 +51,8 @@ pub fn effective_default_remote_from_repo_remotes(repo: &gix::Repository, remote
     remotes.first().map(|remote| remote.name.clone())
 }
 
-fn open_gix_repo(repo: &Repository) -> Result<gix::Repository, git2::Error> {
-    let path = repo.workdir().unwrap_or(repo.path());
-    gix::open(path).map_err(|error| git2::Error::from_str(&error.to_string()))
+fn open_gix_repo(path: impl AsRef<Path>) -> Result<gix::Repository, git2::Error> {
+    gix::open(path.as_ref()).map_err(|error| git2::Error::from_str(&error.to_string()))
 }
 
 fn list_remotes_from_repo(repo: &gix::Repository) -> Result<Vec<RemoteEntry>, git2::Error> {

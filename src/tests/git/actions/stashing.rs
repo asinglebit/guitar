@@ -1,5 +1,5 @@
 use super::*;
-use crate::git::queries::commits::get_stashed_commits;
+use crate::git::queries::commits::get_stashed_commits_from_gix;
 use git2::{Repository, Signature};
 use std::{
     fs,
@@ -58,7 +58,8 @@ fn stash_message_uses_head_short_sha_and_summary_and_includes_untracked_files() 
     assert_eq!(fs::read_to_string(repo.workdir().unwrap().join("file.txt")).unwrap(), "content\n");
     assert!(!repo.workdir().unwrap().join("extra.txt").exists());
     let mut oids = crate::core::oids::Oids::default();
-    assert_eq!(get_stashed_commits(&mut repo, &mut oids).len(), 1);
+    let gix_repo = gix::open(repo.workdir().unwrap_or(repo.path())).unwrap();
+    assert_eq!(get_stashed_commits_from_gix(&gix_repo, &mut oids).len(), 1);
 }
 
 #[test]
@@ -72,7 +73,8 @@ fn pop_without_applying_drops_stash_without_restoring_changes() {
     pop(&mut repo, &stash_oid, false).unwrap();
 
     let mut oids = crate::core::oids::Oids::default();
-    assert!(get_stashed_commits(&mut repo, &mut oids).is_empty());
+    let gix_repo = gix::open(repo.workdir().unwrap_or(repo.path())).unwrap();
+    assert!(get_stashed_commits_from_gix(&gix_repo, &mut oids).is_empty());
     assert_eq!(fs::read_to_string(repo.workdir().unwrap().join("file.txt")).unwrap(), "content\n");
     assert!(!repo.workdir().unwrap().join("extra.txt").exists());
 }
@@ -89,5 +91,6 @@ fn pop_with_apply_leaves_conflicts_and_drops_the_stash() {
     assert!(pop(&mut repo, &stash_oid, true).is_ok());
     assert!(repo.index().unwrap().has_conflicts());
     let mut oids = crate::core::oids::Oids::default();
-    assert!(get_stashed_commits(&mut repo, &mut oids).is_empty());
+    let gix_repo = gix::open(repo.workdir().unwrap_or(repo.path())).unwrap();
+    assert!(get_stashed_commits_from_gix(&gix_repo, &mut oids).is_empty());
 }

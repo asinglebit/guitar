@@ -1,4 +1,5 @@
 use super::*;
+use crate::git::queries::reflogs::get_head_reflog_entries_from_gix;
 use git2::{Repository, ResetType, Signature};
 use std::{
     fs,
@@ -49,7 +50,8 @@ fn head_reflog_keeps_commit_after_reset() {
     let base_commit = repo.find_commit(base).unwrap();
     repo.reset(base_commit.as_object(), ResetType::Hard, None).unwrap();
 
-    let entries = get_head_reflog_entries(&repo).unwrap();
+    let gix_repo = gix::open(repo.workdir().unwrap_or(repo.path())).unwrap();
+    let entries = get_head_reflog_entries_from_gix(&gix_repo).unwrap();
 
     assert!(entries.iter().any(|entry| entry.new_oid == lost && entry.selector.starts_with("HEAD@{")));
     assert_eq!(repo.head().unwrap().target(), Some(base));
@@ -66,7 +68,8 @@ fn head_reflog_skips_entries_that_no_longer_point_to_commits() {
     let skipped_oid = repo.blob(b"skip-me").unwrap();
     append_reflog_entry(&repo, skipped_oid, "skip-me");
 
-    let entries = get_head_reflog_entries(&repo).unwrap();
+    let gix_repo = gix::open(repo.workdir().unwrap_or(repo.path())).unwrap();
+    let entries = get_head_reflog_entries_from_gix(&gix_repo).unwrap();
 
     assert!(entries.iter().any(|entry| entry.new_oid == lost));
     assert!(!entries.iter().any(|entry| entry.message == "skip-me"));
@@ -76,6 +79,6 @@ fn head_reflog_skips_entries_that_no_longer_point_to_commits() {
 #[test]
 fn missing_head_reflog_returns_an_error() {
     let (_path, repo) = temp_repo("missing");
-
-    assert!(get_head_reflog_entries(&repo).is_err());
+    let gix_repo = gix::open(repo.workdir().unwrap_or(repo.path())).unwrap();
+    assert!(get_head_reflog_entries_from_gix(&gix_repo).is_err());
 }

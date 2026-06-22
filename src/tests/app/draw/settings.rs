@@ -80,7 +80,7 @@ fn remote_selection_lines(app: &App, remote_name: &str) -> Vec<usize> {
 }
 
 fn populate_remotes(app: &mut App, repo: &Repository) {
-    app.remotes = list_remotes(repo).unwrap();
+    app.remotes = list_remotes(repo.workdir().unwrap_or(repo.path())).unwrap();
 }
 
 #[test]

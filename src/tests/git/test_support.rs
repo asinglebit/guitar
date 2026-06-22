@@ -15,7 +15,7 @@ use crate::{
         },
         auth::{AuthSession, NetworkResult},
         queries::{
-            commits::{get_current_branch, get_stashed_commits, get_tag_oids, get_tip_oids},
+            commits::{get_current_branch, get_stashed_commits_from_gix, get_tag_oids, get_tip_oids},
             diffs::get_filenames_diff_at_workdir,
             submodules::list_submodules,
             worktrees::list_worktrees,
@@ -160,7 +160,8 @@ fn stash_fixture_saves_and_restores_dirty_worktrees() {
 
     let stash_oid = stash(&mut repo).unwrap();
     let mut oids = Oids::default();
-    let stashed = get_stashed_commits(&mut repo, &mut oids);
+    let gix_repo = gix::open(repo.workdir().unwrap_or(repo.path())).unwrap();
+    let stashed = get_stashed_commits_from_gix(&gix_repo, &mut oids);
     assert_eq!(stashed.len(), 1);
 
     let after_stash = get_filenames_diff_at_workdir(&repo).unwrap();
@@ -176,7 +177,8 @@ fn stash_fixture_saves_and_restores_dirty_worktrees() {
     assert_eq!(fs::read_to_string(repo.workdir().unwrap().join("untracked.txt")).unwrap(), "extra\n");
 
     let mut oids = Oids::default();
-    assert!(get_stashed_commits(&mut repo, &mut oids).is_empty());
+    let gix_repo = gix::open(repo.workdir().unwrap_or(repo.path())).unwrap();
+    assert!(get_stashed_commits_from_gix(&gix_repo, &mut oids).is_empty());
 }
 
 #[test]
@@ -397,6 +399,31 @@ fn fetch_fixture_errors_when_remote_path_disappears() {
         NetworkResult::Failure(_) => {},
         other => panic!("unexpected fetch result: {other:?}"),
     }
+}
+
+#[test]
+fn fetch_fixture_supports_linked_worktree_paths() {
+    let dir = TestDir::new("fetch-linked-worktree");
+    let source = init_repo_at(&dir.join("source"));
+    let commit = commit_file(&source, "file.txt", "source\n", "source");
+    create_branch(&source, "feature", commit);
+
+    let remote_path = dir.join("remote.git");
+    init_bare_repo_at(&remote_path);
+    add_remote_path(&source, "origin", &remote_path);
+    seed_remote(&source, "origin", &["refs/heads/feature:refs/heads/feature"]);
+
+    let consumer = init_repo_at(&dir.join("consumer"));
+    let consumer_commit = commit_file(&consumer, "consumer.txt", "consumer\n", "consumer");
+    add_remote_path(&consumer, "origin", &remote_path);
+    let linked_path = dir.join("linked");
+    create_worktree(&consumer, "linked", &linked_path, consumer_commit).unwrap();
+
+    let handle = fetch_remote(linked_path.to_str().unwrap(), "origin", AuthSession::default());
+    assert!(matches!(handle.join().unwrap(), NetworkResult::Success));
+
+    let linked_repo = Repository::open(&linked_path).unwrap();
+    assert_eq!(linked_repo.find_reference("refs/remotes/origin/feature").unwrap().target(), Some(commit));
 }
 
 #[test]

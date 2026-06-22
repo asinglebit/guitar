@@ -944,7 +944,7 @@ impl App {
         // Repository-specific state starts only after Repository::open succeeds.
         if let Some(repo) = &self.repo {
             let current_path = PathBuf::from(&absolute_path);
-            self.remotes = list_remotes(repo).unwrap_or_default();
+            self.remotes = list_remotes(current_path.as_path()).unwrap_or_default();
             self.worktrees = Worktrees::from_entries(list_worktrees_metadata(repo, Some(current_path.as_path())).unwrap_or_default());
             self.submodules = Submodules::from_entries(list_submodules(repo).unwrap_or_default());
 

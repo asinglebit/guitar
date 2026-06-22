@@ -3,8 +3,8 @@ use crate::{
     core::{graph_service::GraphRow, oids::Oids, renderers::render_graph_projection},
     git::actions::worktrees::create_worktree,
     git::queries::{
-        commits::{get_stashed_commits, get_tag_oids, get_tip_oids},
-        reflogs::get_head_reflog_entries,
+        commits::{get_stashed_commits_from_gix, get_tag_oids, get_tip_oids},
+        reflogs::get_head_reflog_entries_from_gix,
     },
     helpers::{
         palette::Theme,
@@ -120,11 +120,11 @@ fn collect_root_oids(repo: &mut Repository, include_head_reflog_roots: bool) -> 
     let gix_repo = gix::open(repo.workdir().unwrap_or(repo.path())).unwrap();
     let (branches_local, branches_remote) = get_tip_oids(&gix_repo, &mut oids);
     let tags_local = get_tag_oids(repo, &mut oids);
-    let stashes = get_stashed_commits(repo, &mut oids);
+    let stashes = get_stashed_commits_from_gix(&gix_repo, &mut oids);
     let mut aliases: StdHashSet<u32> = branches_local.keys().copied().chain(branches_remote.keys().copied()).chain(tags_local.keys().copied()).chain(stashes.into_iter()).collect();
 
     if include_head_reflog_roots {
-        for entry in get_head_reflog_entries(repo).unwrap_or_default() {
+        for entry in get_head_reflog_entries_from_gix(&gix_repo).unwrap_or_default() {
             aliases.insert(oids.get_alias_by_oid(entry.new_oid));
         }
     }
@@ -136,11 +136,13 @@ fn collect_root_oids(repo: &mut Repository, include_head_reflog_roots: bool) -> 
 
 fn git2_stash_root_oids(repo: &mut Repository) -> StdHashSet<Oid> {
     let mut oids = Oids::default();
-    get_stashed_commits(repo, &mut oids).into_iter().map(|alias| *oids.get_oid_by_alias(alias)).collect()
+    let gix_repo = gix::open(repo.workdir().unwrap_or(repo.path())).unwrap();
+    get_stashed_commits_from_gix(&gix_repo, &mut oids).into_iter().map(|alias| *oids.get_oid_by_alias(alias)).collect()
 }
 
 fn git2_head_reflog_root_oids(repo: &Repository) -> StdHashSet<Oid> {
-    get_head_reflog_entries(repo).unwrap_or_default().into_iter().map(|entry| entry.new_oid).collect()
+    let gix_repo = gix::open(repo.workdir().unwrap_or(repo.path())).unwrap();
+    get_head_reflog_entries_from_gix(&gix_repo).unwrap_or_default().into_iter().map(|entry| entry.new_oid).collect()
 }
 
 fn gitoxide_stash_root_oids(repo: &gix::Repository) -> StdHashSet<Oid> {

@@ -30,12 +30,12 @@ fn commit(repo: &Repository, file: &str) -> git2::Oid {
 
 #[test]
 fn list_remotes_returns_sorted_names_and_urls() {
-    let (_path, repo) = temp_repo("list");
+    let (path, repo) = temp_repo("list");
     repo.remote("zeta", "https://example.com/zeta.git").unwrap();
     repo.remote("alpha", "https://example.com/alpha.git").unwrap();
     repo.remote_set_pushurl("alpha", Some("ssh://example.com/alpha.git")).unwrap();
 
-    let remotes = list_remotes(&repo).unwrap();
+    let remotes = list_remotes(path.as_path()).unwrap();
 
     assert_eq!(remotes.len(), 2);
     assert_eq!(remotes[0].name, "alpha");
@@ -48,14 +48,14 @@ fn list_remotes_returns_sorted_names_and_urls() {
 
 #[test]
 fn list_remotes_returns_empty_for_repo_without_remotes() {
-    let (_path, repo) = temp_repo("empty");
+    let (path, _repo) = temp_repo("empty");
 
-    assert!(list_remotes(&repo).unwrap().is_empty());
+    assert!(list_remotes(path.as_path()).unwrap().is_empty());
 }
 
 #[test]
 fn effective_default_remote_uses_current_branch_upstream_when_no_config_default_exists() {
-    let (_path, repo) = temp_repo("upstream-default");
+    let (path, repo) = temp_repo("upstream-default");
     repo.remote("origin", "https://example.com/origin.git").unwrap();
     repo.remote("upstream", "https://example.com/upstream.git").unwrap();
     let oid = commit(&repo, "file.txt");
@@ -63,21 +63,21 @@ fn effective_default_remote_uses_current_branch_upstream_when_no_config_default_
     repo.reference(&format!("refs/remotes/upstream/{current_branch}"), oid, true, "remote").unwrap();
     repo.find_branch(&current_branch, BranchType::Local).unwrap().set_upstream(Some(&format!("upstream/{current_branch}"))).unwrap();
 
-    assert_eq!(effective_default_remote(&repo).as_deref(), Some("upstream"));
+    assert_eq!(effective_default_remote(path.as_path()).as_deref(), Some("upstream"));
 }
 
 #[test]
 fn effective_default_remote_prefers_origin_before_first_sorted_remote() {
-    let (_path, repo) = temp_repo("origin-fallback");
+    let (path, repo) = temp_repo("origin-fallback");
     repo.remote("zeta", "https://example.com/zeta.git").unwrap();
     repo.remote("origin", "https://example.com/origin.git").unwrap();
 
-    assert_eq!(effective_default_remote(&repo).as_deref(), Some("origin"));
+    assert_eq!(effective_default_remote(path.as_path()).as_deref(), Some("origin"));
 }
 
 #[test]
 fn effective_default_remote_uses_config_precedence() {
-    let (_path, repo) = temp_repo("default-precedence");
+    let (path, repo) = temp_repo("default-precedence");
     repo.remote("origin", "https://example.com/origin.git").unwrap();
     repo.remote("upstream", "https://example.com/upstream.git").unwrap();
     let oid = commit(&repo, "file.txt");
@@ -85,24 +85,24 @@ fn effective_default_remote_uses_config_precedence() {
     repo.reference(&format!("refs/remotes/upstream/{current_branch}"), oid, true, "remote").unwrap();
     repo.find_branch(&current_branch, BranchType::Local).unwrap().set_upstream(Some(&format!("upstream/{current_branch}"))).unwrap();
 
-    assert_eq!(effective_default_remote(&repo).as_deref(), Some("upstream"));
+    assert_eq!(effective_default_remote(path.as_path()).as_deref(), Some("upstream"));
 
     {
         let mut config = repo.config().unwrap();
         config.set_str(PUSH_DEFAULT_CONFIG, "origin").unwrap();
     }
-    assert_eq!(effective_default_remote(&repo).as_deref(), Some("origin"));
+    assert_eq!(effective_default_remote(path.as_path()).as_deref(), Some("origin"));
 
     {
         let mut config = repo.config().unwrap();
         config.set_str(GUITAR_DEFAULT_REMOTE_CONFIG, "upstream").unwrap();
     }
-    assert_eq!(effective_default_remote(&repo).as_deref(), Some("upstream"));
+    assert_eq!(effective_default_remote(path.as_path()).as_deref(), Some("upstream"));
 }
 
 #[test]
 fn effective_default_remote_from_remotes_matches_full_resolution() {
-    let (_path, repo) = temp_repo("default-from-remotes");
+    let (path, repo) = temp_repo("default-from-remotes");
     repo.remote("origin", "https://example.com/origin.git").unwrap();
     repo.remote("upstream", "https://example.com/upstream.git").unwrap();
     let oid = commit(&repo, "file.txt");
@@ -110,14 +110,14 @@ fn effective_default_remote_from_remotes_matches_full_resolution() {
     repo.reference(&format!("refs/remotes/upstream/{current_branch}"), oid, true, "remote").unwrap();
     repo.find_branch(&current_branch, BranchType::Local).unwrap().set_upstream(Some(&format!("upstream/{current_branch}"))).unwrap();
 
-    let remotes = list_remotes(&repo).unwrap();
+    let remotes = list_remotes(path.as_path()).unwrap();
 
-    assert_eq!(effective_default_remote_from_remotes(&repo, &remotes), effective_default_remote(&repo));
+    assert_eq!(effective_default_remote_from_remotes(path.as_path(), &remotes), effective_default_remote(path.as_path()));
 }
 
 #[test]
 fn effective_default_remote_ignores_stale_config_and_falls_back() {
-    let (_path, repo) = temp_repo("default-stale");
+    let (path, repo) = temp_repo("default-stale");
     repo.remote("zeta", "https://example.com/zeta.git").unwrap();
     repo.remote("alpha", "https://example.com/alpha.git").unwrap();
 
@@ -127,5 +127,5 @@ fn effective_default_remote_ignores_stale_config_and_falls_back() {
         config.set_str(PUSH_DEFAULT_CONFIG, "also-missing").unwrap();
     }
 
-    assert_eq!(effective_default_remote(&repo).as_deref(), Some("alpha"));
+    assert_eq!(effective_default_remote(path.as_path()).as_deref(), Some("alpha"));
 }

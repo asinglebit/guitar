@@ -17,7 +17,7 @@ use crate::{
             tagging::untag,
         },
         auth::{AuthRequired, AuthSecret, NetworkResult},
-        queries::{commits::get_current_branch, remotes::effective_default_remote_from_remotes, submodules::submodules_if_present},
+        queries::{commits::get_current_branch, remotes::effective_default_remote_from_remotes, submodules::list_submodules},
         repository::open,
     },
     helpers::{
@@ -33,7 +33,7 @@ impl App {
 
     fn submodule_name_for_status_path(repo: &Repository, path: &str) -> Option<String> {
         let target = Path::new(path);
-        submodules_if_present(repo).ok()?.into_iter().find(|submodule| submodule.path() == target).map(|submodule| submodule.name().map(str::to_string).unwrap_or_else(|| path.to_string()))
+        list_submodules(repo).ok()?.into_iter().find(|submodule| submodule.path == target).map(|submodule| submodule.name)
     }
 
     pub(crate) fn start_network_request(&mut self, request: NetworkRequest) {
@@ -791,11 +791,11 @@ impl App {
     }
 
     fn default_remote_for_network(&mut self, operation: &str) -> Option<String> {
-        let Some(repo) = self.repo.clone() else {
+        if self.repo.is_none() {
             return None;
-        };
+        }
 
-        match effective_default_remote_from_remotes(repo.as_ref(), &self.remotes) {
+        match effective_default_remote_from_remotes(self.path.as_deref().unwrap_or("."), &self.remotes) {
             Some(remote_name) => Some(remote_name),
             None => {
                 self.show_error(errors::no_remotes_configured(operation));
