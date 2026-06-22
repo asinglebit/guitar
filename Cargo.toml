@@ -4,6 +4,7 @@ version = "1.0.4"
 description = "Terminal based git interface"
 authors = ["rattleworks <gasimov.abdulali@gmail.com>"]
 edition = "2024"
+default-run = "guitar"
 homepage = "https://github.com/asinglebit/guitar/"
 repository = "https://github.com/asinglebit/guitar/"
 readme = "README.md"
