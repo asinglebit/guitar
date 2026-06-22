@@ -105,6 +105,29 @@ fn detects_staged_gitmodules_without_workdir_or_head_entry() {
 }
 
 #[test]
+fn detects_workdir_gitmodules_without_index_or_head_entry() {
+    let dir = TestDir::new("workdir-gitmodules");
+    let repo = init_repo(&dir.path.join("repo"));
+    let gitmodules = repo.workdir().unwrap().join(".gitmodules");
+    fs::write(&gitmodules, "[submodule \"deps/child\"]\n\tpath = deps/child\n\turl = ../child\n").unwrap();
+
+    assert!(has_submodule_metadata(&repo));
+    assert!(has_committed_or_workdir_submodule_metadata(&repo));
+}
+
+#[test]
+fn detects_committed_gitmodules_without_workdir_file() {
+    let dir = TestDir::new("committed-gitmodules");
+    let repo = init_repo(&dir.path.join("repo"));
+    let gitmodules = repo.workdir().unwrap().join(".gitmodules");
+    commit_file(&repo, ".gitmodules", "[submodule \"deps/child\"]\n\tpath = deps/child\n\turl = ../child\n", "add gitmodules");
+    fs::remove_file(&gitmodules).unwrap();
+
+    assert!(has_submodule_metadata(&repo));
+    assert!(has_committed_or_workdir_submodule_metadata(&repo));
+}
+
+#[test]
 fn gitmodules_index_scan_matches_across_buffer_boundary() {
     let dir = TestDir::new("gitmodules-scan-boundary");
     let path = dir.path.join("index");

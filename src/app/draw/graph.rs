@@ -91,25 +91,22 @@ impl App {
 
         // Build table rows and measure the graph column from rendered span widths.
         let mut rows = Vec::with_capacity(visible_height);
-        let width = (start..end)
-            .filter_map(|index| projected_line(&graph_lines, cached_start, index))
-            .map(|line| line.spans.iter().filter(|span| !span.content.is_empty()).map(|span| span.content.chars().count()).sum::<usize>())
-            .max()
-            .unwrap_or(0) as u16;
+        let width = (start..end).filter_map(|index| projected_line(&graph_lines, cached_start, index)).map(|line| line.width()).max().unwrap_or(0) as u16;
         let search_highlight_indices: HashSet<usize> =
             if self.layout_config.is_search && self.search_path.is_some() { self.search_rows.iter().map(|row| row.graph_index).filter(|&index| index != 0).collect() } else { HashSet::new() };
         for idx in 0..visible_height {
             let global_idx = idx + start;
+            let row = global_idx.checked_sub(cached_start).and_then(|source_index| cached_rows.get(source_index));
+            let graph_line = projected_line(&graph_lines, cached_start, global_idx);
+            let message_line = projected_line(&message_lines, cached_start, global_idx);
 
             let mut row = Row::new(graph_row_cells(
-                cached_rows,
+                row,
                 self.layout_config.is_shas,
-                &graph_lines,
+                graph_line,
                 self.layout_config.is_graph_dates,
                 self.layout_config.is_graph_committers,
-                &message_lines,
-                cached_start,
-                global_idx,
+                message_line,
                 self.graph_selected,
                 &self.theme,
             ));
@@ -127,7 +124,7 @@ impl App {
         }
 
         // The graph column is fixed to its measured width; message text gets the rest.
-        let mut constraints = Vec::new();
+        let mut constraints = Vec::with_capacity(5);
         if self.layout_config.is_shas {
             constraints.push(ratatui::layout::Constraint::Length(9));
         }
@@ -197,18 +194,18 @@ fn blank_projection(len: usize) -> Vec<Line<'static>> {
 }
 
 fn graph_backdrop_rows<'a>(visible_height: usize, start: usize, selected: Option<usize>, theme: &crate::helpers::palette::Theme) -> Vec<Row<'a>> {
-    (0..visible_height)
-        .map(|idx| {
-            let global_idx = start + idx;
-            let mut row = Row::new([WidgetCell::from(Line::default())]);
-            if selected == Some(global_idx) {
-                row = row.style(Style::default().bg(theme.background_or_default(theme.COLOR_GREY_800)));
-            } else if global_idx.is_multiple_of(2) {
-                row = row.style(Style::default().bg(theme.background_or_default(theme.COLOR_GREY_900)));
-            }
-            row
-        })
-        .collect()
+    let mut rows = Vec::with_capacity(visible_height);
+    for idx in 0..visible_height {
+        let global_idx = start + idx;
+        let mut row = Row::new([WidgetCell::from(Line::default())]);
+        if selected == Some(global_idx) {
+            row = row.style(Style::default().bg(theme.background_or_default(theme.COLOR_GREY_800)));
+        } else if global_idx.is_multiple_of(2) {
+            row = row.style(Style::default().bg(theme.background_or_default(theme.COLOR_GREY_900)));
+        }
+        rows.push(row);
+    }
+    rows
 }
 
 fn graph_window_has_stable_visible_page(window: &crate::app::app::GraphWindowCache, target_start: usize, target_end: usize) -> bool {
@@ -229,26 +226,21 @@ fn projected_line<'a, 'line>(lines: &'a [Line<'line>], cached_start: usize, targ
 }
 
 fn graph_row_cells<'a, 'line>(
-    rows: &'a [GraphRow], is_shas: bool, graph_lines: &'a [Line<'line>], is_dates: bool, is_committers: bool, message_lines: &'a [Line<'static>], cached_start: usize, global_idx: usize,
-    selected: usize, theme: &crate::helpers::palette::Theme,
+    row: Option<&'a GraphRow>, is_shas: bool, graph_line: Option<&'line Line<'line>>, is_dates: bool, is_committers: bool, message_line: Option<&'line Line<'static>>, selected: usize,
+    theme: &crate::helpers::palette::Theme,
 ) -> impl Iterator<Item = WidgetCell<'a>>
 where
     'line: 'a,
 {
-    let row = projected_row(rows, cached_start, global_idx);
     [
         is_shas.then(|| sha_cell(row, selected, theme)),
-        Some(WidgetCell::from(projected_line(graph_lines, cached_start, global_idx).cloned().unwrap_or_default())),
+        Some(WidgetCell::from(graph_line.cloned().unwrap_or_default())),
         is_dates.then(|| date_cell(row, selected, theme)),
         is_committers.then(|| committer_cell(row, selected, theme)),
-        Some(WidgetCell::from(projected_line(message_lines, cached_start, global_idx).cloned().unwrap_or_default())),
+        Some(WidgetCell::from(message_line.cloned().unwrap_or_default())),
     ]
     .into_iter()
     .flatten()
-}
-
-fn projected_row(rows: &[GraphRow], cached_start: usize, target_index: usize) -> Option<&GraphRow> {
-    target_index.checked_sub(cached_start).and_then(|source_index| rows.get(source_index))
 }
 
 fn text_color(row: &GraphRow, selected: usize, theme: &crate::helpers::palette::Theme) -> ratatui::style::Color {

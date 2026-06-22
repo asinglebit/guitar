@@ -33,15 +33,14 @@ pub fn render_graph_projection<'a>(
     let graph = &symbols.graph;
     let worktree = &symbols.worktree;
     let mut layers = LayersContext::new(ColorPicker::from_theme(theme));
-    let mut lines: Vec<Line<'a>> = Vec::new();
-    let mut flattened_lanes = Vec::new();
-    let mut closeout_flattened_lanes = Vec::new();
+    let mut lines: Vec<Line<'a>> = Vec::with_capacity(rows.len());
+    let mut flattened_lanes = Vec::with_capacity(history.last().map_or(0, |snapshot| snapshot.len()));
+    let mut closeout_flattened_lanes = Vec::with_capacity(history.last().map_or(0, |snapshot| snapshot.len()));
 
     for row in rows {
         let global_idx = row.index;
 
         layers.clear();
-        let mut spans = vec![Span::raw(" ")];
 
         let mut is_commit_found = false;
         let mut is_merged_before = false;
@@ -65,6 +64,8 @@ pub fn render_graph_projection<'a>(
         };
         let next = history.get(delta + 1);
         layers.reserve(last.len().saturating_mul(2));
+        let mut spans = Vec::with_capacity(last.len().saturating_mul(2).saturating_add(1));
+        spans.push(Span::raw(" "));
         fill_flattened_lanes(&mut flattened_lanes, last, prev);
         fill_flattened_lanes_around_closeout(&mut closeout_flattened_lanes, last, prev, next);
         layers.set_flattened_lanes(&flattened_lanes);
@@ -75,8 +76,8 @@ pub fn render_graph_projection<'a>(
         }
 
         let current_row_lane_idx = last.iter().position(|chunk| !chunk.is_dummy() && chunk.alias == row.alias);
-        let mut branch_up_bridges: Vec<(usize, usize)> = Vec::new();
-        let mut branching_lanes: Vec<usize> = Vec::new();
+        let mut branch_up_bridges: Vec<(usize, usize)> = Vec::with_capacity(last.len());
+        let mut branching_lanes: Vec<usize> = Vec::with_capacity(last.len());
         for (lane_idx, chunk) in last.iter().enumerate() {
             if chunk.is_dummy()
                 && let Some(prev_snapshot) = prev
@@ -156,7 +157,7 @@ pub fn render_graph_projection<'a>(
                     layers.commit(&graph.merge, lane_idx);
                 } else if row.has_any_branch {
                     layers.commit(&graph.commit_branch, lane_idx);
-                } else if row.worktrees.iter().any(|entry| entry.branch.is_none() || !row.has_any_branch) {
+                } else if row.has_current_worktree {
                     layers.commit(&worktree.current, lane_idx);
                 } else if row.is_stash {
                     layers.commit(&graph.commit_stash, lane_idx);
@@ -312,7 +313,7 @@ pub fn render_graph_projection<'a>(
         if !is_commit_found {
             let symbol = if row.has_any_branch {
                 &graph.commit_branch
-            } else if row.worktrees.iter().any(|entry| entry.branch.is_none() || !row.has_any_branch) {
+            } else if row.has_current_worktree {
                 &worktree.current
             } else {
                 &graph.commit

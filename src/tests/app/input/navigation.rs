@@ -829,6 +829,7 @@ fn zen_graph_narrow_promotes_cached_window_row_before_opening_inspector() {
             is_stash: false,
             stash_lane: None,
             worktrees: Vec::new(),
+            has_current_worktree: false,
             reflog: None,
         }],
         history: Default::default(),
@@ -875,6 +876,7 @@ fn graph_row_lookup_result_opens_inspector_with_reflog() {
                 is_stash: false,
                 stash_lane: None,
                 worktrees: Vec::new(),
+                has_current_worktree: false,
                 reflog: Some(GraphReflogLabel { selector: "HEAD@{0}".to_string(), message: "commit: commit".to_string(), lane: Some(LaneRef::new(2, false)) }),
             })),
         })

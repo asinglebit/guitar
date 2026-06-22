@@ -60,6 +60,7 @@ fn graph_row(index: usize, alias: u32, oid: Oid, summary: &str) -> GraphRow {
         is_stash: false,
         stash_lane: None,
         worktrees: Vec::new(),
+        has_current_worktree: false,
         reflog: None,
     }
 }

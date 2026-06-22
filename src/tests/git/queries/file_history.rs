@@ -45,8 +45,8 @@ fn commit_file(repo: &Repository, root: &Path, file: &str, content: &str, messag
     commit_index(repo, message)
 }
 
-fn gix_file_status(repo: &gix::Repository, oid: Oid, path: &str) -> Option<FileStatus> {
-    super::changed_file_status_at_commit_gix(repo, gix::ObjectId::from_bytes_or_panic(oid.as_bytes()), path).unwrap()
+fn file_status_from_repo(repo: &gix::Repository, oid: Oid, path: &str) -> Option<FileStatus> {
+    super::changed_file_status_at_commit_from_repo(repo, gix::ObjectId::from_bytes_or_panic(oid.as_bytes()), path).unwrap()
 }
 
 #[test]
@@ -62,10 +62,10 @@ fn root_add_modify_delete_and_non_matching_commits_are_classified() {
     let deleted = commit_index(&repo, "delete");
     let gix_repo = gix::open(&path).unwrap();
 
-    assert_eq!(gix_file_status(&gix_repo, root, "tracked.txt"), Some(FileStatus::Added));
-    assert_eq!(gix_file_status(&gix_repo, other, "tracked.txt"), None);
-    assert_eq!(gix_file_status(&gix_repo, modified, "tracked.txt"), Some(FileStatus::Modified));
-    assert_eq!(gix_file_status(&gix_repo, deleted, "tracked.txt"), Some(FileStatus::Deleted));
+    assert_eq!(file_status_from_repo(&gix_repo, root, "tracked.txt"), Some(FileStatus::Added));
+    assert_eq!(file_status_from_repo(&gix_repo, other, "tracked.txt"), None);
+    assert_eq!(file_status_from_repo(&gix_repo, modified, "tracked.txt"), Some(FileStatus::Modified));
+    assert_eq!(file_status_from_repo(&gix_repo, deleted, "tracked.txt"), Some(FileStatus::Deleted));
 }
 
 #[test]
@@ -80,8 +80,8 @@ fn rename_matches_old_and_new_selected_path() {
     let renamed = commit_index(&repo, "rename");
     let gix_repo = gix::open(&path).unwrap();
 
-    assert_eq!(gix_file_status(&gix_repo, renamed, "old.txt"), Some(FileStatus::Renamed));
-    assert_eq!(gix_file_status(&gix_repo, renamed, "new.txt"), Some(FileStatus::Renamed));
+    assert_eq!(file_status_from_repo(&gix_repo, renamed, "old.txt"), Some(FileStatus::Renamed));
+    assert_eq!(file_status_from_repo(&gix_repo, renamed, "new.txt"), Some(FileStatus::Renamed));
 }
 
 #[test]
@@ -96,8 +96,8 @@ fn copied_file_stays_an_added_change_in_file_history() {
     let copied = commit_index(&repo, "copy");
     let gix_repo = gix::open(&path).unwrap();
 
-    assert_eq!(gix_file_status(&gix_repo, copied, "copy.txt"), Some(FileStatus::Added));
-    assert_eq!(gix_file_status(&gix_repo, copied, "source.txt"), None);
+    assert_eq!(file_status_from_repo(&gix_repo, copied, "copy.txt"), Some(FileStatus::Added));
+    assert_eq!(file_status_from_repo(&gix_repo, copied, "source.txt"), None);
 }
 
 #[cfg(unix)]
@@ -114,7 +114,7 @@ fn typechange_is_reported_as_deleted_in_file_history() {
     let typechanged = commit_index(&repo, "typechange");
     let gix_repo = gix::open(&path).unwrap();
 
-    assert_eq!(gix_file_status(&gix_repo, typechanged, "link.txt"), Some(FileStatus::Deleted));
+    assert_eq!(file_status_from_repo(&gix_repo, typechanged, "link.txt"), Some(FileStatus::Deleted));
 }
 
 #[test]
@@ -129,7 +129,7 @@ fn directory_like_file_names_remain_file_history_entries() {
     let updated = commit_index(&repo, "update");
     let gix_repo = gix::open(&path).unwrap();
 
-    assert_eq!(gix_file_status(&gix_repo, updated, "docs/guide"), Some(FileStatus::Modified));
+    assert_eq!(file_status_from_repo(&gix_repo, updated, "docs/guide"), Some(FileStatus::Modified));
 }
 
 #[test]
@@ -138,9 +138,9 @@ fn empty_and_normalized_paths_match_plain_inputs() {
     let root = commit_file(&repo, &path, "tracked.txt", "one\n", "root");
     let gix_repo = gix::open(&path).unwrap();
 
-    assert_eq!(gix_file_status(&gix_repo, root, ""), None);
+    assert_eq!(file_status_from_repo(&gix_repo, root, ""), None);
 
-    assert_eq!(gix_file_status(&gix_repo, root, "./tracked.txt"), Some(FileStatus::Added));
+    assert_eq!(file_status_from_repo(&gix_repo, root, "./tracked.txt"), Some(FileStatus::Added));
 
-    assert_eq!(gix_file_status(&gix_repo, root, r".\tracked.txt"), Some(FileStatus::Added));
+    assert_eq!(file_status_from_repo(&gix_repo, root, r".\tracked.txt"), Some(FileStatus::Added));
 }

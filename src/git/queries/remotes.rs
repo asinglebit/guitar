@@ -13,38 +13,38 @@ pub struct RemoteEntry {
 
 pub fn list_remotes(repo: &Repository) -> Result<Vec<RemoteEntry>, git2::Error> {
     let gix_repo = open_gix_repo(repo)?;
-    list_remotes_gix(&gix_repo)
+    list_remotes_from_repo(&gix_repo)
 }
 
 pub fn effective_default_remote(repo: &Repository) -> Option<String> {
     let gix_repo = open_gix_repo(repo).ok()?;
-    let remotes = list_remotes_gix(&gix_repo).ok()?;
-    effective_default_remote_from_gix_remotes(&gix_repo, &remotes)
+    let remotes = list_remotes_from_repo(&gix_repo).ok()?;
+    effective_default_remote_from_repo_remotes(&gix_repo, &remotes)
 }
 
 pub fn effective_default_remote_from_remotes(repo: &Repository, remotes: &[RemoteEntry]) -> Option<String> {
     let gix_repo = open_gix_repo(repo).ok()?;
-    effective_default_remote_from_gix_remotes(&gix_repo, remotes)
+    effective_default_remote_from_repo_remotes(&gix_repo, remotes)
 }
 
-pub fn list_remotes_from_gix(repo: &gix::Repository) -> Result<Vec<RemoteEntry>, git2::Error> {
-    list_remotes_gix(repo)
+pub fn list_remotes_from_open_repo(repo: &gix::Repository) -> Result<Vec<RemoteEntry>, git2::Error> {
+    list_remotes_from_repo(repo)
 }
 
-pub fn effective_default_remote_from_gix_remotes(repo: &gix::Repository, remotes: &[RemoteEntry]) -> Option<String> {
+pub fn effective_default_remote_from_repo_remotes(repo: &gix::Repository, remotes: &[RemoteEntry]) -> Option<String> {
     if remotes.is_empty() {
         return None;
     }
 
-    if let Some(remote) = repo_config_remote_gix(repo, GUITAR_DEFAULT_REMOTE_CONFIG, remotes) {
+    if let Some(remote) = repo_config_remote(repo, GUITAR_DEFAULT_REMOTE_CONFIG, remotes) {
         return Some(remote);
     }
 
-    if let Some(remote) = repo_config_remote_gix(repo, PUSH_DEFAULT_CONFIG, remotes) {
+    if let Some(remote) = repo_config_remote(repo, PUSH_DEFAULT_CONFIG, remotes) {
         return Some(remote);
     }
 
-    if let Some(remote) = current_branch_upstream_remote_gix(repo, remotes) {
+    if let Some(remote) = current_branch_upstream_remote(repo, remotes) {
         return Some(remote);
     }
 
@@ -60,7 +60,7 @@ fn open_gix_repo(repo: &Repository) -> Result<gix::Repository, git2::Error> {
     gix::open(path).map_err(|error| git2::Error::from_str(&error.to_string()))
 }
 
-fn list_remotes_gix(repo: &gix::Repository) -> Result<Vec<RemoteEntry>, git2::Error> {
+fn list_remotes_from_repo(repo: &gix::Repository) -> Result<Vec<RemoteEntry>, git2::Error> {
     let mut entries = Vec::new();
 
     for name in repo.remote_names() {
@@ -68,7 +68,7 @@ fn list_remotes_gix(repo: &gix::Repository) -> Result<Vec<RemoteEntry>, git2::Er
             continue;
         };
         let remote = repo.find_remote(name.as_str()).map_err(|error| git2::Error::from_str(&error.to_string()))?;
-        let push_url = remote_push_url_gix(repo, &name);
+        let push_url = remote_push_url(repo, &name);
         entries.push(RemoteEntry { name, url: remote.url(remote::Direction::Fetch).map(|url| url.to_string()).unwrap_or_default(), push_url });
     }
 
@@ -76,7 +76,7 @@ fn list_remotes_gix(repo: &gix::Repository) -> Result<Vec<RemoteEntry>, git2::Er
     Ok(entries)
 }
 
-fn remote_push_url_gix(repo: &gix::Repository, remote_name: &str) -> Option<String> {
+fn remote_push_url(repo: &gix::Repository, remote_name: &str) -> Option<String> {
     let key = format!("remote.{remote_name}.pushUrl");
     let value = repo.config_snapshot().string(&key)?;
     Some(value.to_str().ok()?.to_string())
@@ -86,14 +86,14 @@ fn remote_exists(remotes: &[RemoteEntry], name: &str) -> bool {
     remotes.iter().any(|remote| remote.name == name)
 }
 
-fn repo_config_remote_gix(repo: &gix::Repository, key: &str, remotes: &[RemoteEntry]) -> Option<String> {
+fn repo_config_remote(repo: &gix::Repository, key: &str, remotes: &[RemoteEntry]) -> Option<String> {
     repo.config_snapshot().string(key).and_then(|value| value.to_str().ok().map(|value| value.trim().to_string())).filter(|name| remote_exists(remotes, name))
 }
 
-fn current_branch_upstream_remote_gix(repo: &gix::Repository, remotes: &[RemoteEntry]) -> Option<String> {
+fn current_branch_upstream_remote(repo: &gix::Repository, remotes: &[RemoteEntry]) -> Option<String> {
     let branch = repo.head_name().ok().flatten()?.shorten().to_str().ok()?.to_string();
     let key = format!("branch.{branch}.remote");
-    repo_config_remote_gix(repo, &key, remotes)
+    repo_config_remote(repo, &key, remotes)
 }
 
 #[cfg(test)]

@@ -1,7 +1,8 @@
 use super::*;
 use crate::{
-    app::state::layout::Layout,
+    app::{app::Focus, state::layout::Layout},
     core::{
+        branches::Branches,
         submodules::SubmoduleStackEntry,
         worktrees::{WorktreeEntry, WorktreeKind},
     },
@@ -81,4 +82,32 @@ fn statusbar_renders_submodule_stack_before_branch() {
     assert!(rendered.contains("deps/child"));
     assert!(rendered.contains("vendor/grandchild"));
     assert!(rendered.find(&breadcrumb).unwrap() < rendered.find('●').unwrap());
+}
+
+#[test]
+fn statusbar_branch_count_uses_cached_branch_rows_without_scanning_refs() {
+    let (path, repo) = temp_repo("cached-branches");
+    let head = repo.head().unwrap().peel_to_commit().unwrap();
+    repo.branch("repo-only-a", &head, false).unwrap();
+    repo.branch("repo-only-b", &head, false).unwrap();
+
+    let mut branches = Branches::default();
+    branches.sorted = vec![(1, "main".to_string()), (2, "hidden".to_string())];
+    branches.hidden_branch_names.insert("hidden".to_string());
+
+    let mut app = App {
+        focus: Focus::Branches,
+        layout: Layout { statusbar_left: Rect::new(0, 0, 40, 1), statusbar_right: Rect::new(40, 0, 20, 1), ..Default::default() },
+        branches,
+        worktrees: crate::core::worktrees::Worktrees::from_entries(vec![current_worktree(path, Some("main"), head.id())]),
+        ..Default::default()
+    };
+    let backend = TestBackend::new(60, 1);
+    let mut terminal = Terminal::new(backend).unwrap();
+
+    terminal.draw(|frame| app.draw_statusbar(frame, &repo)).unwrap();
+
+    let rendered = rendered_symbols(&terminal);
+    assert!(rendered.contains("1/1"), "{rendered}");
+    assert!(!rendered.contains("1/3"), "{rendered}");
 }

@@ -107,6 +107,7 @@ fn render_graph_projection_uncommitted_row(bencher: Bencher) {
         is_stash: false,
         stash_lane: None,
         worktrees: Vec::new(),
+        has_current_worktree: false,
         reflog: None,
     }];
     bench_render(bencher, &fixture.theme, &fixture.symbols, &rows, &fixture.history, fixture.head_alias, 0, rows.len(), true);

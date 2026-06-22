@@ -485,6 +485,7 @@ fn push_commit(buffer: &mut Buffer, rows: &mut Vec<GraphRow>, index: usize, alia
         is_stash: false,
         stash_lane: None,
         worktrees: Vec::new(),
+        has_current_worktree: false,
         reflog: None,
     };
 

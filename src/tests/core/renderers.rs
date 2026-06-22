@@ -25,6 +25,7 @@ fn graph_row(index: usize, oid: Oid, summary: &str) -> GraphRow {
         is_stash: false,
         stash_lane: None,
         worktrees: Vec::new(),
+        has_current_worktree: false,
         reflog: None,
     }
 }
@@ -272,6 +273,34 @@ fn graph_projection_uses_cached_window_end_to_select_history_rows() {
     assert!(full_visible_text.contains(graph::COMMIT), "{full_visible_text:?}");
     assert_eq!(full_visible_text.matches(graph::COMMIT).count(), 1, "{full_visible_text:?}");
     assert_ne!(full_visible_text, sliced_visible_text);
+}
+
+#[test]
+fn graph_projection_uses_current_worktree_symbol_when_row_has_unbranched_worktree() {
+    let theme = Theme::classic();
+    let symbols = SymbolTheme::main();
+    let mut row = graph_row_with_alias(0, 1);
+    row.worktrees = vec![WorktreeEntry {
+        name: "wt".to_string(),
+        path: PathBuf::from("/tmp/wt"),
+        branch: Some("main".to_string()),
+        head: Some(row.oid),
+        alias: Some(row.alias),
+        kind: WorktreeKind::Linked,
+        is_current: true,
+        is_valid: true,
+        is_prunable: false,
+        locked_reason: None,
+        is_dirty: false,
+    }];
+    row.has_current_worktree = true;
+    let history = GraphHistory::from_rows(vec![vec![Chunk::commit(1, NONE, NONE)]]);
+
+    let lines = render_graph_projection(&theme, &symbols, &[row], &history, NONE, 0, 1, true);
+    let rendered = line_text(&lines[0]);
+
+    assert!(rendered.contains(&symbols.worktree.current), "{rendered:?}");
+    assert!(!rendered.contains(graph::COMMIT), "{rendered:?}");
 }
 
 #[test]

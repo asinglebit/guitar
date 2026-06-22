@@ -87,7 +87,7 @@ fn prune_hidden_branches_removes_names_that_no_longer_exist() {
 }
 
 #[test]
-fn current_branch_names_gix_matches_git2_wrapper_for_local_and_remote_refs() {
+fn current_branch_names_from_repo_matches_wrapper_for_local_and_remote_refs() {
     let (path, repo) = temp_repo("current-names");
     let oid = commit(&repo, "file.txt");
     repo.branch("topic", &repo.find_commit(oid).unwrap(), false).unwrap();
@@ -95,9 +95,18 @@ fn current_branch_names_gix_matches_git2_wrapper_for_local_and_remote_refs() {
 
     let gix_repo = gix::open(path).unwrap();
 
-    assert_eq!(current_branch_names_gix(&gix_repo), current_branch_names(&repo));
-    assert!(current_branch_names_gix(&gix_repo).contains("topic"));
-    assert!(current_branch_names_gix(&gix_repo).contains("origin/main"));
+    assert_eq!(current_branch_names_from_repo(&gix_repo), current_branch_names(&repo));
+    assert!(current_branch_names_from_repo(&gix_repo).contains("topic"));
+    assert!(current_branch_names_from_repo(&gix_repo).contains("origin/main"));
+}
+
+#[test]
+fn branch_name_from_ref_accepts_only_utf8_branch_refs() {
+    assert_eq!(branch_name_from_ref(b"refs/heads/main"), Some("main"));
+    assert_eq!(branch_name_from_ref(b"refs/remotes/origin/main"), Some("origin/main"));
+    assert_eq!(branch_name_from_ref(b"refs/tags/v1.0.0"), None);
+    assert_eq!(branch_name_from_ref(b"refs/heads/"), None);
+    assert_eq!(branch_name_from_ref(b"refs/heads/\xff"), None);
 }
 
 #[test]

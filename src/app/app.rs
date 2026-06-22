@@ -950,8 +950,7 @@ impl App {
 
             let same_repo_reload = !has_override_path && previous_path.as_deref() == Some(absolute_path.as_str());
             let mut hidden_branch_names = if same_repo_reload { existing_hidden_branch_names } else { load_branch_visibility(&absolute_path) };
-            let current_names = current_branch_names(repo);
-            if prune_hidden_branches(&mut hidden_branch_names, &current_names) {
+            if !hidden_branch_names.is_empty() && prune_hidden_branches(&mut hidden_branch_names, &current_branch_names(repo)) {
                 save_branch_visibility(&absolute_path, &hidden_branch_names);
             }
             self.branches.hidden_branch_names = hidden_branch_names;

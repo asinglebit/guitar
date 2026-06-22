@@ -1,6 +1,6 @@
 use crate::{
     app::app::{App, Focus, Viewport},
-    helpers::{branch_visibility::current_branch_names, keymap::InputMode, localisation::status as status_text},
+    helpers::{keymap::InputMode, localisation::status as status_text},
 };
 use ratatui::Frame;
 use ratatui::{
@@ -29,7 +29,11 @@ impl App {
         Span::styled(status_text::NO_HEAD_NO_COMMITS(), Style::default().fg(self.theme.COLOR_TEXT))
     }
 
-    pub fn draw_statusbar(&mut self, frame: &mut Frame, repo: &git2::Repository) {
+    fn statusbar_branch_total(&self) -> usize {
+        self.graph.branches_window.as_ref().map(|window| window.total).unwrap_or_else(|| self.branches.sorted.iter().filter(|(_, branch)| !self.branches.hidden_branch_names.contains(branch)).count())
+    }
+
+    pub fn draw_statusbar(&mut self, frame: &mut Frame, _repo: &git2::Repository) {
         let mut left_spans: Vec<Span> = match self.worktrees.current_name() {
             Some(name) => vec![Span::styled(format!("  {} {name} ", self.symbols.worktree.current), Style::default().fg(self.theme.COLOR_GRASS))],
             None => vec![Span::raw("  ")],
@@ -58,7 +62,7 @@ impl App {
                 }
             },
             Focus::StatusBottom => self.uncommitted.conflicts.len() + self.uncommitted.unstaged.modified.len() + self.uncommitted.unstaged.added.len() + self.uncommitted.unstaged.deleted.len(),
-            Focus::Branches => self.graph.branches_window.as_ref().map(|window| window.total).unwrap_or_else(|| current_branch_names(repo).len()),
+            Focus::Branches => self.statusbar_branch_total(),
             Focus::Tags => self.graph.tags_window.as_ref().map(|window| window.total).unwrap_or(self.tags.sorted.len()),
             Focus::Stashes => self.graph.stashes_window.as_ref().map(|window| window.total).unwrap_or(self.oids.stashes.len()),
             Focus::Reflogs => self.graph.reflogs_window.as_ref().map(|window| window.total).unwrap_or(self.reflogs.entries.len()),
@@ -79,11 +83,7 @@ impl App {
                 },
                 Focus::StatusTop => self.status_top_selected + 1,
                 Focus::StatusBottom => self.status_bottom_selected + 1,
-                Focus::Branches => {
-                    let branch_names = current_branch_names(repo);
-                    let hidden = branch_names.iter().filter(|branch| self.branches.hidden_branch_names.contains(*branch)).count();
-                    branch_names.len().saturating_sub(hidden)
-                },
+                Focus::Branches => (self.branches_selected + 1).min(total),
                 Focus::Tags => self.tags_selected + 1,
                 Focus::Stashes => self.stashes_selected + 1,
                 Focus::Reflogs => self.reflogs_selected + 1,

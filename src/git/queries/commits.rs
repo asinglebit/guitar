@@ -2,25 +2,30 @@ use crate::core::{
     batcher::{Batcher, WalkCommit},
     oids::Oids,
 };
+use crate::helpers::branch_visibility::branch_name_from_ref;
 use git2::ObjectType;
 use git2::{Oid, Repository, Time};
 use std::collections::HashMap;
 
 // Map each ref tip to the compact alias used by the graph renderer.
-pub fn get_tip_oids(repo: &Repository, oids: &mut Oids) -> (HashMap<u32, Vec<String>>, HashMap<u32, Vec<String>>) {
+pub fn get_tip_oids(repo: &gix::Repository, oids: &mut Oids) -> (HashMap<u32, Vec<String>>, HashMap<u32, Vec<String>>) {
     let mut local: HashMap<u32, Vec<String>> = HashMap::new();
     let mut remote: HashMap<u32, Vec<String>> = HashMap::new();
 
-    for reference in repo.references().unwrap().flatten() {
-        // Symbolic refs such as HEAD have no target and are skipped.
-        if let Some(oid) = reference.target() {
-            let alias = oids.get_alias_by_oid(oid);
-            let name = reference.name().unwrap_or("unknown");
+    let Ok(references) = repo.references() else {
+        return (local, remote);
+    };
+    for (references, bucket) in [(references.local_branches(), &mut local), (references.remote_branches(), &mut remote)] {
+        let Ok(references) = references else { continue };
+        let Ok(references) = references.peeled() else { continue };
 
-            if let Some(stripped) = name.strip_prefix("refs/heads/") {
-                local.entry(alias).or_default().push(stripped.to_string());
-            } else if let Some(stripped) = name.strip_prefix("refs/remotes/") {
-                remote.entry(alias).or_default().push(stripped.to_string());
+        for reference in references {
+            let Ok(reference) = reference else { continue };
+            let Some(oid) = reference.try_id().map(|id| Oid::from_bytes(id.detach().as_bytes()).unwrap()) else { continue };
+            let alias = oids.get_alias_by_oid(oid);
+
+            if let Some(name) = branch_name_from_ref(reference.name().as_bstr()) {
+                bucket.entry(alias).or_default().push(name.to_string());
             }
         }
     }
@@ -53,6 +58,30 @@ pub fn get_tag_oids(repo: &Repository, oids: &mut Oids) -> HashMap<u32, Vec<Stri
         let alias = oids.get_alias_by_oid(commit_oid);
 
         local.entry(alias).or_default().push(stripped.to_string());
+    }
+
+    local
+}
+
+// Map lightweight and annotated tags from a gitoxide repo to the commit aliases they resolve to.
+pub fn get_tag_oids_from_gix(repo: &gix::Repository, oids: &mut Oids) -> HashMap<u32, Vec<String>> {
+    let mut local: HashMap<u32, Vec<String>> = HashMap::new();
+
+    let Ok(references) = repo.references() else {
+        return local;
+    };
+
+    for reference in references.all().into_iter().flatten().flatten() {
+        let Some(name) = reference.name().as_bstr().strip_prefix(b"refs/tags/") else {
+            continue;
+        };
+
+        let Some(oid) = reference.try_id().map(|id| Oid::from_bytes(id.detach().as_bytes()).unwrap()) else {
+            continue;
+        };
+
+        let alias = oids.get_alias_by_oid(oid);
+        local.entry(alias).or_default().push(String::from_utf8_lossy(name).into_owned());
     }
 
     local
@@ -115,6 +144,27 @@ pub fn get_stashed_commits(repo: &mut Repository, oids: &mut Oids) -> Vec<u32> {
         true
     })
     .unwrap();
+
+    stashes
+}
+
+// Enumerate stash roots from a gitoxide repo, keeping the newest stash first.
+pub fn get_stashed_commits_from_gix(repo: &gix::Repository, oids: &mut Oids) -> Vec<u32> {
+    let mut stashes = Vec::new();
+
+    let Some(reference) = repo.try_find_reference("refs/stash").ok().flatten() else {
+        return stashes;
+    };
+
+    let mut log_iter = reference.log_iter();
+    let Some(logs) = log_iter.rev().ok().flatten() else {
+        return stashes;
+    };
+
+    for entry in logs.filter_map(Result::ok) {
+        let alias = oids.get_alias_by_oid(Oid::from_bytes(entry.new_oid.as_bytes()).unwrap());
+        stashes.push(alias);
+    }
 
     stashes
 }

@@ -1,6 +1,7 @@
 use super::*;
 use crate::{
     core::{graph_service::GraphRow, oids::Oids, renderers::render_graph_projection},
+    git::actions::worktrees::create_worktree,
     git::queries::{
         commits::{get_stashed_commits, get_tag_oids, get_tip_oids},
         reflogs::get_head_reflog_entries,
@@ -10,7 +11,7 @@ use crate::{
         symbols::{SymbolTheme, graph},
     },
 };
-use git2::{Oid, ResetType, Signature, Time};
+use git2::{Oid, Repository, ResetType, Signature, Time};
 use gix::traverse::commit::topo::{Builder as GixTopoBuilder, Sorting as GixTopoSorting};
 use ratatui::text::Line;
 use std::{
@@ -86,6 +87,7 @@ fn graph_row(index: usize, alias: u32, oid: Oid) -> GraphRow {
         is_stash: false,
         stash_lane: None,
         worktrees: Vec::new(),
+        has_current_worktree: false,
         reflog: None,
     }
 }
@@ -99,13 +101,6 @@ struct CommitMetadata {
     summary: String,
     committer_name: String,
     committer_seconds: i64,
-}
-
-fn commit_metadata_from_git2(repo: &Repository, oid: Oid) -> CommitMetadata {
-    let commit = repo.find_commit(oid).unwrap();
-    let committer = commit.committer();
-
-    CommitMetadata { summary: commit.summary().unwrap_or_default().to_string(), committer_name: committer.name().unwrap_or_default().to_string(), committer_seconds: committer.when().seconds() }
 }
 
 fn commit_metadata_from_repo(repo: &gix::Repository, oid: gix::ObjectId) -> CommitMetadata {
@@ -122,7 +117,8 @@ fn commit_metadata_from_repo(repo: &gix::Repository, oid: gix::ObjectId) -> Comm
 
 fn collect_root_oids(repo: &mut Repository, include_head_reflog_roots: bool) -> Vec<Oid> {
     let mut oids = Oids::default();
-    let (branches_local, branches_remote) = get_tip_oids(repo, &mut oids);
+    let gix_repo = gix::open(repo.workdir().unwrap_or(repo.path())).unwrap();
+    let (branches_local, branches_remote) = get_tip_oids(&gix_repo, &mut oids);
     let tags_local = get_tag_oids(repo, &mut oids);
     let stashes = get_stashed_commits(repo, &mut oids);
     let mut aliases: StdHashSet<u32> = branches_local.keys().copied().chain(branches_remote.keys().copied()).chain(tags_local.keys().copied()).chain(stashes.into_iter()).collect();
@@ -169,14 +165,16 @@ fn special_roots_fixture(name: &str) -> (PathBuf, Repository) {
 }
 
 fn graph_metadata_from_walker(walker: &Walker) -> HashMap<Oid, CommitMetadata> {
-    let repo = walker.repo.borrow();
     walker
         .oids
         .get_sorted_aliases()
         .iter()
         .filter_map(|&alias| {
             let oid = *walker.oids.get_oid_by_alias(alias);
-            (!walker.oids.is_zero(&oid)).then(|| (oid, commit_metadata_from_git2(&repo, oid)))
+            (!walker.oids.is_zero(&oid)).then(|| {
+                let oid = gix::ObjectId::from_bytes_or_panic(oid.as_bytes());
+                (gix_to_git2_oid(oid), commit_metadata_from_repo(&walker.gix_repo, oid))
+            })
         })
         .collect()
 }
@@ -220,6 +218,14 @@ fn representative_graph_fixture(name: &str, tail_commits: usize) -> (PathBuf, Re
     repo.set_head("refs/heads/main").unwrap();
 
     (path, repo)
+}
+
+fn linked_worktree_startup_fixture(name: &str) -> (PathBuf, PathBuf, Repository) {
+    let (path, repo) = representative_graph_fixture(name, 32);
+    let head = repo.head().unwrap().target().unwrap();
+    let linked_path = path.parent().unwrap_or_else(|| Path::new(".")).join(format!("{}-linked", path.file_name().and_then(|name| name.to_str()).unwrap_or("repo")));
+    create_worktree(&repo, "linked", &linked_path, head).unwrap();
+    (path, linked_path, repo)
 }
 
 #[test]
@@ -314,6 +320,33 @@ fn walker_records_ref_stash_and_reflog_lanes_from_update_lane() {
     assert!(walker.tags_lanes.contains_key(&base_alias));
     assert!(walker.reflogs_lanes.contains_key(&base_alias));
     assert!(walker.stashes_lanes.contains_key(&stash_alias));
+}
+
+#[test]
+fn walker_new_collects_startup_metadata_before_walking() {
+    let (path, mut repo) = representative_graph_fixture("startup-metadata", 32);
+    let stash = stash_tracked_change(&mut repo, "tail.txt", "stashed change");
+
+    let walker = Walker::new(path.display().to_string(), 100, HashSet::new(), true, 20).unwrap();
+
+    assert!(walker.branches_local.values().flatten().any(|name| name == "main"));
+    assert!(walker.branches_local.values().flatten().any(|name| name == "feature"));
+    assert!(walker.tags_local.values().flatten().any(|name| name == "v-main"));
+    assert!(!walker.oids.stashes.is_empty());
+    assert!(walker.oids.get_existing_alias(stash).is_some());
+    assert!(!walker.head_reflog_entries.is_empty());
+}
+
+#[test]
+fn walker_new_handles_linked_worktree_startup_paths() {
+    let (_repo_path, linked_path, repo) = linked_worktree_startup_fixture("startup-linked-worktree");
+
+    let walker = Walker::new(linked_path.display().to_string(), 100, HashSet::new(), true, 20).unwrap();
+
+    assert!(walker.gix_repo.worktree().is_some());
+    assert_eq!(walker.gix_repo.common_dir(), repo.commondir());
+    assert!(walker.branches_local.values().flatten().any(|name| name == "main"));
+    assert!(walker.tags_local.values().flatten().any(|name| name == "v-main"));
 }
 
 #[test]

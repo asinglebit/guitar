@@ -16,7 +16,7 @@ pub fn changed_file_status_at_commit(repo: &Repository, oid: Oid, path: &str) ->
     }
 
     let gix_repo = open_gix_repo(repo)?;
-    let status = changed_file_status_at_commit_gix(&gix_repo, git2_to_gix_oid(oid), &normalized_path)?;
+    let status = changed_file_status_at_commit_from_repo(&gix_repo, git2_to_gix_oid(oid), &normalized_path)?;
     FILE_STATUS_CACHE.with(|cache| {
         cache.borrow_mut().insert((repo_path, oid, normalized_path), status);
     });
@@ -47,7 +47,7 @@ fn open_gix_repo(repo: &Repository) -> Result<gix::Repository, git2::Error> {
     })
 }
 
-pub(crate) fn changed_file_status_at_commit_gix(repo: &gix::Repository, oid: gix::ObjectId, path: &str) -> Result<Option<FileStatus>, git2::Error> {
+pub(crate) fn changed_file_status_at_commit_from_repo(repo: &gix::Repository, oid: gix::ObjectId, path: &str) -> Result<Option<FileStatus>, git2::Error> {
     let path = normalize_path(path);
     if path.is_empty() {
         return Ok(None);

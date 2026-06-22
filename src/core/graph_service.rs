@@ -146,6 +146,7 @@ pub struct GraphRow {
     pub is_stash: bool,
     pub stash_lane: Option<LaneRef>,
     pub worktrees: Vec<WorktreeEntry>,
+    pub has_current_worktree: bool,
     pub reflog: Option<GraphReflogLabel>,
 }
 
@@ -510,6 +511,7 @@ fn graph_rows(
         let is_stash = walk_ctx.oids.stashes.contains(&alias);
         let stash_lane = walk_ctx.stashes_lanes.get(&alias).copied();
         let worktrees = worktrees_for_alias(worktrees, walk_ctx, alias);
+        let has_current_worktree = !worktrees.is_empty() && (!has_any_branch || worktrees.iter().any(|entry| entry.branch.is_none()));
         let reflog = latest_reflogs.get(&alias).map(|entry| GraphReflogLabel { selector: entry.selector.clone(), message: entry.message.clone(), lane: walk_ctx.reflogs_lanes.get(&alias).copied() });
 
         rows.push(GraphRow {
@@ -526,6 +528,7 @@ fn graph_rows(
             is_stash,
             stash_lane,
             worktrees,
+            has_current_worktree,
             reflog,
         });
     }

@@ -1,4 +1,3 @@
-use crate::git::queries::{commits::get_stashed_commits, reflogs::HeadReflogEntry};
 use crate::{
     core::{
         batcher::{Batcher, WalkCommit},
@@ -7,24 +6,18 @@ use crate::{
         oids::{Oids, git2_to_gix_oid, gix_to_git2_oid},
     },
     git::gix::enable_history_object_cache,
-    git::queries::commits::{get_sorted_oids, get_tag_oids, get_tip_oids},
-    git::queries::reflogs::get_head_reflog_entries,
-    git::repository::open,
+    git::queries::commits::{get_sorted_oids, get_stashed_commits_from_gix, get_tag_oids_from_gix, get_tip_oids},
+    git::queries::reflogs::{get_head_reflog_entries_from_gix, HeadReflogEntry},
     helpers::heatmap::HeatmapCounts,
 };
-use git2::Repository;
 use im::HashSet;
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet as StdHashSet},
-    rc::Rc,
 };
 
 // Walks git history into lane snapshots and ref lookup tables.
 pub struct Walker {
-    // Repository state shared with the batcher and stash query.
-    pub repo: Rc<RefCell<Repository>>,
-
     // gitoxide repository shared with the batcher and commit metadata lookups.
     pub gix_repo: gix::Repository,
 
@@ -61,9 +54,7 @@ pub struct Walker {
 impl Walker {
     // Open the repository and seed all metadata that does not depend on walking commits.
     pub fn new(path: String, amount: usize, hidden_branch_names: HashSet<String>, include_head_reflog_roots: bool, graph_lane_limit: usize) -> Result<Self, git2::Error> {
-        let repo_path = path.clone();
-        let repo = Rc::new(RefCell::new(open(path)?));
-        let mut gix_repo = gix::open(repo_path.clone()).map_err(|error| git2::Error::from_str(&error.to_string()))?;
+        let mut gix_repo = gix::open(path).map_err(|error| git2::Error::from_str(&error.to_string()))?;
         enable_history_object_cache(&mut gix_repo);
 
         let buffer = RefCell::new(Buffer::with_lane_limit(graph_lane_limit));
@@ -72,19 +63,16 @@ impl Walker {
 
         // Branch and tag tips are registered before walking so aliases are stable.
         let branches_lanes = HashMap::new();
-        let (branches_local, branches_remote) = get_tip_oids(&repo.borrow(), &mut oids);
+        let (branches_local, branches_remote) = get_tip_oids(&gix_repo, &mut oids);
 
         let tags_lanes = HashMap::new();
-        let tags_local = get_tag_oids(&repo.borrow(), &mut oids);
+        let tags_local = get_tag_oids_from_gix(&gix_repo, &mut oids);
 
         let stashes_lanes = HashMap::new();
         let reflogs_lanes = HashMap::new();
 
         // Stashes are collected up front so they can be inserted near their parents later.
-        {
-            let mut repo_mut = repo.borrow_mut();
-            oids.stashes = get_stashed_commits(&mut repo_mut, &mut oids);
-        }
+        oids.stashes = get_stashed_commits_from_gix(&gix_repo, &mut oids);
         let stash_aliases: StdHashSet<u32> = oids.stashes.iter().copied().collect();
         let mut stash_parent_aliases = Vec::with_capacity(oids.stashes.len());
         for stash_alias in oids.stashes.clone() {
@@ -96,7 +84,7 @@ impl Walker {
             }
         }
 
-        let head_reflog_entries = get_head_reflog_entries(&repo.borrow()).unwrap_or_default();
+        let head_reflog_entries = get_head_reflog_entries_from_gix(&gix_repo).unwrap_or_default();
         let mut head_reflog_roots = Vec::new();
         let mut reflog_aliases = StdHashSet::new();
         for entry in &head_reflog_entries {
@@ -107,11 +95,10 @@ impl Walker {
             }
         }
 
-        let batcher = Batcher::new(repo.clone(), repo_path, &hidden_branch_names, &head_reflog_roots)?;
+        let batcher = Batcher::new(&gix_repo, &hidden_branch_names, &head_reflog_roots)?;
         let sorted_batch_capacity = amount.saturating_add(oids.stashes.len());
 
         Ok(Self {
-            repo,
             gix_repo,
             batcher,
             buffer,

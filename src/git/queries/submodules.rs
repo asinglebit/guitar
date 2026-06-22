@@ -67,7 +67,21 @@ fn changed_content_flags(changes: &[gix::status::Item]) -> (bool, bool) {
 
 fn has_committed_or_workdir_submodule_metadata(repo: &Repository) -> bool {
     let gitmodules = Path::new(".gitmodules");
-    repo.workdir().is_some_and(|workdir| workdir.join(gitmodules).exists()) || repo.head().ok().and_then(|head| head.peel_to_tree().ok()).is_some_and(|tree| tree.get_path(gitmodules).is_ok())
+    if repo.workdir().is_some_and(|workdir| workdir.join(gitmodules).exists()) {
+        return true;
+    }
+
+    let Ok(gix_repo) = open_gix_repo(repo) else {
+        return false;
+    };
+    let Ok(tree_id) = gix_repo.head_tree_id_or_empty() else {
+        return false;
+    };
+    let Ok(tree) = gix_repo.find_tree(tree_id) else {
+        return false;
+    };
+
+    tree.lookup_entry_by_path(gitmodules).ok().flatten().is_some()
 }
 
 pub fn has_submodule_metadata(repo: &Repository) -> bool {

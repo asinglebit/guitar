@@ -1,10 +1,14 @@
 use facet::Facet;
 use git2::Repository;
+use gix::bstr::ByteSlice;
 use im::HashSet;
 use std::{
     fs,
     path::{Path, PathBuf},
 };
+
+const LOCAL_BRANCH_PREFIX: &[u8] = b"refs/heads/";
+const REMOTE_BRANCH_PREFIX: &[u8] = b"refs/remotes/";
 
 #[derive(Facet, Clone, Default)]
 pub struct RepositoryBranchVisibility {
@@ -31,27 +35,26 @@ pub fn current_branch_names(repo: &Repository) -> HashSet<String> {
     let Ok(repo) = gix::open(path) else {
         return HashSet::new();
     };
-    current_branch_names_gix(&repo)
+    current_branch_names_from_repo(&repo)
 }
 
-pub fn current_branch_names_gix(repo: &gix::Repository) -> HashSet<String> {
+pub fn current_branch_names_from_repo(repo: &gix::Repository) -> HashSet<String> {
     let mut names = HashSet::new();
     let Ok(references) = repo.references() else {
         return names;
     };
 
     for reference in references.all().into_iter().flatten().flatten() {
-        let name = reference.name().as_bstr().to_string();
-
-        let branch_name = name.strip_prefix("refs/heads/").or_else(|| name.strip_prefix("refs/remotes/"));
-        if let Some(branch_name) = branch_name
-            && !branch_name.is_empty()
-        {
+        if let Some(branch_name) = branch_name_from_ref(reference.name().as_bstr()) {
             names.insert(branch_name.to_string());
         }
     }
 
     names
+}
+
+pub(crate) fn branch_name_from_ref(name: &[u8]) -> Option<&str> {
+    name.strip_prefix(LOCAL_BRANCH_PREFIX).or_else(|| name.strip_prefix(REMOTE_BRANCH_PREFIX)).filter(|branch_name| !branch_name.is_empty()).and_then(|branch_name| branch_name.to_str().ok())
 }
 
 pub fn prune_hidden_branches(hidden: &mut HashSet<String>, current: &HashSet<String>) -> bool {

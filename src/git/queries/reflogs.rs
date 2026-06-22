@@ -12,7 +12,11 @@ pub struct HeadReflogEntry {
 
 pub fn get_head_reflog_entries(repo: &Repository) -> Result<Vec<HeadReflogEntry>, git2::Error> {
     let gix_repo = open_gix_repo(repo)?;
-    get_head_reflog_entries_gix(&gix_repo)
+    get_head_reflog_entries_from_repo(&gix_repo)
+}
+
+pub fn get_head_reflog_entries_from_gix(repo: &gix::Repository) -> Result<Vec<HeadReflogEntry>, git2::Error> {
+    get_head_reflog_entries_from_repo(repo)
 }
 
 fn open_gix_repo(repo: &Repository) -> Result<gix::Repository, git2::Error> {
@@ -20,7 +24,7 @@ fn open_gix_repo(repo: &Repository) -> Result<gix::Repository, git2::Error> {
     gix::open(path).map_err(|error| git2::Error::from_str(&error.to_string()))
 }
 
-fn get_head_reflog_entries_gix(repo: &gix::Repository) -> Result<Vec<HeadReflogEntry>, git2::Error> {
+fn get_head_reflog_entries_from_repo(repo: &gix::Repository) -> Result<Vec<HeadReflogEntry>, git2::Error> {
     let head = repo.head().map_err(|error| git2::Error::from_str(&error.to_string()))?;
     let mut log_iter = head.log_iter();
     let Some(reflog) = log_iter.rev().map_err(|error| git2::Error::from_str(&error.to_string()))? else {
