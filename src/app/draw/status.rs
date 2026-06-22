@@ -52,6 +52,7 @@ impl App {
         let visible_height_status_top = self.layout.status_top.height.saturating_sub(2) as usize;
         let visible_height_status_bottom = self.layout.status_bottom.height.saturating_sub(2) as usize;
         let is_uncommitted_loading = is_showing_uncommitted && !self.is_uncommitted_loaded;
+        let is_uncommitted_detail_loading = is_showing_uncommitted && self.is_uncommitted_loaded && self.is_uncommitted_detail_loading;
         let is_commit_diff_loading = !is_showing_uncommitted && !self.selected_commit_diff_is_loaded();
 
         // The pseudo-row splits uncommitted files into staged and unstaged panes.
@@ -122,32 +123,36 @@ impl App {
                     max_status_bottom_width,
                 ));
             }
-            for file in self.uncommitted.unstaged.modified.iter() {
-                lines_status_bottom.push(StatusRow::file(
-                    file,
-                    &self.symbols.status.modified_spaced,
-                    Style::default().fg(self.theme.COLOR_BLUE),
-                    Style::default().fg(self.theme.COLOR_TEXT),
-                    max_status_bottom_width,
-                ));
-            }
-            for file in self.uncommitted.unstaged.added.iter() {
-                lines_status_bottom.push(StatusRow::file(
-                    file,
-                    &self.symbols.status.added_spaced,
-                    Style::default().fg(self.theme.COLOR_GREEN),
-                    Style::default().fg(self.theme.COLOR_TEXT),
-                    max_status_bottom_width,
-                ));
-            }
-            for file in self.uncommitted.unstaged.deleted.iter() {
-                lines_status_bottom.push(StatusRow::file(
-                    file,
-                    &self.symbols.status.deleted_spaced,
-                    Style::default().fg(self.theme.COLOR_RED),
-                    Style::default().fg(self.theme.COLOR_TEXT),
-                    max_status_bottom_width,
-                ));
+            if is_uncommitted_detail_loading {
+                lines_status_bottom = centered_loading_lines(visible_height_status_bottom, max_status_bottom_width + 3, Style::default().fg(self.theme.COLOR_GREY_800));
+            } else {
+                for file in self.uncommitted.unstaged.modified.iter() {
+                    lines_status_bottom.push(StatusRow::file(
+                        file,
+                        &self.symbols.status.modified_spaced,
+                        Style::default().fg(self.theme.COLOR_BLUE),
+                        Style::default().fg(self.theme.COLOR_TEXT),
+                        max_status_bottom_width,
+                    ));
+                }
+                for file in self.uncommitted.unstaged.added.iter() {
+                    lines_status_bottom.push(StatusRow::file(
+                        file,
+                        &self.symbols.status.added_spaced,
+                        Style::default().fg(self.theme.COLOR_GREEN),
+                        Style::default().fg(self.theme.COLOR_TEXT),
+                        max_status_bottom_width,
+                    ));
+                }
+                for file in self.uncommitted.unstaged.deleted.iter() {
+                    lines_status_bottom.push(StatusRow::file(
+                        file,
+                        &self.symbols.status.deleted_spaced,
+                        Style::default().fg(self.theme.COLOR_RED),
+                        Style::default().fg(self.theme.COLOR_TEXT),
+                        max_status_bottom_width,
+                    ));
+                }
             }
 
             // Empty states are vertically padded to stay centered in short panes.

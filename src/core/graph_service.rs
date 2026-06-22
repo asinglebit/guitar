@@ -219,6 +219,7 @@ pub enum GraphEvent {
     LookupResult { generation: Generation, request_id: RequestId, result: GraphLookupResult },
     Worktrees { generation: Generation, version: GraphVersion, worktrees: Vec<WorktreeEntry> },
     Uncommitted { generation: Generation, result: Result<UncommittedChanges, String> },
+    UncommittedDetails { generation: Generation, result: Result<UncommittedChanges, String> },
     Heatmap { generation: Generation, heatmap: [[usize; WEEKS]; DAYS] },
     Error { generation: Generation, message: String },
 }

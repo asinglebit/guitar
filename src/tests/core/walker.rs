@@ -3,7 +3,7 @@ use crate::{
     core::{graph_service::GraphRow, oids::Oids, renderers::render_graph_projection},
     git::actions::worktrees::create_worktree,
     git::queries::{
-        commits::{get_stashed_commits_from_gix, get_tag_oids, get_tip_oids},
+        commits::{get_stashed_commits_from_gix, get_tag_oids, get_tag_oids_from_gix, get_tip_oids},
         reflogs::get_head_reflog_entries_from_gix,
     },
     helpers::{
@@ -337,6 +337,74 @@ fn walker_new_collects_startup_metadata_before_walking() {
     assert!(!walker.oids.stashes.is_empty());
     assert!(walker.oids.get_existing_alias(stash).is_some());
     assert!(!walker.head_reflog_entries.is_empty());
+}
+
+#[test]
+fn walker_matches_rev_list_all_by_walking_tag_only_commits() {
+    let (path, repo) = temp_repo("tag-only-root");
+    let root = commit(&repo, "root.txt", "root");
+    let branch_tip = commit(&repo, "branch.txt", "branch");
+    let tag_only = commit_with_parents(&repo, "tag-only.txt", "tag-only", &[], 99);
+    let tag_only_commit = repo.find_commit(tag_only).unwrap();
+    repo.tag_lightweight("tag-only", tag_only_commit.as_object(), false).unwrap();
+    repo.reference("refs/heads/main", branch_tip, true, "test").unwrap();
+    repo.set_head("refs/heads/main").unwrap();
+
+    let mut walker = Walker::new(path.display().to_string(), 1, HashSet::new(), false, 20).unwrap();
+    while walker.walk() {}
+
+    let sorted_oids: StdHashSet<Oid> = walker.oids.get_sorted_aliases().iter().map(|alias| *walker.oids.get_oid_by_alias(*alias)).filter(|oid| !walker.oids.is_zero(oid)).collect();
+
+    assert_eq!(sorted_oids, StdHashSet::from([root, branch_tip, tag_only]));
+}
+
+#[test]
+fn walker_matches_rev_list_all_for_annotated_tags() {
+    let (path, repo) = temp_repo("annotated-tag-root");
+    let root = commit(&repo, "root.txt", "root");
+    let branch_tip = commit(&repo, "branch.txt", "branch");
+    let tagged = commit_with_parents(&repo, "tagged.txt", "tagged", &[], 100);
+    let tagged_commit = repo.find_commit(tagged).unwrap();
+    let sig = Signature::now("Test User", "test@example.com").unwrap();
+    repo.tag("annotated", tagged_commit.as_object(), &sig, "annotated", false).unwrap();
+    repo.reference("refs/heads/main", branch_tip, true, "test").unwrap();
+    repo.set_head("refs/heads/main").unwrap();
+
+    let mut walker = Walker::new(path.display().to_string(), 1, HashSet::new(), false, 20).unwrap();
+    while walker.walk() {}
+
+    let sorted_oids: StdHashSet<Oid> = walker.oids.get_sorted_aliases().iter().map(|alias| *walker.oids.get_oid_by_alias(*alias)).filter(|oid| !walker.oids.is_zero(oid)).collect();
+
+    assert_eq!(sorted_oids, StdHashSet::from([root, branch_tip, tagged]));
+}
+
+#[test]
+fn gix_tag_oids_resolves_tags_without_collecting_other_refs() {
+    let (path, repo) = temp_repo("gix-tag-oids");
+    let base = commit(&repo, "base.txt", "base");
+    let tagged = commit_with_parents(&repo, "tagged.txt", "tagged", &[], 100);
+    let base_commit = repo.find_commit(base).unwrap();
+    let tagged_commit = repo.find_commit(tagged).unwrap();
+    let tree = base_commit.tree().unwrap();
+    let sig = Signature::now("Test User", "test@example.com").unwrap();
+
+    repo.tag_lightweight("lightweight", base_commit.as_object(), false).unwrap();
+    repo.tag("annotated", tagged_commit.as_object(), &sig, "annotated", false).unwrap();
+    repo.tag_lightweight("tree-tag", tree.as_object(), false).unwrap();
+    repo.reference("refs/notes/not-a-tag", tagged, true, "test").unwrap();
+
+    let mut oids = Oids::default();
+    let gix_repo = gix::open(path).unwrap();
+    let tags = get_tag_oids_from_gix(&gix_repo, &mut oids);
+
+    let base_alias = oids.get_existing_alias(base).unwrap();
+    let tagged_alias = oids.get_existing_alias(tagged).unwrap();
+    let names = tags.values().flatten().cloned().collect::<StdHashSet<_>>();
+
+    assert_eq!(tags.get(&base_alias).unwrap(), &vec!["lightweight".to_string()]);
+    assert_eq!(tags.get(&tagged_alias).unwrap(), &vec!["annotated".to_string()]);
+    assert!(!names.contains("tree-tag"));
+    assert!(!names.contains("not-a-tag"));
 }
 
 #[test]

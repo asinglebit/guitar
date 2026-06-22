@@ -67,7 +67,7 @@ impl Batcher {
 
         let references = repo.references().map_err(|error| git2::Error::from_str(&error.to_string()))?;
         for references in [references.local_branches(), references.remote_branches()] {
-            let references = references.map_err(|error| git2::Error::from_str(&error.to_string()))?.peeled().map_err(|error| git2::Error::from_str(&error.to_string()))?;
+            let references = references.map_err(|error| git2::Error::from_str(&error.to_string()))?;
 
             for reference in references {
                 let Ok(reference) = reference else { continue };
@@ -102,6 +102,7 @@ mod tests {
     use super::*;
     use git2::{BranchType, Commit, Repository, Signature};
     use std::{
+        collections::HashSet as StdHashSet,
         fs,
         path::{Path, PathBuf},
         time::{SystemTime, UNIX_EPOCH},
@@ -200,6 +201,30 @@ mod tests {
 
         assert_eq!(branch_tip(&repo, "hidden"), hidden);
         assert_eq!(batcher.next(10).iter().map(|commit| commit.oid).collect::<Vec<_>>(), vec![main]);
+    }
+
+    #[test]
+    fn remote_branch_tip_is_used_and_can_be_hidden() {
+        let (path, repo) = temp_repo("remote-tip");
+        let base = commit(&repo, "base.txt", "base");
+        let main_ref = head_refname(&repo);
+        repo.branch("side", &repo.find_commit(base).unwrap(), false).unwrap();
+        repo.set_head("refs/heads/side").unwrap();
+        repo.checkout_head(None).unwrap();
+        let side = commit(&repo, "side.txt", "side");
+        repo.set_head(&main_ref).unwrap();
+        repo.checkout_head(None).unwrap();
+        repo.find_branch("side", BranchType::Local).unwrap().delete().unwrap();
+        repo.reference("refs/remotes/origin/side", side, true, "test").unwrap();
+
+        let gix_repo = gix::open(&path).unwrap();
+        let mut batcher = Batcher::new(&gix_repo, &HashSet::new(), &[]).unwrap();
+        assert_eq!(batcher.next(10).iter().map(|commit| commit.oid).collect::<StdHashSet<_>>(), StdHashSet::from([side, base]));
+
+        let mut hidden_names = HashSet::new();
+        hidden_names.insert("origin/side".to_string());
+        let mut batcher = Batcher::new(&gix_repo, &hidden_names, &[]).unwrap();
+        assert_eq!(batcher.next(10).iter().map(|commit| commit.oid).collect::<Vec<_>>(), vec![base]);
     }
 
     #[test]

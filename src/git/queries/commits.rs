@@ -5,6 +5,7 @@ use crate::core::{
 use crate::helpers::branch_visibility::branch_name_from_ref;
 use git2::ObjectType;
 use git2::{Oid, Repository, Time};
+use gix::prelude::HeaderExt;
 use std::collections::HashMap;
 
 // Map each ref tip to the compact alias used by the graph renderer.
@@ -17,7 +18,6 @@ pub fn get_tip_oids(repo: &gix::Repository, oids: &mut Oids) -> (HashMap<u32, Ve
     };
     for (references, bucket) in [(references.local_branches(), &mut local), (references.remote_branches(), &mut remote)] {
         let Ok(references) = references else { continue };
-        let Ok(references) = references.peeled() else { continue };
 
         for reference in references {
             let Ok(reference) = reference else { continue };
@@ -71,17 +71,29 @@ pub fn get_tag_oids_from_gix(repo: &gix::Repository, oids: &mut Oids) -> HashMap
         return local;
     };
 
-    for reference in references.all().into_iter().flatten().flatten() {
+    let Ok(tags) = references.tags() else {
+        return local;
+    };
+
+    let Ok(tags) = tags.peeled() else {
+        return local;
+    };
+
+    for reference in tags.flatten() {
         let Some(name) = reference.name().as_bstr().strip_prefix(b"refs/tags/") else {
             continue;
         };
-
-        let Some(oid) = reference.try_id().map(|id| Oid::from_bytes(id.detach().as_bytes()).unwrap()) else {
+        let Some(id) = reference.try_id() else { continue };
+        let id = id.detach();
+        let Ok(header) = repo.objects.header(&id) else { continue };
+        if header.kind() != gix::object::Kind::Commit {
             continue;
-        };
+        }
+        let oid = Oid::from_bytes(id.as_bytes()).unwrap();
+        let tag_name = String::from_utf8_lossy(name).into_owned();
 
         let alias = oids.get_alias_by_oid(oid);
-        local.entry(alias).or_default().push(String::from_utf8_lossy(name).into_owned());
+        local.entry(alias).or_default().push(tag_name);
     }
 
     local

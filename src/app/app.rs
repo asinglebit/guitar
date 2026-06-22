@@ -64,7 +64,7 @@ use ratatui::{
     crossterm::event,
     layout::Rect,
     style::Style,
-    text::Span,
+    text::{Line, Span},
     widgets::{Block, Borders, ListItem},
 };
 use std::{
@@ -226,6 +226,28 @@ pub struct GraphSelectionRestore {
 }
 
 #[derive(Default)]
+pub struct GraphProjectionCache {
+    pub key: Option<GraphProjectionKey>,
+    pub message_lines: Vec<Line<'static>>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GraphProjectionKey {
+    pub version: GraphVersion,
+    pub start: usize,
+    pub end: usize,
+    pub head_alias: u32,
+    pub selected: usize,
+    pub show_reflog_labels: bool,
+    pub show_ref_labels: bool,
+    pub render_uncommitted_row: bool,
+    pub conflict_count: usize,
+    pub modified_count: usize,
+    pub added_count: usize,
+    pub deleted_count: usize,
+}
+
+#[derive(Default)]
 pub struct GraphClientCache {
     pub generation: Generation,
     pub version: GraphVersion,
@@ -237,6 +259,7 @@ pub struct GraphClientCache {
     pub pending_selection_restore: Option<GraphSelectionRestore>,
     pub index_rows: HashMap<usize, GraphRow>,
     pub graph_window: Option<GraphWindowCache>,
+    pub graph_projection: GraphProjectionCache,
     pub branches_window: Option<PaneWindowCache>,
     pub tags_window: Option<PaneWindowCache>,
     pub stashes_window: Option<PaneWindowCache>,
@@ -251,6 +274,10 @@ impl GraphClientCache {
 
     pub fn row_at(&self, index: usize) -> Option<&GraphRow> {
         self.graph_window.as_ref().and_then(|window| window.rows.iter().find(|row| row.index == index)).or_else(|| self.index_rows.get(&index))
+    }
+
+    pub fn clear_graph_projection(&mut self) {
+        self.graph_projection = GraphProjectionCache::default();
     }
 }
 
@@ -511,6 +538,8 @@ pub struct App {
     pub current_diff: Vec<FileChange>,
     pub current_diff_identity: Option<GraphIndexIdentity>,
     pub is_uncommitted_loaded: bool,
+    pub is_uncommitted_detail_loaded: bool,
+    pub is_uncommitted_detail_loading: bool,
     pub file_name: Option<String>,
     pub viewer_lines: Vec<ListItem<'static>>,
     pub viewer_split_rows: Vec<SplitViewerRow>,
@@ -904,6 +933,8 @@ impl App {
         self.current_diff = Vec::new();
         self.current_diff_identity = None;
         self.is_uncommitted_loaded = false;
+        self.is_uncommitted_detail_loaded = false;
+        self.is_uncommitted_detail_loading = false;
         self.uncommitted = UncommittedChanges::default();
         self.viewer_lines = Vec::new();
         self.viewer_split_rows = Vec::new();
@@ -1032,20 +1063,49 @@ impl App {
 
         std::thread::spawn(move || {
             let result = open(&path).map_err(|error| error.to_string()).and_then(|repo| {
-                if let Ok(staged) = get_staged_filenames_diff(&repo).map_err(|error| error.to_string()) {
-                    if let Ok(worktrees) = list_worktrees_metadata_with_current_dirty(&repo, Some(path.as_path()), &staged) {
-                        let _ = reload_metadata_tx.send(GraphCommand::UpdateWorktrees { generation, worktrees });
-                    }
-                    let _ = reload_uncommitted_tx.send(GraphEvent::Uncommitted { generation, result: Ok(staged) });
+                let staged = get_staged_filenames_diff(&repo).map_err(|error| error.to_string())?;
+                if let Ok(worktrees) = list_worktrees_metadata_with_current_dirty(&repo, Some(path.as_path()), &staged) {
+                    let _ = reload_metadata_tx.send(GraphCommand::UpdateWorktrees { generation, worktrees });
                 }
+                Ok(staged)
+            });
+            let _ = reload_uncommitted_tx.send(GraphEvent::Uncommitted { generation, result });
+        });
+    }
 
+    pub(crate) fn refresh_current_diff_for_identity(&mut self, repo: &git2::Repository, identity: GraphIndexIdentity) {
+        if self.current_diff_identity == Some(identity) {
+            return;
+        }
+        self.current_diff = get_filenames_diff_at_oid(repo, identity.oid);
+        self.current_diff_identity = Some(identity);
+    }
+
+    pub fn ensure_uncommitted_details_loaded(&mut self) {
+        if self.is_uncommitted_detail_loaded || self.is_uncommitted_detail_loading {
+            return;
+        }
+        let generation = self.graph.generation;
+        let Some(path) = self.path.as_ref().map(PathBuf::from) else {
+            return;
+        };
+        let Some(reload_metadata_tx) = self.graph_tx.clone() else {
+            return;
+        };
+        let Some(reload_uncommitted_tx) = self.graph_event_tx.clone() else {
+            return;
+        };
+        self.is_uncommitted_detail_loading = true;
+
+        std::thread::spawn(move || {
+            let result = open(&path).map_err(|error| error.to_string()).and_then(|repo| {
                 let uncommitted = get_filenames_diff_at_workdir(&repo).map_err(|error| error.to_string())?;
                 if let Ok(worktrees) = list_worktrees_metadata_with_current_dirty(&repo, Some(path.as_path()), &uncommitted) {
                     let _ = reload_metadata_tx.send(GraphCommand::UpdateWorktrees { generation, worktrees });
                 }
                 Ok(uncommitted)
             });
-            let _ = reload_uncommitted_tx.send(GraphEvent::Uncommitted { generation, result });
+            let _ = reload_uncommitted_tx.send(GraphEvent::UncommittedDetails { generation, result });
         });
     }
 
@@ -1100,13 +1160,13 @@ impl App {
                 self.graph.version = self.graph.version.max(version);
                 self.graph.total = total;
                 self.graph.graph_window = Some(GraphWindowCache { version, start, end, head_alias, rows, history });
+                self.graph.clear_graph_projection();
                 self.graph.requested_graph = None;
 
                 if self.graph_selected != 0
                     && let Some(identity) = self.graph_identity_at(self.graph_selected)
                 {
-                    self.current_diff = get_filenames_diff_at_oid(repo, identity.oid);
-                    self.current_diff_identity = Some(identity);
+                    self.refresh_current_diff_for_identity(repo, identity);
                 }
             },
             GraphEvent::PaneWindow { generation, version, pane, start, end, total, rows } => {
@@ -1167,20 +1227,20 @@ impl App {
                     },
                     (PendingGraphLookup::CacheGraphRow, GraphLookupResult::GraphRow(Some(row))) => {
                         let index = row.index;
-                        let oid = row.oid;
                         self.cache_graph_row(row);
                         if index == self.graph_selected && index != 0 {
-                            self.current_diff = get_filenames_diff_at_oid(repo, oid);
-                            self.current_diff_identity = self.graph_identity_at(index);
+                            if let Some(identity) = self.graph_identity_at(index) {
+                                self.refresh_current_diff_for_identity(repo, identity);
+                            }
                         }
                     },
                     (PendingGraphLookup::OpenInspector, GraphLookupResult::GraphRow(Some(row))) => {
                         let index = row.index;
-                        let oid = row.oid;
                         self.cache_graph_row(row);
                         if index == self.graph_selected {
-                            self.current_diff = get_filenames_diff_at_oid(repo, oid);
-                            self.current_diff_identity = self.graph_identity_at(index);
+                            if let Some(identity) = self.graph_identity_at(index) {
+                                self.refresh_current_diff_for_identity(repo, identity);
+                            }
                             self.layout_config.is_inspector = true;
                             self.focus = Focus::Inspector;
                         }
@@ -1210,6 +1270,24 @@ impl App {
                         },
                         Err(error) => {
                             self.uncommitted = UncommittedChanges::default();
+                            self.show_error(errors::with_error(errors::FILE_DIFF(), error));
+                        },
+                    }
+                    self.is_uncommitted_loaded = true;
+                }
+            },
+            GraphEvent::UncommittedDetails { generation, result } => {
+                if generation == self.graph.generation {
+                    match result {
+                        Ok(uncommitted) => {
+                            self.uncommitted = uncommitted;
+                            self.is_uncommitted_detail_loaded = true;
+                            self.is_uncommitted_detail_loading = false;
+                        },
+                        Err(error) => {
+                            self.uncommitted = UncommittedChanges::default();
+                            self.is_uncommitted_detail_loaded = true;
+                            self.is_uncommitted_detail_loading = false;
                             self.show_error(errors::with_error(errors::FILE_DIFF(), error));
                         },
                     }
@@ -1394,8 +1472,7 @@ impl App {
         if self.graph_selected != 0
             && let Some(identity) = self.graph_identity_at(self.graph_selected)
         {
-            self.current_diff = get_filenames_diff_at_oid(repo, identity.oid);
-            self.current_diff_identity = Some(identity);
+            self.refresh_current_diff_for_identity(repo, identity);
         }
     }
 
@@ -1405,6 +1482,7 @@ impl App {
             Span::styled(self.symbols.splash.logo_word_prefix.clone(), Style::default().fg(self.theme.COLOR_GRASS)),
             Span::styled(self.symbols.splash.logo_corner.clone(), Style::default().fg(self.theme.COLOR_GREEN)),
         ];
+        self.graph.clear_graph_projection();
     }
 
     pub fn set_theme(&mut self, theme: Theme) {

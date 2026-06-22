@@ -1,6 +1,6 @@
 use super::*;
-use crate::core::graph_service::{GraphCommand, GraphEvent, GraphFileHistoryRow, GraphLookupKind, GraphLookupResult, GraphPane, GraphRow};
-use crate::git::queries::helpers::{FileStatus, UncommittedChanges};
+use crate::core::graph_service::{GraphCommand, GraphEvent, GraphFileHistoryRow, GraphHistory, GraphIndexIdentity, GraphLookupKind, GraphLookupResult, GraphPane, GraphRow};
+use crate::git::queries::helpers::{FileChange, FileStatus, UncommittedChanges};
 use git2::{Repository, Signature};
 use ratatui::{Terminal, backend::TestBackend, layout::Rect, style::Color};
 use std::{
@@ -240,9 +240,13 @@ fn first_graph_progress_with_dirty_submodule_status_stays_in_graph_view() {
 }
 
 #[test]
-fn uncommitted_metadata_waits_for_complete_graph_progress() {
+fn uncommitted_metadata_waits_for_complete_graph_progress_without_full_worktree_scan() {
     let (path, repo) = temp_repo("deferred-uncommitted");
     commit_file(&repo, "tracked.txt", "tracked");
+    fs::write(path.join("staged.txt"), "staged\n").unwrap();
+    let mut index = repo.index().unwrap();
+    index.add_path(Path::new("staged.txt")).unwrap();
+    index.write().unwrap();
     fs::write(path.join("new.txt"), "new\n").unwrap();
     let repo = Rc::new(repo);
     let (cmd_tx, _cmd_rx) = std::sync::mpsc::channel();
@@ -271,7 +275,84 @@ fn uncommitted_metadata_waits_for_complete_graph_progress() {
     }
 
     assert!(app.is_uncommitted_loaded);
+    assert!(!app.is_uncommitted_detail_loaded);
+    assert_eq!(app.uncommitted.staged.added, vec!["staged.txt".to_string()]);
+    assert!(app.uncommitted.unstaged.added.is_empty());
+}
+
+#[test]
+fn selecting_uncommitted_row_loads_full_worktree_details() {
+    let (path, repo) = temp_repo("deferred-uncommitted-details");
+    commit_file(&repo, "tracked.txt", "tracked");
+    fs::write(path.join("new.txt"), "new\n").unwrap();
+    let repo = Rc::new(repo);
+    let (cmd_tx, _cmd_rx) = std::sync::mpsc::channel();
+    let (event_tx, event_rx) = std::sync::mpsc::channel();
+    let mut app = App {
+        path: Some(path.display().to_string()),
+        repo: Some(repo.clone()),
+        graph_tx: Some(cmd_tx),
+        graph_event_tx: Some(event_tx),
+        graph_rx: Some(event_rx),
+        viewport: Viewport::Graph,
+        focus: Focus::Viewport,
+        ..Default::default()
+    };
+    app.graph.generation = 12;
+    app.is_uncommitted_loaded = true;
+    app.graph.total = 2;
+
+    app.select_graph_index(0);
+    assert!(app.is_uncommitted_detail_loading);
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while !app.is_uncommitted_detail_loaded && Instant::now() < deadline {
+        app.sync(&repo);
+        std::thread::sleep(Duration::from_millis(5));
+    }
+
+    assert!(app.is_uncommitted_detail_loaded);
+    assert!(!app.is_uncommitted_detail_loading);
     assert_eq!(app.uncommitted.unstaged.added, vec!["new.txt".to_string()]);
+}
+
+#[test]
+fn graph_window_refresh_reuses_loaded_selected_commit_diff() {
+    let (_path, repo) = temp_repo("graph-window-reuses-diff");
+    let oid = commit_file(&repo, "tracked.txt", "tracked");
+    let repo = Rc::new(repo);
+    let (event_tx, event_rx) = std::sync::mpsc::channel();
+    let identity = GraphIndexIdentity { index: 1, alias: 7, oid };
+    let mut app = App {
+        repo: Some(repo.clone()),
+        graph_rx: Some(event_rx),
+        viewport: Viewport::Graph,
+        focus: Focus::Viewport,
+        graph_selected: identity.index,
+        current_diff_identity: Some(identity),
+        current_diff: vec![FileChange { filename: "sentinel.txt".to_string(), status: FileStatus::Other }],
+        ..Default::default()
+    };
+    app.graph.generation = 13;
+    app.graph.requested_graph = Some((99, 0, 2));
+
+    event_tx
+        .send(GraphEvent::GraphWindow {
+            generation: 13,
+            request_id: 99,
+            version: 1,
+            start: 0,
+            end: 2,
+            total: 2,
+            head_alias: 0,
+            rows: vec![graph_row(identity.index, identity.alias, identity.oid)],
+            history: GraphHistory::new(),
+        })
+        .unwrap();
+    app.sync(&repo);
+
+    assert_eq!(app.current_diff_identity, Some(identity));
+    assert_eq!(app.current_diff.len(), 1);
+    assert_eq!(app.current_diff[0].filename, "sentinel.txt");
 }
 
 #[test]

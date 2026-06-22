@@ -121,6 +121,14 @@ fn rendered_lines(terminal: &Terminal<TestBackend>) -> Vec<String> {
     (0..buffer.area.height).map(|y| (0..buffer.area.width).map(|x| buffer[(x, y)].symbol()).collect::<String>()).collect()
 }
 
+fn draw_graph_once(app: &mut App, repo: &Repository, terminal: &mut Terminal<TestBackend>) {
+    terminal
+        .draw(|frame| {
+            app.draw_graph(frame, repo);
+        })
+        .unwrap();
+}
+
 #[test]
 fn graph_highlights_file_history_rows_when_search_pane_is_open() {
     let (_path, repo, oid) = temp_repo("file-search-highlight");
@@ -247,6 +255,24 @@ fn graph_ascii_symbol_theme_renders_ascii_only_output() {
 
     let rendered = rendered_lines(&terminal).join("");
     assert!(rendered.is_ascii(), "{rendered:?}");
+}
+
+#[test]
+fn graph_truncates_long_committer_names() {
+    let (_path, repo, oid) = temp_repo("long-committer");
+    let mut app = app_with_cached_window(0, &["row0", "row1"], oid);
+    app.layout_config.is_graph_committers = true;
+    if let Some(window) = app.graph.graph_window.as_mut() {
+        window.rows[0].committer_name = "Very Long Committer Name".to_string();
+    }
+
+    let backend = TestBackend::new(100, 3);
+    let mut terminal = Terminal::new(backend).unwrap();
+    draw_graph_once(&mut app, &repo, &mut terminal);
+
+    let lines = rendered_lines(&terminal);
+    assert!(lines[0].contains("Very Long Commi..."), "{lines:?}");
+    assert!(lines[0].contains("row0"), "{lines:?}");
 }
 
 #[test]
@@ -394,4 +420,39 @@ fn zero_sized_graph_draw_does_not_request_empty_window() {
         .unwrap();
 
     assert!(rx.try_recv().is_err());
+}
+
+#[test]
+fn graph_projection_cache_reuses_stable_window_between_draws() {
+    let (_path, repo, oid) = temp_repo("projection-cache-reuse");
+    let mut app = app_with_cached_window(0, &["row0", "row1", "row2"], oid);
+    app.layout.graph = Rect::new(0, 0, 80, 3);
+    let backend = TestBackend::new(80, 3);
+    let mut terminal = Terminal::new(backend).unwrap();
+
+    draw_graph_once(&mut app, &repo, &mut terminal);
+    let first_key = app.graph.graph_projection.key;
+    let first_message_ptr = app.graph.graph_projection.message_lines.as_ptr();
+
+    draw_graph_once(&mut app, &repo, &mut terminal);
+
+    assert_eq!(app.graph.graph_projection.key, first_key);
+    assert_eq!(app.graph.graph_projection.message_lines.as_ptr(), first_message_ptr);
+}
+
+#[test]
+fn graph_projection_cache_key_tracks_ref_visibility() {
+    let (_path, repo, oid) = temp_repo("projection-cache-refs");
+    let mut app = app_with_cached_window(0, &["row0", "row1", "row2"], oid);
+    app.layout_config.is_graph_refs = true;
+    let backend = TestBackend::new(80, 3);
+    let mut terminal = Terminal::new(backend).unwrap();
+
+    draw_graph_once(&mut app, &repo, &mut terminal);
+    assert_eq!(app.graph.graph_projection.key.unwrap().show_ref_labels, true);
+
+    app.layout_config.is_graph_refs = false;
+    draw_graph_once(&mut app, &repo, &mut terminal);
+
+    assert_eq!(app.graph.graph_projection.key.unwrap().show_ref_labels, false);
 }

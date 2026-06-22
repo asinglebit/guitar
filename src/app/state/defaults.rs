@@ -95,6 +95,8 @@ impl Default for App {
             current_diff: Vec::new(),
             current_diff_identity: None,
             is_uncommitted_loaded: false,
+            is_uncommitted_detail_loaded: false,
+            is_uncommitted_detail_loading: false,
             file_name: None,
             viewer_lines: Vec::new(),
             viewer_split_rows: Vec::new(),

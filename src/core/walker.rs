@@ -7,7 +7,7 @@ use crate::{
     },
     git::gix::enable_history_object_cache,
     git::queries::commits::{get_sorted_oids, get_stashed_commits_from_gix, get_tag_oids_from_gix, get_tip_oids},
-    git::queries::reflogs::{get_head_reflog_entries_from_gix, HeadReflogEntry},
+    git::queries::reflogs::{HeadReflogEntry, get_head_reflog_entries_from_gix},
     helpers::heatmap::HeatmapCounts,
 };
 use im::HashSet;
@@ -95,7 +95,13 @@ impl Walker {
             }
         }
 
-        let batcher = Batcher::new(&gix_repo, &hidden_branch_names, &head_reflog_roots)?;
+        // Seed the cursor with every ref-backed root we render, plus optional head reflog roots.
+        let mut extra_roots = Vec::with_capacity(tags_local.len().saturating_add(oids.stashes.len()).saturating_add(head_reflog_roots.len()));
+        extra_roots.extend(tags_local.keys().copied().map(|alias| *oids.get_oid_by_alias(alias)));
+        extra_roots.extend(oids.stashes.iter().copied().map(|alias| *oids.get_oid_by_alias(alias)));
+        extra_roots.extend(head_reflog_roots);
+
+        let batcher = Batcher::new(&gix_repo, &hidden_branch_names, &extra_roots)?;
         let sorted_batch_capacity = amount.saturating_add(oids.stashes.len());
 
         Ok(Self {

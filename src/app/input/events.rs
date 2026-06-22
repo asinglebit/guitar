@@ -614,7 +614,7 @@ impl App {
     }
 
     fn status_bottom_clickable_count(&self) -> usize {
-        if self.graph_selected != 0 || !self.is_uncommitted_loaded || !self.uncommitted.is_unstaged {
+        if self.graph_selected != 0 || !self.is_uncommitted_loaded || !self.is_uncommitted_detail_loaded || !self.uncommitted.is_unstaged {
             return 0;
         }
         self.uncommitted.conflicts.len() + self.uncommitted.unstaged.modified.len() + self.uncommitted.unstaged.added.len() + self.uncommitted.unstaged.deleted.len()
