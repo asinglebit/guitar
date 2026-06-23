@@ -10,7 +10,7 @@ use guitar::{
     core::{
         chunk::NONE,
         graph_service::{GraphHistory, GraphRow},
-        renderers::{render_graph_projection as render_graph_projection_lines, render_message_projection},
+        renderers::{GraphProjectionRender, MessageProjectionRender, render_graph_projection as render_graph_projection_lines, render_message_projection},
     },
     git::queries::helpers::UncommittedChanges,
     helpers::{palette::Theme, symbols::SymbolTheme},
@@ -34,7 +34,16 @@ struct GraphRenderCase<'a> {
 
 impl GraphRenderCase<'_> {
     fn render(&self) -> (usize, usize) {
-        let lines = black_box(render_graph_projection_lines(self.theme, self.symbols, self.rows, self.history, self.head_alias, self.start, self.end, self.render_uncommitted_row));
+        let lines = black_box(render_graph_projection_lines(GraphProjectionRender {
+            theme: self.theme,
+            symbols: self.symbols,
+            rows: self.rows,
+            history: self.history,
+            head_alias: self.head_alias,
+            start: self.start,
+            end: self.end,
+            render_uncommitted_row: self.render_uncommitted_row,
+        }));
         let bytes = lines.iter().map(|line| line.width()).sum();
         (lines.len(), bytes)
     }
@@ -47,7 +56,17 @@ fn bench_render(bencher: Bencher, case: GraphRenderCase<'_>) {
 }
 
 fn message_case(theme: &Theme, symbols: &SymbolTheme, rows: &[GraphRow], selected: usize, show_refs: bool) -> (usize, usize) {
-    let lines = black_box(render_message_projection(theme, symbols, rows, true, show_refs, selected, &UncommittedChanges::default(), true));
+    let uncommitted = UncommittedChanges::default();
+    let lines = black_box(render_message_projection(MessageProjectionRender {
+        theme,
+        symbols,
+        rows,
+        show_reflog_labels: true,
+        show_ref_labels: show_refs,
+        selected,
+        uncommitted: &uncommitted,
+        render_uncommitted_row: true,
+    }));
     let bytes = lines.iter().map(|line| line.width()).sum();
     (lines.len(), bytes)
 }

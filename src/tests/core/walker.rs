@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    core::{graph_service::GraphRow, oids::Oids, renderers::render_graph_projection},
+    core::{graph_service::GraphRow, oids::Oids, renderers::render_graph_projection_for_test as render_graph_projection},
     git::actions::worktrees::create_worktree,
     git::queries::{
         commits::{get_stashed_commits, get_tag_oids, get_tip_oids},
@@ -308,7 +308,8 @@ fn walker_expires_new_right_merge_lane_before_next_rendered_row() {
 
     let rows: Vec<_> = aliases.iter().enumerate().map(|(index, &alias)| graph_row(index, alias, *walker.oids.get_oid_by_alias(alias))).collect();
     let symbols = SymbolTheme::main();
-    let lines = render_graph_projection(&Theme::classic(), &symbols, &rows, &history, head_alias, 0, aliases.len(), true);
+    let theme = Theme::classic();
+    let lines = render_graph_projection(&theme, &symbols, &rows, &history, head_alias, 0, aliases.len(), true);
     let merge_text = line_text(&lines[merge_idx]);
     let next_text = line_text(&lines[merge_idx + 1]);
     let merge_col = merge_text.chars().position(|ch| ch == graph::MERGE.chars().next().unwrap()).unwrap();

@@ -2,7 +2,7 @@ use crate::app::app::{App, Focus, GraphProjectionCache, GraphProjectionKey};
 use crate::core::{
     chunk::NONE,
     graph_service::GraphRow,
-    renderers::{GRAPH_COMMITTER_WIDTH, render_graph_projection, render_message_projection},
+    renderers::{GRAPH_COMMITTER_WIDTH, GraphProjectionRender, MessageProjectionRender, render_graph_projection, render_message_projection},
 };
 use crate::helpers::text::truncate_with_ellipsis;
 use crate::helpers::{layout::scrollbar_content_length, localisation::empty};
@@ -91,8 +91,16 @@ impl App {
             && self.graph.graph_projection.key != Some(key)
         {
             let window = self.graph.graph_window.as_ref().expect("projection key requires graph window");
-            let message_lines =
-                render_message_projection(&self.theme, &self.symbols, &window.rows, key.show_reflog_labels, key.show_ref_labels, key.selected, &self.uncommitted, key.render_uncommitted_row);
+            let message_lines = render_message_projection(MessageProjectionRender {
+                theme: &self.theme,
+                symbols: &self.symbols,
+                rows: &window.rows,
+                show_reflog_labels: key.show_reflog_labels,
+                show_ref_labels: key.show_ref_labels,
+                selected: key.selected,
+                uncommitted: &self.uncommitted,
+                render_uncommitted_row: key.render_uncommitted_row,
+            });
             self.graph.graph_projection = GraphProjectionCache { key: Some(key), message_lines };
         }
 
@@ -100,16 +108,16 @@ impl App {
         // still looks like movement while loading.
         let (cached_start, cached_rows, graph_lines, message_lines) =
             if let Some(window) = self.graph.graph_window.as_ref().filter(|window| window.start < end && start < window.end && self.graph.graph_projection.key.is_some()) {
-                let graph_lines = render_graph_projection(
-                    &self.theme,
-                    &self.symbols,
-                    &window.rows,
-                    &window.history,
-                    window.head_alias,
-                    window.start,
-                    window.end,
-                    projection_key.is_some_and(|key| key.render_uncommitted_row),
-                );
+                let graph_lines = render_graph_projection(GraphProjectionRender {
+                    theme: &self.theme,
+                    symbols: &self.symbols,
+                    rows: &window.rows,
+                    history: &window.history,
+                    head_alias: window.head_alias,
+                    start: window.start,
+                    end: window.end,
+                    render_uncommitted_row: projection_key.is_some_and(|key| key.render_uncommitted_row),
+                });
                 (window.start, window.rows.as_slice(), graph_lines, self.graph.graph_projection.message_lines.as_slice())
             } else {
                 (start, &[][..], Vec::new(), &[][..])
