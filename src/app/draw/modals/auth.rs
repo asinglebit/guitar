@@ -1,7 +1,7 @@
 use crate::{
     app::{
         app::{App, AuthInputField},
-        draw::modals::shared::{action_row, modal_block, render_modal_text_input},
+        draw::modals::shared::{ModalTextInput, action_row, modal_block, render_modal_text_input},
     },
     git::auth::AuthProtocol,
     helpers::{
@@ -106,7 +106,10 @@ impl App {
         let text_style = Style::default().fg(self.theme.COLOR_TEXT);
         let border_style = Style::default().fg(border);
         let input = if field == AuthInputField::Username { &mut self.auth_username_input } else { &mut self.auth_secret_input };
-        render_modal_text_input(frame, area, input, masked, text_style, border_style, Some(Span::styled(format!(" {label} "), label_style)), active, &self.symbols);
+        render_modal_text_input(
+            frame,
+            ModalTextInput { area, input, masked, text_style, border_style, title: Some(Span::styled(format!(" {label} "), label_style)), show_cursor: active, symbols: &self.symbols },
+        );
     }
 
     fn draw_auth_text_modal(&mut self, frame: &mut Frame, lines: Vec<Line>, border_color: ratatui::style::Color) {

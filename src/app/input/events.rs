@@ -59,6 +59,17 @@ struct ScrollbarInfo {
 }
 
 #[derive(Clone, Copy)]
+struct ScrollableHitTarget {
+    rect: Rect,
+    column: u16,
+    row: u16,
+    visible_height: usize,
+    has_top_border: bool,
+    scroll: usize,
+    total: usize,
+}
+
+#[derive(Clone, Copy)]
 struct ScrollbarMetrics {
     track_top: u16,
     track_len: usize,
@@ -387,7 +398,15 @@ impl App {
     fn left_pane_mouse_target_at(&self, column: u16, row: u16) -> Option<MouseSelectionTarget> {
         if self.layout_config.is_branches {
             let visible_height = self.layout.branches.height.saturating_sub(2) as usize;
-            if let Some(index) = self.scrolled_row_index(self.layout.branches, column, row, visible_height, self.layout_config.is_zen, self.branches_scroll.get(), self.branch_clickable_count()) {
+            if let Some(index) = self.scrolled_row_index(ScrollableHitTarget {
+                rect: self.layout.branches,
+                column,
+                row,
+                visible_height,
+                has_top_border: self.layout_config.is_zen,
+                scroll: self.branches_scroll.get(),
+                total: self.branch_clickable_count(),
+            }) {
                 return self.graph_pane_clickable(index, GraphPaneClickKind::Branches).then_some(MouseSelectionTarget::Branches(index));
             }
         }
@@ -398,7 +417,15 @@ impl App {
             } else {
                 self.layout.tags.height.saturating_sub(if self.layout_config.is_branches { 1 } else { 2 }) as usize
             };
-            if let Some(index) = self.scrolled_row_index(self.layout.tags, column, row, visible_height, self.layout_config.is_zen, self.tags_scroll.get(), self.tag_clickable_count()) {
+            if let Some(index) = self.scrolled_row_index(ScrollableHitTarget {
+                rect: self.layout.tags,
+                column,
+                row,
+                visible_height,
+                has_top_border: self.layout_config.is_zen,
+                scroll: self.tags_scroll.get(),
+                total: self.tag_clickable_count(),
+            }) {
                 return self.graph_pane_clickable(index, GraphPaneClickKind::Tags).then_some(MouseSelectionTarget::Tags(index));
             }
         }
@@ -409,7 +436,15 @@ impl App {
             } else {
                 self.layout.stashes.height.saturating_sub(if self.layout_config.is_branches || self.layout_config.is_tags { 1 } else { 2 }) as usize
             };
-            if let Some(index) = self.scrolled_row_index(self.layout.stashes, column, row, visible_height, self.layout_config.is_zen, self.stashes_scroll.get(), self.stash_clickable_count()) {
+            if let Some(index) = self.scrolled_row_index(ScrollableHitTarget {
+                rect: self.layout.stashes,
+                column,
+                row,
+                visible_height,
+                has_top_border: self.layout_config.is_zen,
+                scroll: self.stashes_scroll.get(),
+                total: self.stash_clickable_count(),
+            }) {
                 return self.graph_pane_clickable(index, GraphPaneClickKind::Stashes).then_some(MouseSelectionTarget::Stashes(index));
             }
         }
@@ -418,7 +453,15 @@ impl App {
             let has_previous = self.layout_config.is_branches || self.layout_config.is_tags || self.layout_config.is_stashes;
             let visible_height =
                 if self.layout_config.is_zen { self.layout.reflogs.height.saturating_sub(2) as usize } else { self.layout.reflogs.height.saturating_sub(if has_previous { 1 } else { 2 }) as usize };
-            if let Some(index) = self.scrolled_row_index(self.layout.reflogs, column, row, visible_height, self.layout_config.is_zen, self.reflogs_scroll.get(), self.reflog_clickable_count()) {
+            if let Some(index) = self.scrolled_row_index(ScrollableHitTarget {
+                rect: self.layout.reflogs,
+                column,
+                row,
+                visible_height,
+                has_top_border: self.layout_config.is_zen,
+                scroll: self.reflogs_scroll.get(),
+                total: self.reflog_clickable_count(),
+            }) {
                 return self.graph_pane_clickable(index, GraphPaneClickKind::Reflogs).then_some(MouseSelectionTarget::Reflogs(index));
             }
         }
@@ -430,7 +473,15 @@ impl App {
             } else {
                 self.layout.worktrees.height.saturating_sub(if has_previous { 1 } else { 2 }) as usize
             };
-            if let Some(index) = self.scrolled_row_index(self.layout.worktrees, column, row, visible_height, self.layout_config.is_zen, self.worktrees_scroll.get(), self.worktrees.entries.len()) {
+            if let Some(index) = self.scrolled_row_index(ScrollableHitTarget {
+                rect: self.layout.worktrees,
+                column,
+                row,
+                visible_height,
+                has_top_border: self.layout_config.is_zen,
+                scroll: self.worktrees_scroll.get(),
+                total: self.worktrees.entries.len(),
+            }) {
                 return Some(MouseSelectionTarget::Worktrees(index));
             }
         }
@@ -442,7 +493,15 @@ impl App {
             } else {
                 self.layout.submodules.height.saturating_sub(if has_previous { 1 } else { 2 }) as usize
             };
-            if let Some(index) = self.scrolled_row_index(self.layout.submodules, column, row, visible_height, self.layout_config.is_zen, self.submodules_scroll.get(), self.submodules.entries.len()) {
+            if let Some(index) = self.scrolled_row_index(ScrollableHitTarget {
+                rect: self.layout.submodules,
+                column,
+                row,
+                visible_height,
+                has_top_border: self.layout_config.is_zen,
+                scroll: self.submodules_scroll.get(),
+                total: self.submodules.entries.len(),
+            }) {
                 return Some(MouseSelectionTarget::Submodules(index));
             }
         }
@@ -456,7 +515,15 @@ impl App {
                 || self.layout_config.is_submodules;
             let visible_height =
                 if self.layout_config.is_zen { self.layout.search.height.saturating_sub(2) as usize } else { self.layout.search.height.saturating_sub(if has_previous { 1 } else { 2 }) as usize };
-            if let Some(index) = self.scrolled_row_index(self.layout.search, column, row, visible_height, self.layout_config.is_zen, self.search_scroll.get(), self.search_clickable_count()) {
+            if let Some(index) = self.scrolled_row_index(ScrollableHitTarget {
+                rect: self.layout.search,
+                column,
+                row,
+                visible_height,
+                has_top_border: self.layout_config.is_zen,
+                scroll: self.search_scroll.get(),
+                total: self.search_clickable_count(),
+            }) {
                 return Some(MouseSelectionTarget::Search(index));
             }
         }
@@ -467,8 +534,15 @@ impl App {
     fn right_pane_mouse_target_at(&self, column: u16, row: u16) -> Option<MouseSelectionTarget> {
         if self.layout_config.is_inspector && (self.graph_selected != 0 || self.uncommitted.has_conflicts) {
             let visible_height = if self.layout_config.is_zen { self.layout.inspector.height.saturating_sub(2) as usize } else { self.layout.inspector.height.saturating_sub(1) as usize };
-            if let Some(index) = self.scrolled_row_index(self.layout.inspector, column, row, visible_height, self.layout_config.is_zen, self.inspector_scroll.get(), usize::MAX)
-                && self.inspector_clickable()
+            if let Some(index) = self.scrolled_row_index(ScrollableHitTarget {
+                rect: self.layout.inspector,
+                column,
+                row,
+                visible_height,
+                has_top_border: self.layout_config.is_zen,
+                scroll: self.inspector_scroll.get(),
+                total: usize::MAX,
+            }) && self.inspector_clickable()
             {
                 return Some(MouseSelectionTarget::Inspector(index));
             }
@@ -478,14 +552,30 @@ impl App {
             let top_count = self.status_top_clickable_count();
             let top_visible_height = self.layout.status_top.height.saturating_sub(2) as usize;
             let top_has_border = self.layout_config.is_zen || (self.layout_config.is_inspector && (self.graph_selected != 0 || self.uncommitted.has_conflicts));
-            if let Some(index) = self.scrolled_row_index(self.layout.status_top, column, row, top_visible_height, top_has_border, self.status_top_scroll.get(), top_count) {
+            if let Some(index) = self.scrolled_row_index(ScrollableHitTarget {
+                rect: self.layout.status_top,
+                column,
+                row,
+                visible_height: top_visible_height,
+                has_top_border: top_has_border,
+                scroll: self.status_top_scroll.get(),
+                total: top_count,
+            }) {
                 return Some(MouseSelectionTarget::StatusTop(index));
             }
 
             if self.graph_selected == 0 {
                 let bottom_count = self.status_bottom_clickable_count();
                 let bottom_visible_height = self.layout.status_bottom.height.saturating_sub(2) as usize;
-                if let Some(index) = self.scrolled_row_index(self.layout.status_bottom, column, row, bottom_visible_height, true, self.status_bottom_scroll.get(), bottom_count) {
+                if let Some(index) = self.scrolled_row_index(ScrollableHitTarget {
+                    rect: self.layout.status_bottom,
+                    column,
+                    row,
+                    visible_height: bottom_visible_height,
+                    has_top_border: true,
+                    scroll: self.status_bottom_scroll.get(),
+                    total: bottom_count,
+                }) {
                     return Some(MouseSelectionTarget::StatusBottom(index));
                 }
             }
@@ -545,13 +635,13 @@ impl App {
         (offset < visible_height).then_some(offset)
     }
 
-    fn scrolled_row_index(&self, rect: Rect, column: u16, row: u16, visible_height: usize, has_top_border: bool, scroll: usize, total: usize) -> Option<usize> {
-        if total == 0 {
+    fn scrolled_row_index(&self, target: ScrollableHitTarget) -> Option<usize> {
+        if target.total == 0 {
             return None;
         }
-        let offset = self.row_offset_in_content(rect, column, row, visible_height, has_top_border)?;
-        let index = scroll.saturating_add(offset);
-        (index < total).then_some(index)
+        let offset = self.row_offset_in_content(target.rect, target.column, target.row, target.visible_height, target.has_top_border)?;
+        let index = target.scroll.saturating_add(offset);
+        (index < target.total).then_some(index)
     }
 
     fn branch_clickable_count(&self) -> usize {

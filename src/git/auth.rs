@@ -317,10 +317,7 @@ impl AuthAttempt {
 pub fn network_result(label: &str, attempt: &AuthAttempt, result: Result<(), Error>) -> NetworkResult {
     match result {
         Ok(_) => NetworkResult::Success,
-        Err(error) => match attempt.auth_required(&error) {
-            Some(auth) => NetworkResult::AuthRequired(auth),
-            None => NetworkResult::Failure(errors::operation_failed(label, error)),
-        },
+        Err(error) => attempt.auth_required(&error).map_or_else(|| NetworkResult::Failure(errors::operation_failed(label, error)), NetworkResult::AuthRequired),
     }
 }
 

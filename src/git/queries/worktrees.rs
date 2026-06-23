@@ -17,7 +17,7 @@ fn gix_path(repo: &Repository) -> PathBuf {
     repo.workdir().map(Path::to_path_buf).unwrap_or_else(|| repo.path().to_path_buf())
 }
 
-fn open_gix_repo(repo: &Repository) -> Result<gix::Repository, Error> {
+fn open_repo(repo: &Repository) -> Result<gix::Repository, Error> {
     let path = gix_path(repo);
     let options = if repo.workdir().is_some() { gix::open::Options::default() } else { gix::open::Options::default().open_path_as_is(true) };
 
@@ -112,7 +112,7 @@ fn list_worktrees_with_dirty_check(repo: &Repository, current_path: Option<&Path
     let current = current_path.map(Path::to_path_buf).or_else(|| repo.workdir().map(Path::to_path_buf)).or_else(|| main_worktree_path(repo)).unwrap_or_else(|| PathBuf::from("."));
     let current = canonical_path(&current);
 
-    let current_repo = open_gix_repo(repo)?;
+    let current_repo = open_repo(repo)?;
     let owner_repo = current_repo.main_repo().map_err(|err| Error::from_str(&err.to_string()))?;
 
     let mut entries = Vec::new();

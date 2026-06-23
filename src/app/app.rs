@@ -717,8 +717,8 @@ impl App {
                 }
 
                 // Pull at most one walker update per tick to keep redraws responsive.
-                if let Some(repo) = &self.repo.clone() {
-                    self.sync(repo);
+                if let Some(repo) = self.repo.clone() {
+                    self.sync(&repo);
                 }
                 self.poll_network_request();
 
@@ -764,7 +764,8 @@ impl App {
         );
 
         // Repo-dependent panes render only after a repository has opened successfully.
-        if let Some(repo) = &self.repo.clone() {
+        if let Some(repo) = self.repo.clone() {
+            let repo = &repo;
             // The central viewport is mutually exclusive, while side panes can be toggled.
             match self.viewport {
                 Viewport::Graph => {
@@ -962,10 +963,7 @@ impl App {
         let absolute_path: PathBuf = try_into_git_repo_root(&canonical_path).unwrap_or(canonical_path);
 
         // Failure keeps the app usable by falling back to the splash screen.
-        let repo = match open(&absolute_path) {
-            Ok(r) => Some(Rc::new(r)),
-            Err(_) => None,
-        };
+        let repo = open(&absolute_path).ok().map(Rc::new);
 
         let absolute_path = absolute_path.display().to_string();
         self.path = Some(absolute_path.clone());
@@ -1504,12 +1502,12 @@ impl App {
     }
 
     pub fn load_language_config(&mut self) {
-        let language = if let Some(path) = &self.language_save_path { load_language_from_path(path.as_path()) } else { load_language() };
+        let language = self.language_save_path.as_ref().map_or_else(load_language, |path| load_language_from_path(path.as_path()));
         self.set_language(language);
     }
 
     pub fn save_language_config(&self) {
-        let result = if let Some(path) = &self.language_save_path { save_language_to_path(path.as_path(), self.language) } else { save_language(self.language) };
+        let result = self.language_save_path.as_ref().map_or_else(|| save_language(self.language), |path| save_language_to_path(path.as_path(), self.language));
         let _ = result;
     }
 
@@ -1519,7 +1517,7 @@ impl App {
     }
 
     pub fn load_symbol_theme_config(&mut self) {
-        let symbols = if let Some(path) = &self.symbol_theme_save_path { load_symbol_theme_from_path(path.as_path()) } else { load_symbol_theme() };
+        let symbols = self.symbol_theme_save_path.as_ref().map_or_else(load_symbol_theme, |path| load_symbol_theme_from_path(path.as_path()));
         self.set_symbol_theme(symbols);
     }
 

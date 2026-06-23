@@ -56,7 +56,7 @@ impl App {
     }
 
     fn save_keymaps_for_app(&self, keymaps: &crate::helpers::keymap::Keymaps) -> Result<(), Box<dyn std::error::Error>> {
-        if let Some(path) = &self.keymap_save_path { save_keymaps_to_path(path.as_path(), keymaps) } else { save_keymaps(keymaps) }
+        self.keymap_save_path.as_ref().map_or_else(|| save_keymaps(keymaps), |path| save_keymaps_to_path(path.as_path(), keymaps))
     }
 
     fn confirm_key_capture(&mut self) {

@@ -59,6 +59,15 @@ impl App {
         self.splash_selected = Self::clamp_selection(self.splash_selected, self.recent.len());
     }
 
+    fn open_status_viewer(&mut self) {
+        let Some(repo) = self.repo.clone() else {
+            return;
+        };
+
+        self.open_viewer(&repo);
+        self.focus = Focus::Viewport;
+    }
+
     fn selected_settings_recent_repository(&self) -> Option<(usize, usize)> {
         self.settings_selections.iter().find(|selection| selection.line == self.settings_selected).and_then(|selection| match &selection.kind {
             SettingsSelectionKind::RecentRepository(index) => Some((selection.line, *index)),
@@ -653,12 +662,7 @@ impl App {
             Focus::ModalRemoteDelete => {
                 self.confirm_delete_remote();
             },
-            Focus::StatusTop | Focus::StatusBottom => {
-                if let Some(repo) = &self.repo.clone() {
-                    self.open_viewer(repo);
-                    self.focus = Focus::Viewport;
-                }
-            },
+            Focus::StatusTop | Focus::StatusBottom => self.open_status_viewer(),
             Focus::ModalCheckout => {
                 if let Some(repo) = &self.repo {
                     let Some(alias) = self.graph_alias_at(self.graph_selected) else {
@@ -859,12 +863,7 @@ impl App {
             Focus::Search => {
                 self.open_search_result();
             },
-            Focus::StatusTop | Focus::StatusBottom => {
-                if let Some(repo) = &self.repo.clone() {
-                    self.open_viewer(repo);
-                    self.focus = Focus::Viewport;
-                }
-            },
+            Focus::StatusTop | Focus::StatusBottom => self.open_status_viewer(),
             _ => {},
         }
         self.save_layout();

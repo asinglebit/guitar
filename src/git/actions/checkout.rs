@@ -11,7 +11,7 @@ fn gix_error(error: impl std::fmt::Display) -> git2::Error {
     git2::Error::from_str(&error.to_string())
 }
 
-fn open_gix_repo(repo: &Repository) -> Result<gix::Repository, git2::Error> {
+fn open_repo(repo: &Repository) -> Result<gix::Repository, git2::Error> {
     let workdir = repo.workdir().ok_or_else(|| git2::Error::from_str("Repository has no worktree"))?;
     gix::open(workdir).map_err(gix_error)
 }
@@ -97,7 +97,7 @@ fn checkout_existing_branch(repo: &mut gix::Repository, branch: &FullName) -> Re
 }
 
 pub fn checkout_head(repo: &Repository, oid: Oid) -> Result<(), git2::Error> {
-    let mut repo = open_gix_repo(repo)?;
+    let mut repo = open_repo(repo)?;
     repo.committer_or_set_generic_fallback().map_err(gix_error)?;
 
     let commit = repo.find_commit(git2_to_gix_oid(oid)).map_err(gix_error)?;
@@ -110,7 +110,7 @@ pub fn checkout_head(repo: &Repository, oid: Oid) -> Result<(), git2::Error> {
 }
 
 pub fn checkout_branch(repo: &Repository, hidden_branch_names: &mut HashSet<String>, local: &mut HashMap<u32, Vec<String>>, alias: u32, branch_name: &str) -> Result<(), git2::Error> {
-    let mut repo = open_gix_repo(repo)?;
+    let mut repo = open_repo(repo)?;
     repo.committer_or_set_generic_fallback().map_err(gix_error)?;
 
     let local_branch_name = local_branch_ref_name(branch_name)?;

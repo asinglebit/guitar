@@ -263,7 +263,7 @@ impl App {
             .branches
             .hidden_branch_names
             .iter()
-            .filter_map(|name| if let Some(suffix) = name.strip_prefix(&prefix) { new_remote.map(|remote| format!("{remote}/{suffix}")) } else { Some(name.clone()) })
+            .filter_map(|name| name.strip_prefix(&prefix).map_or_else(|| Some(name.clone()), |suffix| new_remote.map(|remote| format!("{remote}/{suffix}"))))
             .collect();
 
         self.branches.hidden_branch_names = updated;

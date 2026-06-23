@@ -6,7 +6,7 @@ fn gix_error(error: impl std::fmt::Display) -> Error {
     Error::from_str(&error.to_string())
 }
 
-fn open_gix_repo(repo: &Repository) -> Result<gix::Repository, Error> {
+fn open_repo(repo: &Repository) -> Result<gix::Repository, Error> {
     let path = repo.workdir().unwrap_or(repo.path());
     gix::open(path).map_err(gix_error)
 }
@@ -20,7 +20,7 @@ fn tag_ref_exists(repo: &gix::Repository, tag_ref_name: &FullName) -> Result<boo
 }
 
 pub fn tag(repo: &Repository, oid: git2::Oid, tag: &str) -> Result<Oid, Error> {
-    let mut repo = open_gix_repo(repo)?;
+    let mut repo = open_repo(repo)?;
     let tag_ref_name = tag_ref_name(tag)?;
     if tag_ref_exists(&repo, &tag_ref_name)? {
         return Err(Error::from_str("tag name already exists"));
@@ -37,7 +37,7 @@ pub fn tag(repo: &Repository, oid: git2::Oid, tag: &str) -> Result<Oid, Error> {
 }
 
 pub fn untag(repo: &Repository, tag: &str) -> Result<(), Error> {
-    let mut repo = open_gix_repo(repo)?;
+    let mut repo = open_repo(repo)?;
     let tag_ref_name = tag_ref_name(tag)?;
     repo.committer_or_set_generic_fallback().map_err(gix_error)?;
     let tag_ref = repo.find_reference(tag_ref_name.as_ref()).map_err(gix_error)?;

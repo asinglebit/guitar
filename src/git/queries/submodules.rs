@@ -9,7 +9,7 @@ const GITMODULES_PATH: &[u8] = b".gitmodules";
 const INDEX_SCAN_BUFFER: usize = 64 * 1024;
 const GITMODULES_OVERLAP: usize = 10;
 
-fn open_gix_repo(repo: &Repository) -> Result<gix::Repository, git2::Error> {
+fn open_repo(repo: &Repository) -> Result<gix::Repository, git2::Error> {
     let path = repo.workdir().unwrap_or(repo.path());
     gix::open(path).map_err(|error| git2::Error::from_str(&error.to_string()))
 }
@@ -71,7 +71,7 @@ fn has_committed_or_workdir_submodule_metadata(repo: &Repository) -> bool {
         return true;
     }
 
-    let Ok(gix_repo) = open_gix_repo(repo) else {
+    let Ok(gix_repo) = open_repo(repo) else {
         return false;
     };
     let Ok(tree_id) = gix_repo.head_tree_id_or_empty() else {
@@ -135,7 +135,7 @@ pub fn list_submodules(repo: &Repository) -> Result<Vec<SubmoduleEntry>, git2::E
         return Ok(Vec::new());
     }
 
-    let gix_repo = open_gix_repo(repo)?;
+    let gix_repo = open_repo(repo)?;
     let workdir = repo.workdir().map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from("."));
     let mut entries = Vec::new();
 

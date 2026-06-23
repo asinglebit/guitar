@@ -262,24 +262,37 @@ fn run_graph_service(config: GraphServiceConfig, rx: Receiver<GraphCommand>, tx:
             break;
         }
 
-        if !drain_commands(
+        let mut command_context = GraphCommandContext {
             generation,
-            &mut version,
-            &rx,
-            &tx,
-            &walk_ctx,
-            &mut worktrees,
-            &mut pending_graph,
-            &mut pending_file_history,
-            &mut commit_metadata,
-            &config.hidden_branch_names,
-            &config.symbols,
-        ) {
+            version: &mut version,
+            tx: &tx,
+            walk_ctx: &walk_ctx,
+            worktrees: &mut worktrees,
+            pending_graph: &mut pending_graph,
+            pending_file_history: &mut pending_file_history,
+            commit_metadata: &mut commit_metadata,
+            hidden_branch_names: &config.hidden_branch_names,
+            symbols: &config.symbols,
+        };
+        if !drain_commands(&rx, &mut command_context) {
             break;
         }
 
         if let Some((request_id, start, end)) = pending_graph.take() {
-            send_graph_window(generation, request_id, version, start, end, &tx, &walk_ctx, &worktrees, &mut commit_metadata, &config.hidden_branch_names, &config.symbols);
+            let mut window_context = GraphWindowContext {
+                generation,
+                request_id,
+                version,
+                start,
+                end,
+                tx: &tx,
+                walk_ctx: &walk_ctx,
+                worktrees: &worktrees,
+                commit_metadata: &mut commit_metadata,
+                hidden_branch_names: &config.hidden_branch_names,
+                symbols: &config.symbols,
+            };
+            send_graph_window(&mut window_context);
         }
 
         if is_complete && let Some((request_id, path)) = pending_file_history.take() {
@@ -290,19 +303,19 @@ fn run_graph_service(config: GraphServiceConfig, rx: Receiver<GraphCommand>, tx:
             match rx.recv_timeout(Duration::from_millis(50)) {
                 Ok(GraphCommand::Shutdown) => break,
                 Ok(command) => {
-                    if !handle_command(
+                    let mut command_context = GraphCommandContext {
                         generation,
-                        &mut version,
-                        command,
-                        &tx,
-                        &walk_ctx,
-                        &mut worktrees,
-                        &mut pending_graph,
-                        &mut pending_file_history,
-                        &mut commit_metadata,
-                        &config.hidden_branch_names,
-                        &config.symbols,
-                    ) {
+                        version: &mut version,
+                        tx: &tx,
+                        walk_ctx: &walk_ctx,
+                        worktrees: &mut worktrees,
+                        pending_graph: &mut pending_graph,
+                        pending_file_history: &mut pending_file_history,
+                        commit_metadata: &mut commit_metadata,
+                        hidden_branch_names: &config.hidden_branch_names,
+                        symbols: &config.symbols,
+                    };
+                    if !handle_command(command, &mut command_context) {
                         break;
                     }
                 },
@@ -334,74 +347,90 @@ fn run_graph_service(config: GraphServiceConfig, rx: Receiver<GraphCommand>, tx:
     }
 }
 
-fn drain_commands(
-    generation: Generation, version: &mut GraphVersion, rx: &Receiver<GraphCommand>, tx: &Sender<GraphEvent>, walk_ctx: &Walker, worktrees: &mut Worktrees,
-    pending_graph: &mut Option<(RequestId, usize, usize)>, pending_file_history: &mut Option<(RequestId, String)>, commit_metadata: &mut CommitMetadataCache, hidden_branch_names: &HashSet<String>,
-    symbols: &SymbolTheme,
-) -> bool {
+struct GraphCommandContext<'a> {
+    generation: Generation,
+    version: &'a mut GraphVersion,
+    tx: &'a Sender<GraphEvent>,
+    walk_ctx: &'a Walker,
+    worktrees: &'a mut Worktrees,
+    pending_graph: &'a mut Option<(RequestId, usize, usize)>,
+    pending_file_history: &'a mut Option<(RequestId, String)>,
+    commit_metadata: &'a mut CommitMetadataCache,
+    hidden_branch_names: &'a HashSet<String>,
+    symbols: &'a SymbolTheme,
+}
+
+fn drain_commands(rx: &Receiver<GraphCommand>, context: &mut GraphCommandContext<'_>) -> bool {
     while let Ok(command) = rx.try_recv() {
-        if !handle_command(generation, version, command, tx, walk_ctx, worktrees, pending_graph, pending_file_history, commit_metadata, hidden_branch_names, symbols) {
+        if !handle_command(command, context) {
             return false;
         }
     }
     true
 }
 
-fn handle_command(
-    generation: Generation, version: &mut GraphVersion, command: GraphCommand, tx: &Sender<GraphEvent>, walk_ctx: &Walker, worktrees: &mut Worktrees,
-    pending_graph: &mut Option<(RequestId, usize, usize)>, pending_file_history: &mut Option<(RequestId, String)>, commit_metadata: &mut CommitMetadataCache, hidden_branch_names: &HashSet<String>,
-    symbols: &SymbolTheme,
-) -> bool {
+fn handle_command(command: GraphCommand, context: &mut GraphCommandContext<'_>) -> bool {
     match command {
         GraphCommand::Shutdown => false,
         GraphCommand::QueryGraphWindow { generation: cmd_generation, request_id, start, end } => {
-            if cmd_generation == generation {
-                *pending_graph = Some((request_id, start, end));
+            if cmd_generation == context.generation {
+                *context.pending_graph = Some((request_id, start, end));
             }
             true
         },
         GraphCommand::QueryPaneWindow { generation: cmd_generation, pane, start, end } => {
-            if cmd_generation == generation {
-                send_pane_window(generation, *version, pane, start, end, tx, walk_ctx);
+            if cmd_generation == context.generation {
+                send_pane_window(context.generation, *context.version, pane, start, end, context.tx, context.walk_ctx);
             }
             true
         },
         GraphCommand::QueryFileHistory { generation: cmd_generation, request_id, path } => {
-            if cmd_generation == generation {
-                *pending_file_history = Some((request_id, path));
+            if cmd_generation == context.generation {
+                *context.pending_file_history = Some((request_id, path));
             }
             true
         },
         GraphCommand::Lookup { generation: cmd_generation, request_id, kind } => {
-            if cmd_generation == generation {
-                let result = lookup(kind, walk_ctx, worktrees, commit_metadata, hidden_branch_names, symbols);
-                let _ = tx.send(GraphEvent::LookupResult { generation, request_id, result });
+            if cmd_generation == context.generation {
+                let result = lookup(kind, context.walk_ctx, context.worktrees, context.commit_metadata, context.hidden_branch_names, context.symbols);
+                let _ = context.tx.send(GraphEvent::LookupResult { generation: context.generation, request_id, result });
             }
             true
         },
         GraphCommand::UpdateWorktrees { generation: cmd_generation, worktrees: updated_worktrees } => {
-            if cmd_generation == generation {
-                worktrees.entries = updated_worktrees.clone();
-                *version = (*version).saturating_add(1);
-                let _ = tx.send(GraphEvent::Worktrees { generation, version: *version, worktrees: updated_worktrees });
+            if cmd_generation == context.generation {
+                context.worktrees.entries = updated_worktrees.clone();
+                *context.version = (*context.version).saturating_add(1);
+                let _ = context.tx.send(GraphEvent::Worktrees { generation: context.generation, version: *context.version, worktrees: updated_worktrees });
             }
             true
         },
     }
 }
 
-fn send_graph_window(
-    generation: Generation, request_id: RequestId, version: GraphVersion, start: usize, end: usize, tx: &Sender<GraphEvent>, walk_ctx: &Walker, worktrees: &Worktrees,
-    commit_metadata: &mut CommitMetadataCache, hidden_branch_names: &HashSet<String>, symbols: &SymbolTheme,
-) {
-    let total = walk_ctx.oids.get_commit_count();
-    let start = start.min(total);
-    let end = end.min(total);
-    let history = walk_ctx.buffer.borrow().window(start, end.saturating_add(1));
-    let rows = graph_rows(walk_ctx, worktrees, commit_metadata, hidden_branch_names, symbols, start, end);
-    let head_alias = head_alias(walk_ctx);
+struct GraphWindowContext<'a> {
+    generation: Generation,
+    request_id: RequestId,
+    version: GraphVersion,
+    start: usize,
+    end: usize,
+    tx: &'a Sender<GraphEvent>,
+    walk_ctx: &'a Walker,
+    worktrees: &'a Worktrees,
+    commit_metadata: &'a mut CommitMetadataCache,
+    hidden_branch_names: &'a HashSet<String>,
+    symbols: &'a SymbolTheme,
+}
 
-    let _ = tx.send(GraphEvent::GraphWindow { generation, request_id, version, start, end, total, head_alias, rows, history });
+fn send_graph_window(context: &mut GraphWindowContext<'_>) {
+    let total = context.walk_ctx.oids.get_commit_count();
+    let start = context.start.min(total);
+    let end = context.end.min(total);
+    let history = context.walk_ctx.buffer.borrow().window(start, end.saturating_add(1));
+    let rows = graph_rows(context.walk_ctx, context.worktrees, context.commit_metadata, context.hidden_branch_names, context.symbols, start, end);
+    let head_alias = head_alias(context.walk_ctx);
+
+    let _ = context.tx.send(GraphEvent::GraphWindow { generation: context.generation, request_id: context.request_id, version: context.version, start, end, total, head_alias, rows, history });
 }
 
 fn send_pane_window(generation: Generation, version: GraphVersion, pane: GraphPane, start: usize, end: usize, tx: &Sender<GraphEvent>, walk_ctx: &Walker) {

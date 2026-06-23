@@ -31,9 +31,19 @@ pub(crate) fn action_row(actions: &[(&str, &str)], style: Style) -> Line<'static
     Line::from(Span::styled(text, style))
 }
 
-pub(crate) fn render_modal_text_input(
-    frame: &mut Frame, area: Rect, input: &mut TextInput, masked: bool, text_style: Style, border_style: Style, title: Option<Span<'static>>, show_cursor: bool, symbols: &SymbolTheme,
-) {
+pub(crate) struct ModalTextInput<'a> {
+    pub area: Rect,
+    pub input: &'a mut TextInput,
+    pub masked: bool,
+    pub text_style: Style,
+    pub border_style: Style,
+    pub title: Option<Span<'static>>,
+    pub show_cursor: bool,
+    pub symbols: &'a SymbolTheme,
+}
+
+pub(crate) fn render_modal_text_input(frame: &mut Frame, config: ModalTextInput<'_>) {
+    let ModalTextInput { area, input, masked, text_style, border_style, title, show_cursor, symbols } = config;
     let visible_width = area.width.saturating_sub(1) as usize;
     input.set_max_width(visible_width);
     let start = *input.scroll();

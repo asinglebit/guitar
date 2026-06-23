@@ -798,13 +798,10 @@ impl App {
         self.repo.as_ref()?;
 
         let repo_path = self.path.as_deref().unwrap_or(".");
-        match effective_default_remote_from_remotes(repo_path, &self.remotes).or_else(|| effective_default_remote(repo_path)) {
-            Some(remote_name) => Some(remote_name),
-            None => {
-                self.show_error(errors::no_remotes_configured(operation));
-                None
-            },
-        }
+        effective_default_remote_from_remotes(repo_path, &self.remotes).or_else(|| effective_default_remote(repo_path)).or_else(|| {
+            self.show_error(errors::no_remotes_configured(operation));
+            None
+        })
     }
 
     pub fn on_create_branch(&mut self) {
@@ -952,10 +949,7 @@ impl App {
                 };
 
                 // Deleting the currently checked-out branch would leave HEAD invalid.
-                let proceed = match get_current_branch(repo) {
-                    Some(current) => current != branch,
-                    None => true,
-                };
+                let proceed = get_current_branch(repo).is_none_or(|current| current != branch);
 
                 if proceed {
                     self.delete_branch_from_ui(&branch);

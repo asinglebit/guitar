@@ -8,7 +8,7 @@ use gix::bstr::ByteSlice;
 use gix::sec::trust::DefaultForLevel;
 use std::{fs::OpenOptions, io::Write, sync::atomic::AtomicBool, thread};
 
-fn open_gix_repo(repo: &Repository) -> Result<gix::Repository, git2::Error> {
+fn open_repo(repo: &Repository) -> Result<gix::Repository, git2::Error> {
     let path = repo.workdir().unwrap_or(repo.path());
     gix::open(path).map_err(|error| git2::Error::from_str(&error.to_string()))
 }
@@ -129,7 +129,7 @@ fn checkout_submodule_commit(repo: &mut gix::Repository, target_oid: gix::Object
 }
 
 pub fn sync_submodule(repo: &Repository, name: &str) -> Result<(), git2::Error> {
-    let gix_repo = open_gix_repo(repo)?;
+    let gix_repo = open_repo(repo)?;
     let Some(submodule) = find_submodule(&gix_repo, name)? else {
         return Err(git2::Error::from_str("Submodule not found"));
     };
@@ -143,7 +143,7 @@ pub fn sync_submodule(repo: &Repository, name: &str) -> Result<(), git2::Error> 
 }
 
 pub fn stage_submodule_head(repo: &Repository, name: &str) -> Result<(), git2::Error> {
-    let gix_repo = open_gix_repo(repo)?;
+    let gix_repo = open_repo(repo)?;
     let Some(submodule) = find_submodule(&gix_repo, name)? else {
         return Err(git2::Error::from_str("Submodule not found"));
     };
@@ -157,7 +157,7 @@ pub fn stage_submodule_head(repo: &Repository, name: &str) -> Result<(), git2::E
 }
 
 pub fn unstage_submodule(repo: &Repository, name: &str) -> Result<(), git2::Error> {
-    let gix_repo = open_gix_repo(repo)?;
+    let gix_repo = open_repo(repo)?;
     let Some(submodule) = find_submodule(&gix_repo, name)? else {
         return Err(git2::Error::from_str("Submodule not found"));
     };
@@ -188,7 +188,7 @@ pub fn update_submodule(repo_path: &str, name: &str, auth_session: AuthSession) 
         let attempt = AuthAttempt::new(auth_session, network::UPDATE_SUBMODULE());
         let result = (|| -> Result<(), git2::Error> {
             let repo = open(&repo_path)?;
-            let gix_repo = open_gix_repo(&repo)?;
+            let gix_repo = open_repo(&repo)?;
             let Some(submodule) = find_submodule(&gix_repo, &name)? else {
                 return Err(git2::Error::from_str("Submodule not found"));
             };

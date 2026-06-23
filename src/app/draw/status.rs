@@ -1,6 +1,6 @@
 use crate::{
     app::app::{App, Focus},
-    git::queries::helpers::FileStatus,
+    git::queries::helpers::{FileChanges, FileStatus},
     helpers::{
         layout::scrollbar_content_length,
         localisation::{common, empty},
@@ -30,6 +30,11 @@ enum StatusPaneKind {
     Bottom,
 }
 
+struct BuiltStatusRows<'a> {
+    rows: Vec<StatusRow<'a>>,
+    has_selectable_changes: bool,
+}
+
 impl<'a> StatusRow<'a> {
     fn plain(line: Line<'a>) -> Self {
         Self { line, path: None }
@@ -41,6 +46,16 @@ impl<'a> StatusRow<'a> {
 }
 
 impl App {
+    fn status_empty_rows(&self, visible_height: usize, max_width: usize, message: &str) -> BuiltStatusRows<'static> {
+        let mut rows = Vec::new();
+        self.push_empty_status_row(&mut rows, visible_height, max_width, message);
+        BuiltStatusRows { rows, has_selectable_changes: false }
+    }
+
+    fn status_loading_rows(&self, visible_height: usize, max_width: usize) -> BuiltStatusRows<'static> {
+        BuiltStatusRows { rows: centered_loading_lines(visible_height, max_width + 3, Style::default().fg(self.theme.COLOR_GREY_800)), has_selectable_changes: false }
+    }
+
     fn push_conflict_status_rows<'a>(&self, rows: &mut Vec<StatusRow<'a>>, files: &'a [String], max_width: usize) {
         for file in files {
             rows.push(StatusRow::file(file, &self.symbols.status.conflict_spaced, Style::default().fg(self.theme.COLOR_ORANGE), Style::default().fg(self.theme.COLOR_ORANGE), max_width));
@@ -61,6 +76,29 @@ impl App {
         }
     }
 
+    fn push_file_change_rows<'a>(&self, rows: &mut Vec<StatusRow<'a>>, files: &'a FileChanges, max_width: usize) {
+        self.push_file_status_rows(rows, &files.modified, FileStatus::Modified, max_width);
+        self.push_file_status_rows(rows, &files.added, FileStatus::Added, max_width);
+        self.push_file_status_rows(rows, &files.deleted, FileStatus::Deleted, max_width);
+    }
+
+    fn uncommitted_status_rows<'a>(&self, files: &'a FileChanges, conflicts: &'a [String], visible_height: usize, max_width: usize, empty_message: &str) -> BuiltStatusRows<'a> {
+        let mut rows = Vec::new();
+        self.push_conflict_status_rows(&mut rows, conflicts, max_width);
+        self.push_file_change_rows(&mut rows, files, max_width);
+
+        if rows.is_empty() { self.status_empty_rows(visible_height, max_width, empty_message) } else { BuiltStatusRows { rows, has_selectable_changes: true } }
+    }
+
+    fn commit_status_rows(&self, visible_height: usize, max_width: usize) -> BuiltStatusRows<'_> {
+        let mut rows = Vec::with_capacity(self.current_diff.len());
+        for file_change in &self.current_diff {
+            self.push_file_status_rows(&mut rows, std::slice::from_ref(&file_change.filename), file_change.status, max_width);
+        }
+
+        if rows.is_empty() { self.status_empty_rows(visible_height, max_width, empty::NO_STAGED_CHANGES()) } else { BuiltStatusRows { rows, has_selectable_changes: true } }
+    }
+
     fn push_empty_status_row(&self, rows: &mut Vec<StatusRow<'_>>, visible_height: usize, max_width: usize, message: &str) {
         for _ in 0..empty_state_top_padding(visible_height) {
             rows.push(StatusRow::plain(Line::from("")));
@@ -75,16 +113,7 @@ impl App {
         // Status panes keep icons close to the border and filenames flush after them.
         let padding = ratatui::widgets::Padding { left: 1, right: 0, top: 0, bottom: 0 };
 
-        // Top is staged or commit diff; bottom exists only for unstaged uncommitted changes.
-        let mut is_staged_changes = false;
-        let mut is_unstaged_changes = false;
         let is_showing_uncommitted = self.graph_selected == 0;
-
-        let mut lines_status_top: Vec<StatusRow<'_>> = Vec::new();
-        let mut lines_status_bottom: Vec<StatusRow<'_>> = Vec::new();
-
-        let mut status_top_empty = false;
-        let mut status_bottom_empty = false;
 
         // Width leaves room for the change symbol and a little border padding.
         let max_status_top_width = self.layout.status_top.width.saturating_sub(5) as usize;
@@ -96,58 +125,22 @@ impl App {
         let is_commit_diff_loading = !is_showing_uncommitted && !self.selected_commit_diff_is_loaded();
 
         // The pseudo-row splits uncommitted files into staged and unstaged panes.
-        if is_uncommitted_loading {
-            status_top_empty = true;
-            status_bottom_empty = true;
-            lines_status_top = centered_loading_lines(visible_height_status_top, max_status_top_width + 3, Style::default().fg(self.theme.COLOR_GREY_800));
-            lines_status_bottom = centered_loading_lines(visible_height_status_bottom, max_status_bottom_width + 3, Style::default().fg(self.theme.COLOR_GREY_800));
+        let (status_top, status_bottom) = if is_uncommitted_loading {
+            (self.status_loading_rows(visible_height_status_top, max_status_top_width), self.status_loading_rows(visible_height_status_bottom, max_status_bottom_width))
         } else if is_showing_uncommitted {
-            self.push_conflict_status_rows(&mut lines_status_top, &self.uncommitted.conflicts, max_status_top_width);
-            self.push_file_status_rows(&mut lines_status_top, &self.uncommitted.staged.modified, FileStatus::Modified, max_status_top_width);
-            self.push_file_status_rows(&mut lines_status_top, &self.uncommitted.staged.added, FileStatus::Added, max_status_top_width);
-            self.push_file_status_rows(&mut lines_status_top, &self.uncommitted.staged.deleted, FileStatus::Deleted, max_status_top_width);
-
-            // Empty states are vertically padded to stay centered in short panes.
-            if lines_status_top.is_empty() {
-                status_top_empty = true;
-                self.push_empty_status_row(&mut lines_status_top, visible_height_status_top, max_status_top_width, empty::NO_STAGED_CHANGES());
+            let top = self.uncommitted_status_rows(&self.uncommitted.staged, &self.uncommitted.conflicts, visible_height_status_top, max_status_top_width, empty::NO_STAGED_CHANGES());
+            let bottom = if is_uncommitted_detail_loading {
+                self.status_loading_rows(visible_height_status_bottom, max_status_bottom_width)
             } else {
-                is_staged_changes = true;
-            }
-
-            self.push_conflict_status_rows(&mut lines_status_bottom, &self.uncommitted.conflicts, max_status_bottom_width);
-            if is_uncommitted_detail_loading {
-                lines_status_bottom = centered_loading_lines(visible_height_status_bottom, max_status_bottom_width + 3, Style::default().fg(self.theme.COLOR_GREY_800));
-            } else {
-                self.push_file_status_rows(&mut lines_status_bottom, &self.uncommitted.unstaged.modified, FileStatus::Modified, max_status_bottom_width);
-                self.push_file_status_rows(&mut lines_status_bottom, &self.uncommitted.unstaged.added, FileStatus::Added, max_status_bottom_width);
-                self.push_file_status_rows(&mut lines_status_bottom, &self.uncommitted.unstaged.deleted, FileStatus::Deleted, max_status_bottom_width);
-            }
-
-            // Empty states are vertically padded to stay centered in short panes.
-            if lines_status_bottom.is_empty() {
-                status_bottom_empty = true;
-                self.push_empty_status_row(&mut lines_status_bottom, visible_height_status_bottom, max_status_bottom_width, empty::NO_UNSTAGED_CHANGES());
-            } else {
-                is_unstaged_changes = true;
-            }
+                self.uncommitted_status_rows(&self.uncommitted.unstaged, &self.uncommitted.conflicts, visible_height_status_bottom, max_status_bottom_width, empty::NO_UNSTAGED_CHANGES())
+            };
+            (top, bottom)
         } else if is_commit_diff_loading {
-            status_top_empty = true;
-            lines_status_top = centered_loading_lines(visible_height_status_top, max_status_top_width + 3, Style::default().fg(self.theme.COLOR_GREY_800));
+            (self.status_loading_rows(visible_height_status_top, max_status_top_width), BuiltStatusRows { rows: Vec::new(), has_selectable_changes: false })
         } else {
             // Commit rows use the selected commit's file diff in the top pane only.
-            for file_change in self.current_diff.iter() {
-                self.push_file_status_rows(&mut lines_status_top, std::slice::from_ref(&file_change.filename), file_change.status, max_status_top_width);
-            }
-
-            // Empty commits and unresolved diff failures share the same quiet state.
-            if lines_status_top.is_empty() {
-                status_top_empty = true;
-                self.push_empty_status_row(&mut lines_status_top, visible_height_status_top, max_status_top_width, empty::NO_STAGED_CHANGES());
-            } else {
-                is_staged_changes = true;
-            }
-        }
+            (self.commit_status_rows(visible_height_status_top, max_status_top_width), BuiltStatusRows { rows: Vec::new(), has_selectable_changes: false })
+        };
 
         let search_highlight_path = if self.layout_config.is_search { self.search_path.clone() } else { None };
         let top_has_inspector_border = self.layout_config.is_inspector && (self.graph_selected != 0 || self.uncommitted.has_conflicts);
@@ -157,12 +150,12 @@ impl App {
             frame,
             StatusPaneConfig {
                 kind: StatusPaneKind::Top,
-                rows: &lines_status_top,
+                rows: &status_top.rows,
                 visible_height: visible_height_status_top,
                 selected: self.status_top_selected,
                 scroll: &self.status_top_scroll,
                 is_focused: self.focus == Focus::StatusTop,
-                selection_enabled: is_staged_changes && !status_top_empty,
+                selection_enabled: status_top.has_selectable_changes,
                 search_highlight_path: search_highlight_path.as_deref(),
                 area: self.layout.status_top,
                 scrollbar_area: self.layout.status_top_scrollbar,
@@ -181,12 +174,12 @@ impl App {
                 frame,
                 StatusPaneConfig {
                     kind: StatusPaneKind::Bottom,
-                    rows: &lines_status_bottom,
+                    rows: &status_bottom.rows,
                     visible_height: visible_height_status_bottom,
                     selected: self.status_bottom_selected,
                     scroll: &self.status_bottom_scroll,
                     is_focused: self.focus == Focus::StatusBottom,
-                    selection_enabled: is_unstaged_changes && !status_bottom_empty,
+                    selection_enabled: status_bottom.has_selectable_changes,
                     search_highlight_path: search_highlight_path.as_deref(),
                     area: self.layout.status_bottom,
                     scrollbar_area: self.layout.status_bottom_scrollbar,

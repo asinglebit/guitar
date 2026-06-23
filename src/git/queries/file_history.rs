@@ -15,8 +15,8 @@ pub fn changed_file_status_at_commit(repo: &Repository, oid: Oid, path: &str) ->
         return Ok(status);
     }
 
-    let gix_repo = open_gix_repo(repo)?;
-    let status = changed_file_status_at_commit_from_repo(&gix_repo, git2_to_gix_oid(oid), &normalized_path)?;
+    let repo = open_repo(repo)?;
+    let status = changed_file_status_at_commit_from_repo(&repo, git2_to_gix_oid(oid), &normalized_path)?;
     FILE_STATUS_CACHE.with(|cache| {
         cache.borrow_mut().insert((repo_path, oid, normalized_path), status);
     });
@@ -34,16 +34,16 @@ pub fn clear_changed_file_status_cache() {
     FILE_STATUS_CACHE.with(|cache| cache.borrow_mut().clear());
 }
 
-fn open_gix_repo(repo: &Repository) -> Result<gix::Repository, git2::Error> {
+fn open_repo(repo: &Repository) -> Result<gix::Repository, git2::Error> {
     let path = repo.workdir().unwrap_or(repo.path());
     GIX_REPO_CACHE.with(|cache| {
-        if let Some(gix_repo) = cache.borrow().get(path).cloned() {
-            return Ok(gix_repo);
+        if let Some(repo) = cache.borrow().get(path).cloned() {
+            return Ok(repo);
         }
 
-        let gix_repo = gix::open(path).map_err(|error| git2::Error::from_str(&error.to_string()))?;
-        cache.borrow_mut().insert(path.to_path_buf(), gix_repo.clone());
-        Ok(gix_repo)
+        let repo = gix::open(path).map_err(|error| git2::Error::from_str(&error.to_string()))?;
+        cache.borrow_mut().insert(path.to_path_buf(), repo.clone());
+        Ok(repo)
     })
 }
 
@@ -214,11 +214,7 @@ fn file_status_from_change(change: &ChangeDetached, path: &str) -> Option<FileSt
         ChangeDetached::Addition { location, .. } if path_matches(location, path) => Some(FileStatus::Added),
         ChangeDetached::Deletion { location, .. } if path_matches(location, path) => Some(FileStatus::Deleted),
         ChangeDetached::Modification { location, previous_entry_mode, entry_mode, .. } if path_matches(location, path) => {
-            if typechange(previous_entry_mode, entry_mode) {
-                Some(FileStatus::Deleted)
-            } else {
-                Some(FileStatus::Modified)
-            }
+            Some(if typechange(previous_entry_mode, entry_mode) { FileStatus::Deleted } else { FileStatus::Modified })
         },
         ChangeDetached::Rewrite { source_location, location, copy, .. } => {
             if path_matches(location, path) {

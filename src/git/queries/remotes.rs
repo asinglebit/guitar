@@ -12,19 +12,19 @@ pub struct RemoteEntry {
 }
 
 pub fn list_remotes(path: impl AsRef<Path>) -> Result<Vec<RemoteEntry>, git2::Error> {
-    let gix_repo = open_gix_repo(path)?;
-    list_remotes_from_repo(&gix_repo)
+    let repo = open_repo(path)?;
+    list_remotes_from_repo(&repo)
 }
 
 pub fn effective_default_remote(path: impl AsRef<Path>) -> Option<String> {
-    let gix_repo = open_gix_repo(path).ok()?;
-    let remotes = list_remotes_from_repo(&gix_repo).ok()?;
-    resolve_effective_default_remote(&gix_repo, &remotes)
+    let repo = open_repo(path).ok()?;
+    let remotes = list_remotes_from_repo(&repo).ok()?;
+    resolve_effective_default_remote(&repo, &remotes)
 }
 
 pub fn effective_default_remote_from_remotes(path: impl AsRef<Path>, remotes: &[RemoteEntry]) -> Option<String> {
-    let gix_repo = open_gix_repo(path).ok()?;
-    resolve_effective_default_remote(&gix_repo, remotes)
+    let repo = open_repo(path).ok()?;
+    resolve_effective_default_remote(&repo, remotes)
 }
 
 fn resolve_effective_default_remote(repo: &gix::Repository, remotes: &[RemoteEntry]) -> Option<String> {
@@ -51,7 +51,7 @@ fn resolve_effective_default_remote(repo: &gix::Repository, remotes: &[RemoteEnt
     remotes.first().map(|remote| remote.name.clone())
 }
 
-fn open_gix_repo(path: impl AsRef<Path>) -> Result<gix::Repository, git2::Error> {
+fn open_repo(path: impl AsRef<Path>) -> Result<gix::Repository, git2::Error> {
     gix::open(path.as_ref()).map_err(|error| git2::Error::from_str(&error.to_string()))
 }
 

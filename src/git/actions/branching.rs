@@ -9,7 +9,7 @@ fn gix_error(error: impl std::fmt::Display) -> Error {
     Error::from_str(&error.to_string())
 }
 
-fn open_gix_repo(repo: &Repository) -> Result<gix::Repository, Error> {
+fn open_repo(repo: &Repository) -> Result<gix::Repository, Error> {
     let path = repo.workdir().unwrap_or(repo.path());
     gix::open(path).map_err(gix_error)
 }
@@ -68,7 +68,7 @@ fn branch_ref_log(message: &str) -> LogChange {
 
 pub fn create_branch(repo: &Repository, branch_name: &str, target_oid: Oid) -> Result<(), Error> {
     // Branch creation is intentionally non-checkout; the graph stays on the current HEAD.
-    let mut repo = open_gix_repo(repo)?;
+    let mut repo = open_repo(repo)?;
     let branch_ref_name = branch_ref_name(branch_name)?;
     if repo.try_find_reference(branch_ref_name.as_ref()).map_err(gix_error)?.is_some() {
         return Err(Error::from_str("branch name already exists"));
@@ -85,7 +85,7 @@ pub fn create_branch(repo: &Repository, branch_name: &str, target_oid: Oid) -> R
 }
 
 pub fn delete_branch(repo: &Repository, branch: &str) -> Result<(), git2::Error> {
-    let mut repo = open_gix_repo(repo)?;
+    let mut repo = open_repo(repo)?;
     let branch_ref_name = branch_ref_name(branch)?;
     {
         repo.find_reference(branch_ref_name.as_ref()).map_err(gix_error)?;
@@ -114,7 +114,7 @@ pub fn rename_branch(repo: &Repository, old_name: &str, new_name: &str) -> Resul
         return Err(Error::from_str("new branch name must differ from current branch name"));
     }
 
-    let mut repo = open_gix_repo(repo)?;
+    let mut repo = open_repo(repo)?;
     let old_ref_name = branch_ref_name(old_name)?;
     let new_ref_name = branch_ref_name(new_name)?;
     if repo.try_find_reference(new_ref_name.as_ref()).map_err(gix_error)?.is_some() {

@@ -136,7 +136,7 @@ pub fn heat_cell(count: usize, theme: &Theme, symbols: &SymbolTheme) -> Span<'st
         0 => (symbols.heatmap.cell(count), Some(theme.COLOR_TEXT)),
         _ => (symbols.heatmap.cell(count), Some(theme.COLOR_GRASS)),
     };
-    let style = if let Some(c) = color { Style::default().fg(c) } else { Style::default() };
+    let style = color.map_or_else(Style::default, |c| Style::default().fg(c));
     Span::styled(format!("{:>2}", character), style)
 }
 

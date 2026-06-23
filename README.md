@@ -18,7 +18,7 @@ made with ♡
   </pre>
 </div>
 
-`guita╭`, distributed as `guitar`, is a Rust terminal UI for working with Git history from a topology-first point of view. It is built with `ratatui`, `crossterm`, `gitoxide`, and `libgit2`, and is designed for exploring, filtering, and operating on large repositories without leaving the terminal.
+`guita╭`, distributed as `guitar`, is a Rust terminal UI for working with Git history from a topology-first point of view. It is built with `ratatui`, `crossterm`, and `libgit2`, and is designed for exploring, filtering, and operating on large repositories without leaving the terminal.
 
 `guita╭` lets you instantly travel to prehistoric times in BIG repositores (500k+ commits)
 

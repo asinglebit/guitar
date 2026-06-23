@@ -21,19 +21,29 @@ fn main() {
     divan::main();
 }
 
-fn render_case(theme: &Theme, symbols: &SymbolTheme, rows: &[GraphRow], history: &GraphHistory, head_alias: u32, start: usize, end: usize, render_uncommitted_row: bool) -> (usize, usize) {
-    let lines = black_box(render_graph_projection_lines(theme, symbols, rows, history, head_alias, start, end, render_uncommitted_row));
-    let bytes = lines.iter().map(|line| line.width()).sum();
-    (lines.len(), bytes)
+struct GraphRenderCase<'a> {
+    theme: &'a Theme,
+    symbols: &'a SymbolTheme,
+    rows: &'a [GraphRow],
+    history: &'a GraphHistory,
+    head_alias: u32,
+    start: usize,
+    end: usize,
+    render_uncommitted_row: bool,
 }
 
-fn bench_render(bencher: Bencher, theme: &Theme, symbols: &SymbolTheme, rows: &[GraphRow], history: &GraphHistory, head_alias: u32, start: usize, end: usize, render_uncommitted_row: bool) {
-    let rendered = render_case(theme, symbols, rows, history, head_alias, start, end, render_uncommitted_row);
+impl GraphRenderCase<'_> {
+    fn render(&self) -> (usize, usize) {
+        let lines = black_box(render_graph_projection_lines(self.theme, self.symbols, self.rows, self.history, self.head_alias, self.start, self.end, self.render_uncommitted_row));
+        let bytes = lines.iter().map(|line| line.width()).sum();
+        (lines.len(), bytes)
+    }
+}
 
-    bencher
-        .counter(ItemsCount::new(end.saturating_sub(start)))
-        .counter(BytesCount::new(rendered.1))
-        .bench(|| black_box(render_case(theme, symbols, rows, history, head_alias, start, end, render_uncommitted_row)));
+fn bench_render(bencher: Bencher, case: GraphRenderCase<'_>) {
+    let rendered = case.render();
+
+    bencher.counter(ItemsCount::new(case.end.saturating_sub(case.start))).counter(BytesCount::new(rendered.1)).bench(|| black_box(case.render()));
 }
 
 fn message_case(theme: &Theme, symbols: &SymbolTheme, rows: &[GraphRow], selected: usize, show_refs: bool) -> (usize, usize) {
@@ -58,24 +68,55 @@ fn accent_theme(mut theme: Theme) -> Theme {
 #[divan::bench(sample_count = 80, sample_size = 100)]
 fn render_graph_projection_small(bencher: Bencher) {
     let fixture = graph_fixture(6);
-    bench_render(bencher, &fixture.theme, &fixture.symbols, &fixture.rows, &fixture.history, fixture.head_alias, 0, fixture.rows.len(), false);
+    bench_render(
+        bencher,
+        GraphRenderCase {
+            theme: &fixture.theme,
+            symbols: &fixture.symbols,
+            rows: &fixture.rows,
+            history: &fixture.history,
+            head_alias: fixture.head_alias,
+            start: 0,
+            end: fixture.rows.len(),
+            render_uncommitted_row: false,
+        },
+    );
 }
 
 #[divan::bench(sample_count = 80, sample_size = 100)]
 fn render_graph_projection_dense(bencher: Bencher) {
     let fixture = graph_fixture(24);
-    bench_render(bencher, &fixture.theme, &fixture.symbols, &fixture.rows, &fixture.history, fixture.head_alias, 0, fixture.rows.len(), false);
+    bench_render(
+        bencher,
+        GraphRenderCase {
+            theme: &fixture.theme,
+            symbols: &fixture.symbols,
+            rows: &fixture.rows,
+            history: &fixture.history,
+            head_alias: fixture.head_alias,
+            start: 0,
+            end: fixture.rows.len(),
+            render_uncommitted_row: false,
+        },
+    );
 }
 
 #[divan::bench(sample_count = 30, sample_size = 20)]
 fn render_graph_projection_large(bencher: Bencher) {
     let fixture = graph_fixture(256);
-    let rendered = render_case(&fixture.theme, &fixture.symbols, &fixture.rows, &fixture.history, fixture.head_alias, 0, fixture.rows.len(), false);
+    let case = GraphRenderCase {
+        theme: &fixture.theme,
+        symbols: &fixture.symbols,
+        rows: &fixture.rows,
+        history: &fixture.history,
+        head_alias: fixture.head_alias,
+        start: 0,
+        end: fixture.rows.len(),
+        render_uncommitted_row: false,
+    };
+    let rendered = case.render();
 
-    bencher
-        .counter(ItemsCount::new(fixture.rows.len()))
-        .counter(BytesCount::new(rendered.1))
-        .bench(|| black_box(render_case(&fixture.theme, &fixture.symbols, &fixture.rows, &fixture.history, fixture.head_alias, 0, fixture.rows.len(), false)));
+    bencher.counter(ItemsCount::new(fixture.rows.len())).counter(BytesCount::new(rendered.1)).bench(|| black_box(case.render()));
 }
 
 #[divan::bench(sample_count = 30, sample_size = 20)]
@@ -110,7 +151,19 @@ fn render_graph_projection_uncommitted_row(bencher: Bencher) {
         has_current_worktree: false,
         reflog: None,
     }];
-    bench_render(bencher, &fixture.theme, &fixture.symbols, &rows, &fixture.history, fixture.head_alias, 0, rows.len(), true);
+    bench_render(
+        bencher,
+        GraphRenderCase {
+            theme: &fixture.theme,
+            symbols: &fixture.symbols,
+            rows: &rows,
+            history: &fixture.history,
+            head_alias: fixture.head_alias,
+            start: 0,
+            end: rows.len(),
+            render_uncommitted_row: true,
+        },
+    );
 }
 
 #[divan::bench(sample_count = 80, sample_size = 100)]
@@ -118,5 +171,17 @@ fn render_graph_projection_ascii_theme(bencher: Bencher) {
     let fixture = graph_fixture(18);
     let theme = accent_theme(Theme::classic());
     let symbols = SymbolTheme::ascii();
-    bench_render(bencher, &theme, &symbols, &fixture.rows, &fixture.history, fixture.head_alias, 4, fixture.rows.len(), false);
+    bench_render(
+        bencher,
+        GraphRenderCase {
+            theme: &theme,
+            symbols: &symbols,
+            rows: &fixture.rows,
+            history: &fixture.history,
+            head_alias: fixture.head_alias,
+            start: 4,
+            end: fixture.rows.len(),
+            render_uncommitted_row: false,
+        },
+    );
 }
