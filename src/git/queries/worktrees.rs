@@ -62,7 +62,7 @@ enum DirtyCheck {
     Compute,
 }
 
-fn entry_from_gix_repo(repo: &gix::Repository, name: String, path: PathBuf, kind: WorktreeKind, current_path: &Path, dirty_check: DirtyCheck) -> WorktreeEntry {
+fn worktree_entry_from_repo(repo: &gix::Repository, name: String, path: PathBuf, kind: WorktreeKind, current_path: &Path, dirty_check: DirtyCheck) -> WorktreeEntry {
     let canonical_entry_path = canonical_path(&path);
     WorktreeEntry {
         name,
@@ -119,7 +119,7 @@ fn list_worktrees_with_dirty_check(repo: &Repository, current_path: Option<&Path
 
     if let Some(main_path) = owner_repo.worktree().map(|worktree| worktree.base().to_path_buf()) {
         let main_name = main_path.file_name().and_then(|name| name.to_str()).unwrap_or("main").to_string();
-        entries.push(entry_from_gix_repo(&owner_repo, main_name, main_path, WorktreeKind::Main, &current, dirty_check));
+        entries.push(worktree_entry_from_repo(&owner_repo, main_name, main_path, WorktreeKind::Main, &current, dirty_check));
     }
 
     let mut linked: Vec<WorktreeEntry> = owner_repo.worktrees().map_err(|err| Error::from_str(&err.to_string()))?.into_iter().filter_map(|proxy| linked_entry(proxy, &current, dirty_check)).collect();

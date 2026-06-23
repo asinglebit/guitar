@@ -69,7 +69,7 @@ pub(crate) fn changed_file_status_at_commit_from_repo(repo: &gix::Repository, oi
     let changes = repo.diff_tree_to_tree(parent_tree.as_ref(), Some(&tree), Some(options)).map_err(|error| git2::Error::from_str(&error.to_string()))?;
 
     for change in changes.iter() {
-        if let Some(status) = file_status_from_gix_change(change, &path) {
+        if let Some(status) = file_status_from_change(change, &path) {
             return Ok(Some(status));
         }
     }
@@ -209,7 +209,7 @@ fn raw_tree_changes(repo: &gix::Repository, parent_tree: &gix::Tree<'_>, tree: &
     repo.diff_tree_to_tree(Some(parent_tree), Some(tree), Some(options)).map_err(|error| git2::Error::from_str(&error.to_string())).map(|changes| changes.iter().cloned().collect())
 }
 
-fn file_status_from_gix_change(change: &ChangeDetached, path: &str) -> Option<FileStatus> {
+fn file_status_from_change(change: &ChangeDetached, path: &str) -> Option<FileStatus> {
     match change {
         ChangeDetached::Addition { location, .. } if path_matches(location, path) => Some(FileStatus::Added),
         ChangeDetached::Deletion { location, .. } if path_matches(location, path) => Some(FileStatus::Deleted),

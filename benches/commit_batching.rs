@@ -10,13 +10,9 @@ use guitar::{
         oids::Oids,
         walker::Walker,
     },
-    git::{
-        gix::enable_history_object_cache,
-        queries::commits::{get_sorted_oids, get_stashed_commits_from_gix, get_tag_oids_from_gix},
-    },
-    helpers::layout::GRAPH_LANE_LIMIT_DEFAULT,
+    git::queries::commits::{get_sorted_oids, get_tag_oids},
 };
-use std::{env, path::PathBuf, process::Command};
+use std::{path::PathBuf, process::Command};
 
 fn main() {
     divan::main();
@@ -110,56 +106,13 @@ fn walker_startup(fixture: RepoWalkFixture) -> usize {
 fn collect_tag_oids(fixture: RepoWalkFixture) -> usize {
     let repo = gix::open(&fixture.path).unwrap();
     let mut oids = Oids::default();
-    let tags = get_tag_oids_from_gix(&repo, &mut oids);
+    let tags = get_tag_oids(&repo, &mut oids);
     black_box(tags.values().map(Vec::len).sum())
 }
 
 fn walker_walk_pages_with_commit_graph(fixture: RepoWalkFixture, full_walk: bool) -> usize {
     write_commit_graph(&fixture.path);
     walker_walk_pages(fixture, full_walk)
-}
-
-fn walk_external_repo(path_env: &str) -> usize {
-    let Ok(path) = env::var(path_env) else {
-        return 0;
-    };
-    let lane_limit = env::var("GUITAR_BENCH_LANE_LIMIT").ok().and_then(|value| value.parse().ok()).unwrap_or(GRAPH_LANE_LIMIT_DEFAULT);
-    let mut walker = Walker::new(path, 10_000, im::HashSet::new(), false, lane_limit).unwrap();
-
-    while walker.walk() {}
-
-    black_box(walker.oids.get_sorted_aliases().len())
-}
-
-fn batch_external_repo(path_env: &str, include_tags: bool) -> usize {
-    let Ok(path) = env::var(path_env) else {
-        return 0;
-    };
-    let mut repo = gix::open(path).unwrap();
-    enable_history_object_cache(&mut repo);
-
-    let mut oids = Oids::default();
-    let extra_roots = if include_tags {
-        let tags = get_tag_oids_from_gix(&repo, &mut oids);
-        let stashes = get_stashed_commits_from_gix(&repo, &mut oids);
-        tags.keys().chain(stashes.iter()).map(|&alias| *oids.get_oid_by_alias(alias)).collect::<Vec<_>>()
-    } else {
-        Vec::new()
-    };
-
-    let mut batcher = Batcher::new(&repo, &im::HashSet::new(), &extra_roots).unwrap();
-    let mut count = 0usize;
-    let mut scratch = Vec::with_capacity(10_000);
-    loop {
-        scratch.clear();
-        let read = batcher.next_into(10_000, &mut scratch);
-        if read == 0 {
-            break;
-        }
-        count += read;
-    }
-
-    black_box(count)
 }
 
 #[divan::bench(sample_count = 20, sample_size = 1)]
@@ -311,19 +264,4 @@ fn walker_walk_pages_large_commit_graph(bencher: Bencher) {
     let rounds = 160usize;
 
     bencher.counter(divan::counter::ItemsCount::new(rounds.saturating_mul(4))).bench(|| black_box(walker_walk_pages_with_commit_graph(repo_walk_merge_fixture(rounds, 32), true)));
-}
-
-#[divan::bench(sample_count = 1, sample_size = 1)]
-fn walker_external_repo_full_walk(bencher: Bencher) {
-    bencher.bench(|| black_box(walk_external_repo("GUITAR_BENCH_REPO")));
-}
-
-#[divan::bench(sample_count = 1, sample_size = 1)]
-fn batcher_external_repo_branch_walk(bencher: Bencher) {
-    bencher.bench(|| black_box(batch_external_repo("GUITAR_BENCH_REPO", false)));
-}
-
-#[divan::bench(sample_count = 1, sample_size = 1)]
-fn batcher_external_repo_tag_walk(bencher: Bencher) {
-    bencher.bench(|| black_box(batch_external_repo("GUITAR_BENCH_REPO", true)));
 }

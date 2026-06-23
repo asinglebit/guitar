@@ -6,8 +6,8 @@ use crate::{
         oids::{Oids, git2_to_gix_oid, gix_to_git2_oid},
     },
     git::gix::enable_history_object_cache,
-    git::queries::commits::{get_sorted_oids, get_stashed_commits_from_gix, get_tag_oids_from_gix, get_tip_oids},
-    git::queries::reflogs::{HeadReflogEntry, get_head_reflog_entries_from_gix},
+    git::queries::commits::{get_sorted_oids, get_stashed_commits, get_tag_oids, get_tip_oids},
+    git::queries::reflogs::{HeadReflogEntry, get_head_reflog_entries},
     helpers::heatmap::HeatmapCounts,
 };
 use im::HashSet;
@@ -66,13 +66,13 @@ impl Walker {
         let (branches_local, branches_remote) = get_tip_oids(&gix_repo, &mut oids);
 
         let tags_lanes = HashMap::new();
-        let tags_local = get_tag_oids_from_gix(&gix_repo, &mut oids);
+        let tags_local = get_tag_oids(&gix_repo, &mut oids);
 
         let stashes_lanes = HashMap::new();
         let reflogs_lanes = HashMap::new();
 
         // Stashes are collected up front so they can be inserted near their parents later.
-        oids.stashes = get_stashed_commits_from_gix(&gix_repo, &mut oids);
+        oids.stashes = get_stashed_commits(&gix_repo, &mut oids);
         let stash_aliases: StdHashSet<u32> = oids.stashes.iter().copied().collect();
         let mut stash_parent_aliases = Vec::with_capacity(oids.stashes.len());
         for stash_alias in oids.stashes.clone() {
@@ -84,7 +84,7 @@ impl Walker {
             }
         }
 
-        let head_reflog_entries = get_head_reflog_entries_from_gix(&gix_repo).unwrap_or_default();
+        let head_reflog_entries = get_head_reflog_entries(&gix_repo).unwrap_or_default();
         let mut head_reflog_roots = Vec::new();
         let mut reflog_aliases = StdHashSet::new();
         for entry in &head_reflog_entries {

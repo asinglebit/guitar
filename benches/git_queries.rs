@@ -79,7 +79,7 @@ fn staged_status_many(fixture: &WorkdirStatusFixture) -> usize {
 }
 
 struct RemoteResolutionFixture {
-    repo: Repository,
+    path: std::path::PathBuf,
     remotes: Vec<guitar::git::queries::remotes::RemoteEntry>,
     _temp: TempFixture,
 }
@@ -100,16 +100,17 @@ fn build_remote_resolution_fixture(remote_count: usize) -> RemoteResolutionFixtu
         repo.find_branch(&current_branch, BranchType::Local).unwrap().set_upstream(Some(&format!("{remote_name}/{current_branch}"))).unwrap();
     }
 
-    let remotes = guitar::git::queries::remotes::list_remotes(&repo).unwrap();
-    RemoteResolutionFixture { repo, remotes, _temp: workdir }
+    let path = workdir.to_path_buf();
+    let remotes = guitar::git::queries::remotes::list_remotes(&path).unwrap();
+    RemoteResolutionFixture { path, remotes, _temp: workdir }
 }
 
 fn effective_default_remote_from_repo(fixture: &RemoteResolutionFixture) -> usize {
-    guitar::git::queries::remotes::effective_default_remote(&fixture.repo).map_or(0, |name| name.len())
+    guitar::git::queries::remotes::effective_default_remote(&fixture.path).map_or(0, |name| name.len())
 }
 
 fn effective_default_remote_from_cache(fixture: &RemoteResolutionFixture) -> usize {
-    guitar::git::queries::remotes::effective_default_remote_from_remotes(&fixture.repo, &fixture.remotes).map_or(0, |name| name.len())
+    guitar::git::queries::remotes::effective_default_remote_from_remotes(&fixture.path, &fixture.remotes).map_or(0, |name| name.len())
 }
 
 #[divan::bench(sample_count = 30, sample_size = 10)]

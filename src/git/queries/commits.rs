@@ -3,7 +3,6 @@ use crate::core::{
     oids::Oids,
 };
 use crate::helpers::branch_visibility::branch_name_from_ref;
-use git2::ObjectType;
 use git2::{Oid, Repository, Time};
 use gix::prelude::HeaderExt;
 use std::collections::HashMap;
@@ -34,37 +33,7 @@ pub fn get_tip_oids(repo: &gix::Repository, oids: &mut Oids) -> (HashMap<u32, Ve
 }
 
 // Map lightweight and annotated tags to the commit aliases they resolve to.
-pub fn get_tag_oids(repo: &Repository, oids: &mut Oids) -> HashMap<u32, Vec<String>> {
-    let mut local: HashMap<u32, Vec<String>> = HashMap::new();
-
-    for reference in repo.references().unwrap().flatten() {
-        let name = match reference.name() {
-            Some(n) => n,
-            None => continue,
-        };
-
-        let stripped = match name.strip_prefix("refs/tags/") {
-            Some(s) => s,
-            None => continue,
-        };
-
-        // Non-commit tags are ignored because the graph has no lane for blobs or trees.
-        let obj = match reference.peel(ObjectType::Commit) {
-            Ok(obj) => obj,
-            Err(_) => continue,
-        };
-
-        let commit_oid = obj.id();
-        let alias = oids.get_alias_by_oid(commit_oid);
-
-        local.entry(alias).or_default().push(stripped.to_string());
-    }
-
-    local
-}
-
-// Map lightweight and annotated tags from a gitoxide repo to the commit aliases they resolve to.
-pub fn get_tag_oids_from_gix(repo: &gix::Repository, oids: &mut Oids) -> HashMap<u32, Vec<String>> {
+pub fn get_tag_oids(repo: &gix::Repository, oids: &mut Oids) -> HashMap<u32, Vec<String>> {
     let mut local: HashMap<u32, Vec<String>> = HashMap::new();
 
     let Ok(references) = repo.references() else {
@@ -146,8 +115,8 @@ pub fn get_git_user_info(repo: &Repository) -> Result<(Option<String>, Option<St
     Ok((name, email))
 }
 
-// Enumerate stash roots from a gitoxide repo, keeping the newest stash first.
-pub fn get_stashed_commits_from_gix(repo: &gix::Repository, oids: &mut Oids) -> Vec<u32> {
+// Enumerate stash roots, keeping the newest stash first.
+pub fn get_stashed_commits(repo: &gix::Repository, oids: &mut Oids) -> Vec<u32> {
     let mut stashes = Vec::new();
 
     let Some(reference) = repo.try_find_reference("refs/stash").ok().flatten() else {

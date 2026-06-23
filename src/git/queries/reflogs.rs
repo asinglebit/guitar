@@ -10,11 +10,7 @@ pub struct HeadReflogEntry {
     pub time: Time,
 }
 
-pub fn get_head_reflog_entries_from_gix(repo: &gix::Repository) -> Result<Vec<HeadReflogEntry>, git2::Error> {
-    get_head_reflog_entries_from_repo(repo)
-}
-
-fn get_head_reflog_entries_from_repo(repo: &gix::Repository) -> Result<Vec<HeadReflogEntry>, git2::Error> {
+pub fn get_head_reflog_entries(repo: &gix::Repository) -> Result<Vec<HeadReflogEntry>, git2::Error> {
     let head = repo.head().map_err(|error| git2::Error::from_str(&error.to_string()))?;
     let mut log_iter = head.log_iter();
     let Some(reflog) = log_iter.rev().map_err(|error| git2::Error::from_str(&error.to_string()))? else {

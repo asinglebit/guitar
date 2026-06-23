@@ -567,6 +567,7 @@ fn mouse_scrollbars_work_for_inspector_and_status_panes() {
     bottom_status.layout.status_bottom = Rect::new(0, 2, 40, 5);
     bottom_status.layout.status_bottom_scrollbar = Rect::new(0, 2, 40, 5);
     bottom_status.is_uncommitted_loaded = true;
+    bottom_status.is_uncommitted_detail_loaded = true;
     bottom_status.uncommitted.is_unstaged = true;
     bottom_status.uncommitted.unstaged.modified = (0..20).map(|idx| format!("file-{idx}.rs")).collect();
 
@@ -696,6 +697,7 @@ fn mouse_click_selects_status_rows() {
     app.layout.status_top = Rect::new(0, 0, 30, 6);
     app.layout.status_bottom = Rect::new(0, 10, 30, 6);
     app.is_uncommitted_loaded = true;
+    app.is_uncommitted_detail_loaded = true;
     app.uncommitted.is_staged = true;
     app.uncommitted.is_unstaged = true;
     app.uncommitted.staged.modified = vec!["a".into(), "b".into(), "c".into(), "d".into()];

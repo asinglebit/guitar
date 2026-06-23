@@ -15,7 +15,7 @@ use crate::{
         },
         auth::{AuthSession, NetworkResult},
         queries::{
-            commits::{get_current_branch, get_stashed_commits_from_gix, get_tag_oids, get_tip_oids},
+            commits::{get_current_branch, get_stashed_commits, get_tag_oids, get_tip_oids},
             diffs::get_filenames_diff_at_workdir,
             submodules::list_submodules,
             worktrees::list_worktrees,
@@ -161,7 +161,7 @@ fn stash_fixture_saves_and_restores_dirty_worktrees() {
     let stash_oid = stash(&mut repo).unwrap();
     let mut oids = Oids::default();
     let gix_repo = gix::open(repo.workdir().unwrap_or(repo.path())).unwrap();
-    let stashed = get_stashed_commits_from_gix(&gix_repo, &mut oids);
+    let stashed = get_stashed_commits(&gix_repo, &mut oids);
     assert_eq!(stashed.len(), 1);
 
     let after_stash = get_filenames_diff_at_workdir(&repo).unwrap();
@@ -178,7 +178,7 @@ fn stash_fixture_saves_and_restores_dirty_worktrees() {
 
     let mut oids = Oids::default();
     let gix_repo = gix::open(repo.workdir().unwrap_or(repo.path())).unwrap();
-    assert!(get_stashed_commits_from_gix(&gix_repo, &mut oids).is_empty());
+    assert!(get_stashed_commits(&gix_repo, &mut oids).is_empty());
 }
 
 #[test]
@@ -291,7 +291,7 @@ fn tag_fixture_maps_commit_tags_and_ignores_blob_tags() {
     assert!(local_tips.get(&alias).unwrap().contains(&current_branch));
     assert!(remote_tips.get(&alias).map_or(true, |names| names.is_empty()));
 
-    let tags = get_tag_oids(&repo, &mut oids);
+    let tags = get_tag_oids(&gix_repo, &mut oids);
     let tag_names = tags.get(&alias).unwrap();
     assert!(tag_names.contains(&"v1.0.0".to_string()));
     assert!(tag_names.contains(&"v2.0.0".to_string()));
