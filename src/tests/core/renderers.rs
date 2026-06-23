@@ -59,9 +59,9 @@ fn branch_up_history(current_lane: usize) -> GraphHistory {
     let mut last = vec![Chunk::dummy(), Chunk::dummy()];
     last[current_lane] = Chunk::commit(4, NONE, NONE);
     let mut prev = vec![Chunk::commit(10, 1, NONE), Chunk::commit(11, 2, NONE)];
-    for lane_idx in 0..prev.len() {
+    for (lane_idx, chunk) in prev.iter_mut().enumerate() {
         if lane_idx != current_lane {
-            prev[lane_idx].parent_a = 4;
+            chunk.parent_a = 4;
         }
     }
 

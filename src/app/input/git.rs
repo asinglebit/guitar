@@ -795,9 +795,7 @@ impl App {
     }
 
     fn default_remote_for_network(&mut self, operation: &str) -> Option<String> {
-        if self.repo.is_none() {
-            return None;
-        }
+        self.repo.as_ref()?;
 
         let repo_path = self.path.as_deref().unwrap_or(".");
         match effective_default_remote_from_remotes(repo_path, &self.remotes).or_else(|| effective_default_remote(repo_path)) {
@@ -1027,23 +1025,21 @@ impl App {
                             Err(error) => self.show_error(errors::with_error(errors::DELETE_TAG(), error)),
                         }
                     },
-                    Focus::Viewport => {
-                        if self.graph_selected != 0 {
-                            let tag_names: Vec<String> = self
-                                .graph_row_at(if self.graph_selected == 0 { 1 } else { self.graph_selected })
-                                .map(|row| row.tags.iter().map(|tag| tag.name.clone()).collect())
-                                .or_else(|| self.graph_alias_at(if self.graph_selected == 0 { 1 } else { self.graph_selected }).map(|alias| self.tags.local.get(&alias).cloned().unwrap_or_default()))
-                                .unwrap_or_default();
-                            match tag_names.len() {
-                                0 => {},
-                                1 => match untag(repo, tag_names[0].as_str()) {
-                                    Ok(_) => self.reload(None),
-                                    Err(error) => self.show_error(errors::with_error(errors::DELETE_TAG(), error)),
-                                },
-                                _ => {
-                                    self.focus = Focus::ModalDeleteTag;
-                                },
-                            }
+                    Focus::Viewport if self.graph_selected != 0 => {
+                        let tag_names: Vec<String> = self
+                            .graph_row_at(self.graph_selected)
+                            .map(|row| row.tags.iter().map(|tag| tag.name.clone()).collect())
+                            .or_else(|| self.graph_alias_at(self.graph_selected).map(|alias| self.tags.local.get(&alias).cloned().unwrap_or_default()))
+                            .unwrap_or_default();
+                        match tag_names.len() {
+                            0 => {},
+                            1 => match untag(repo, tag_names[0].as_str()) {
+                                Ok(_) => self.reload(None),
+                                Err(error) => self.show_error(errors::with_error(errors::DELETE_TAG(), error)),
+                            },
+                            _ => {
+                                self.focus = Focus::ModalDeleteTag;
+                            },
                         }
                     },
                     _ => {},

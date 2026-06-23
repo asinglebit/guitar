@@ -82,8 +82,7 @@ fn open_or_init_submodule_repo(submodule: &gix::Submodule<'_>) -> Result<(gix::R
     }
 
     let workdir = submodule.work_dir().map_err(|error| git2::Error::from_str(&error.to_string()))?;
-    let mut create_opts = gix::create::Options::default();
-    create_opts.destination_must_be_empty = true;
+    let create_opts = gix::create::Options { destination_must_be_empty: true, ..Default::default() };
     let repo = gix::ThreadSafeRepository::init_opts(workdir, gix::create::Kind::WithWorktree, create_opts, gix::open::Options::default_for_level(gix::sec::Trust::Full))
         .map_err(|error| git2::Error::from_str(&error.to_string()))?
         .to_thread_local();
@@ -113,18 +112,10 @@ fn checkout_submodule_commit(repo: &mut gix::Repository, target_oid: gix::Object
 
     let workdir = repo.workdir().ok_or_else(|| git2::Error::from_str("Submodule has no working directory"))?;
     let should_interrupt = AtomicBool::new(false);
-    let mut files = gix::progress::Discard;
-    let mut bytes = gix::progress::Discard;
-    gix::worktree::state::checkout(
-        &mut index,
-        workdir,
-        repo.objects.clone().into_arc().map_err(|error| git2::Error::from_str(&error.to_string()))?,
-        &mut files,
-        &mut bytes,
-        &should_interrupt,
-        options,
-    )
-    .map_err(|error| git2::Error::from_str(&error.to_string()))?;
+    let files = gix::progress::Discard;
+    let bytes = gix::progress::Discard;
+    gix::worktree::state::checkout(&mut index, workdir, repo.objects.clone().into_arc().map_err(|error| git2::Error::from_str(&error.to_string()))?, &files, &bytes, &should_interrupt, options)
+        .map_err(|error| git2::Error::from_str(&error.to_string()))?;
     index.write(Default::default()).map_err(|error| git2::Error::from_str(&error.to_string()))?;
 
     let head: gix::refs::FullName = "HEAD".try_into().expect("valid");

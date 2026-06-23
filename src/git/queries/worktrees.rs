@@ -66,7 +66,7 @@ fn worktree_entry_from_repo(repo: &gix::Repository, name: String, path: PathBuf,
     let canonical_entry_path = canonical_path(&path);
     WorktreeEntry {
         name,
-        path: path.clone(),
+        path,
         branch: head_branch(repo),
         head: head_oid(repo),
         alias: None,
@@ -89,7 +89,7 @@ fn linked_entry(proxy: gix::worktree::Proxy<'_>, current_path: &Path, dirty_chec
 
     let mut entry = WorktreeEntry {
         name,
-        path: path.clone(),
+        path,
         branch: repo.as_ref().and_then(head_branch),
         head: repo.as_ref().and_then(head_oid),
         alias: None,

@@ -91,8 +91,7 @@ fn statusbar_branch_count_uses_cached_branch_rows_without_scanning_refs() {
     repo.branch("repo-only-a", &head, false).unwrap();
     repo.branch("repo-only-b", &head, false).unwrap();
 
-    let mut branches = Branches::default();
-    branches.sorted = vec![(1, "main".to_string()), (2, "hidden".to_string())];
+    let mut branches = Branches { sorted: vec![(1, "main".to_string()), (2, "hidden".to_string())], ..Default::default() };
     branches.hidden_branch_names.insert("hidden".to_string());
 
     let mut app = App {

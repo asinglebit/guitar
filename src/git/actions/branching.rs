@@ -134,11 +134,7 @@ pub fn rename_branch(repo: &Repository, old_name: &str, new_name: &str) -> Resul
     ];
     if is_current_branch {
         edits.push(RefEdit {
-            change: Change::Update {
-                log: branch_ref_log("branch rename"),
-                expected: PreviousValue::MustExistAndMatch(Target::Symbolic(old_ref_name.clone())),
-                new: Target::Symbolic(new_ref_name.clone()),
-            },
+            change: Change::Update { log: branch_ref_log("branch rename"), expected: PreviousValue::MustExistAndMatch(Target::Symbolic(old_ref_name)), new: Target::Symbolic(new_ref_name) },
             name: head_ref_name(),
             deref: false,
         });

@@ -20,7 +20,9 @@ use ratatui::{
     widgets::{Block, List, ListItem, Scrollbar, ScrollbarOrientation, ScrollbarState},
 };
 
-const SETTINGS_PANE_COMMANDS: &[(&str, Command, fn() -> &'static str)] = &[
+type SettingsCommandRow = (&'static str, Command, fn() -> &'static str);
+
+const SETTINGS_PANE_COMMANDS: &[SettingsCommandRow] = &[
     ("1", Command::ToggleBranches, settings_text::BRANCHES),
     ("2", Command::ToggleTags, settings_text::TAGS),
     ("3", Command::ToggleStashes, settings_text::STASHES),
@@ -33,7 +35,7 @@ const SETTINGS_PANE_COMMANDS: &[(&str, Command, fn() -> &'static str)] = &[
     ("0", Command::ResetLayout, settings_text::RESET_LAYOUT),
 ];
 
-const SETTINGS_GRAPH_COMMANDS: &[(&str, Command, fn() -> &'static str)] = &[
+const SETTINGS_GRAPH_COMMANDS: &[SettingsCommandRow] = &[
     (")", Command::ToggleGraphReflogs, settings_text::GRAPH_REFLOG_COMMITS),
     ("!", Command::ToggleShas, settings_text::SHAS),
     ("@", Command::ToggleGraphDates, settings_text::COMMITTER_DATE_TIME),

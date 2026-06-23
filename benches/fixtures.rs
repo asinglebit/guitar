@@ -515,12 +515,12 @@ fn push_commit(buffer: &mut Buffer, rows: &mut Vec<GraphRow>, index: usize, alia
         reflog: None,
     };
 
-    if index % 5 == 0 {
+    if index.is_multiple_of(5) {
         row.has_any_branch = true;
         row.branches.push(GraphBranchLabel { name: format!("bench/branch-{alias}"), is_local: true, lane: None });
     }
 
-    if index % 8 == 0 {
+    if index.is_multiple_of(8) {
         row.tags.push(GraphTagLabel { name: format!("v{alias}"), lane: None });
     }
 

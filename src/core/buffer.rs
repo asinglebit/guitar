@@ -106,6 +106,10 @@ impl DeltaLog {
         self.len
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
     #[cfg(test)]
     pub fn capacity(&self) -> usize {
         self.chunks.iter().map(Vec::capacity).sum()
@@ -245,7 +249,7 @@ impl Buffer {
             }
         }
 
-        if !self.transient_lanes.iter().any(|idx| *idx == lane_idx) {
+        if !self.transient_lanes.contains(&lane_idx) {
             self.transient_lanes.push(lane_idx);
         }
     }
@@ -272,12 +276,12 @@ impl Buffer {
 
         // Planned mergers split a lane so the second parent can draw toward its target later.
         if !self.mergers.is_empty()
-            && let Some(merger_idx) = self.curr.iter().position(|inner| self.mergers.iter().any(|alias| *alias == inner.alias))
+            && let Some(merger_idx) = self.curr.iter().position(|inner| self.mergers.contains(&inner.alias))
         {
             let merger_alias = self.curr[merger_idx].alias;
             self.mergers.retain(|alias| *alias != merger_alias);
 
-            let mut clone = self.curr[merger_idx].clone();
+            let mut clone = self.curr[merger_idx];
             clone.parent_a = clone.parent_b;
             clone.parent_b = NONE;
             self.curr[merger_idx].parent_b = NONE;

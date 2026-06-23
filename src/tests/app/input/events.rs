@@ -933,7 +933,7 @@ fn double_click_on_worktree_row_acts_like_enter() {
     app.layout.worktrees = Rect::new(0, 0, 20, 6);
     app.worktrees.entries = vec![WorktreeEntry {
         name: "linked".into(),
-        path: target_path.clone(),
+        path: target_path,
         branch: Some("main".into()),
         head: None,
         alias: None,

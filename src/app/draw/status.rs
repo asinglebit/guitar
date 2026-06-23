@@ -221,6 +221,17 @@ struct StatusPaneConfig<'a, 'b> {
     theme: &'b Theme,
 }
 
+struct StatusListConfig<'a, 'b> {
+    rows: &'a [StatusRow<'a>],
+    visible_height: usize,
+    start: usize,
+    selected: usize,
+    is_focused: bool,
+    selection_enabled: bool,
+    search_highlight_path: Option<&'b str>,
+    theme: &'b Theme,
+}
+
 fn render_status_pane(frame: &mut Frame, config: StatusPaneConfig<'_, '_>) -> usize {
     let total_lines = config.rows.len();
     let selected = if total_lines == 0 { 0 } else { config.selected.min(total_lines.saturating_sub(1)) };
@@ -228,7 +239,16 @@ fn render_status_pane(frame: &mut Frame, config: StatusPaneConfig<'_, '_>) -> us
 
     let start = config.scroll.get().min(total_lines.saturating_sub(config.visible_height));
     let end = (start + config.visible_height).min(total_lines);
-    let list_items = status_list_items(&config.rows[start..end], config.visible_height, start, selected, config.is_focused, config.selection_enabled, config.search_highlight_path, config.theme);
+    let list_items = status_list_items(StatusListConfig {
+        rows: &config.rows[start..end],
+        visible_height: config.visible_height,
+        start,
+        selected,
+        is_focused: config.is_focused,
+        selection_enabled: config.selection_enabled,
+        search_highlight_path: config.search_highlight_path,
+        theme: config.theme,
+    });
     let (borders, use_border_set) = status_pane_borders(config.kind, config.is_zen, config.top_has_inspector_border);
     let mut block = Block::default().padding(config.padding).borders(borders).border_style(Style::default().fg(config.theme.COLOR_BORDER));
     if use_border_set {
@@ -313,27 +333,24 @@ fn centered_loading_lines(visible_height: usize, width: usize, style: Style) -> 
     lines
 }
 
-fn status_list_items<'a>(
-    rows: &[StatusRow<'a>], visible_height: usize, start: usize, selected: usize, is_focused: bool, selection_enabled: bool, search_highlight_path: Option<&str>,
-    theme: &crate::helpers::palette::Theme,
-) -> Vec<ListItem<'a>> {
-    (0..visible_height)
+fn status_list_items<'a>(config: StatusListConfig<'a, '_>) -> Vec<ListItem<'a>> {
+    (0..config.visible_height)
         .map(|idx| {
-            let row = rows.get(idx).cloned().unwrap_or_else(|| StatusRow::plain(Line::default()));
-            let global_idx = start + idx;
-            let is_selected = selection_enabled && is_focused && global_idx == selected;
-            let is_search_highlighted = row.path.zip(search_highlight_path).is_some_and(|(path, searched)| path == searched);
+            let row = config.rows.get(idx).cloned().unwrap_or_else(|| StatusRow::plain(Line::default()));
+            let global_idx = config.start + idx;
+            let is_selected = config.selection_enabled && config.is_focused && global_idx == config.selected;
+            let is_search_highlighted = row.path.zip(config.search_highlight_path).is_some_and(|(path, searched)| path == searched);
             let is_highlighted = is_selected || is_search_highlighted;
 
             let mut item = if is_highlighted {
-                let spans: Vec<Span> = row.line.iter().map(|span| Span::styled(span.content.clone(), span.style.fg(theme.COLOR_HIGHLIGHTED))).collect();
-                ListItem::new(Line::from(spans)).style(Style::default().bg(theme.background_or_default(theme.COLOR_GREY_800)).fg(theme.COLOR_HIGHLIGHTED))
+                let spans: Vec<Span> = row.line.iter().map(|span| Span::styled(span.content.clone(), span.style.fg(config.theme.COLOR_HIGHLIGHTED))).collect();
+                ListItem::new(Line::from(spans)).style(Style::default().bg(config.theme.background_or_default(config.theme.COLOR_GREY_800)).fg(config.theme.COLOR_HIGHLIGHTED))
             } else {
                 ListItem::new(row.line)
             };
 
             if !is_highlighted && global_idx.is_multiple_of(2) {
-                item = item.style(Style::default().bg(theme.background_or_default(theme.COLOR_GREY_900)));
+                item = item.style(Style::default().bg(config.theme.background_or_default(config.theme.COLOR_GREY_900)));
             }
 
             item

@@ -120,7 +120,7 @@ fn collect_root_oids(repo: &mut Repository, include_head_reflog_roots: bool) -> 
     let (branches_local, branches_remote) = get_tip_oids(&gix_repo, &mut oids);
     let tags_local = tag_oids_via_libgit2(repo, &mut oids);
     let stashes = get_stashed_commits(&gix_repo, &mut oids);
-    let mut aliases: StdHashSet<u32> = branches_local.keys().copied().chain(branches_remote.keys().copied()).chain(tags_local.keys().copied()).chain(stashes.into_iter()).collect();
+    let mut aliases: StdHashSet<u32> = branches_local.keys().copied().chain(branches_remote.keys().copied()).chain(tags_local.keys().copied()).chain(stashes).collect();
 
     if include_head_reflog_roots {
         for entry in get_head_reflog_entries(&gix_repo).unwrap_or_default() {

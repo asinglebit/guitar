@@ -210,8 +210,7 @@ impl AuthAttempt {
         let info = classify_remote_url(&url);
         match info.protocol {
             AuthProtocol::Https | AuthProtocol::Http => {
-                let challenge =
-                    AuthChallenge { url: url.clone(), username: ctx.username.clone().or(info.username.clone()), protocol: info.protocol, operation: self.operation.clone(), key_path: None };
+                let challenge = AuthChallenge { url, username: ctx.username.clone().or(info.username.clone()), protocol: info.protocol, operation: self.operation.clone(), key_path: None };
                 self.session.https_secret(&challenge.url, challenge.username.as_deref(), challenge.protocol).map(|(_, username, password)| {
                     Ok(Some(gix::credentials::protocol::Outcome { identity: gix::sec::identity::Account { username, password, oauth_refresh_token: None }, next: ctx.clone().into() }))
                 })

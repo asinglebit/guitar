@@ -220,7 +220,7 @@ pub enum GraphEvent {
     Worktrees { generation: Generation, version: GraphVersion, worktrees: Vec<WorktreeEntry> },
     Uncommitted { generation: Generation, result: Result<UncommittedChanges, String> },
     UncommittedDetails { generation: Generation, result: Result<UncommittedChanges, String> },
-    Heatmap { generation: Generation, heatmap: [[usize; WEEKS]; DAYS] },
+    Heatmap { generation: Generation, heatmap: Box<[[usize; WEEKS]; DAYS]> },
     Error { generation: Generation, message: String },
 }
 
@@ -324,7 +324,7 @@ fn run_graph_service(config: GraphServiceConfig, rx: Receiver<GraphCommand>, tx:
             walk_ctx.oids.compact_alias_index();
             walk_ctx.oids.shrink_to_fit();
             walk_ctx.buffer.borrow_mut().shrink_to_fit();
-            let heatmap = walk_ctx.heatmap_counts.build();
+            let heatmap = Box::new(walk_ctx.heatmap_counts.build());
             let _ = tx.send(GraphEvent::Heatmap { generation, heatmap });
 
             if let Some((request_id, path)) = pending_file_history.take() {
@@ -561,8 +561,8 @@ fn pane_window_rows(pane: GraphPane, walk_ctx: &Walker, start: usize, end: usize
         GraphPane::Branches => {
             let mut local: Vec<_> = walk_ctx.branches_local.iter().flat_map(|(&alias, branches)| branches.iter().map(move |branch| (alias, branch, true))).collect();
             let mut remote: Vec<_> = walk_ctx.branches_remote.iter().flat_map(|(&alias, branches)| branches.iter().map(move |branch| (alias, branch, false))).collect();
-            local.sort_by(|a, b| a.1.cmp(&b.1));
-            remote.sort_by(|a, b| a.1.cmp(&b.1));
+            local.sort_by(|a, b| a.1.cmp(b.1));
+            remote.sort_by(|a, b| a.1.cmp(b.1));
             let total = local.len() + remote.len();
             let start = start.min(total);
             let end = end.min(total);
@@ -582,7 +582,7 @@ fn pane_window_rows(pane: GraphPane, walk_ctx: &Walker, start: usize, end: usize
         },
         GraphPane::Tags => {
             let mut rows: Vec<_> = walk_ctx.tags_local.iter().flat_map(|(&alias, tags)| tags.iter().map(move |tag| (alias, tag))).collect();
-            rows.sort_by(|a, b| a.1.cmp(&b.1));
+            rows.sort_by(|a, b| a.1.cmp(b.1));
             let total = rows.len();
             let start = start.min(total);
             let end = end.min(total);

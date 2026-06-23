@@ -39,11 +39,11 @@ impl App {
         if let Some(error) = &self.modal_key_capture_error {
             lines.push(Line::default());
             let message = match error {
-                KeymapEditError::Conflict { mode, key, command } => modal::keymap_conflict(&input_mode_to_visual_string(*mode), &keybinding_to_visual_string(key), &command_to_visual_string(command)),
-                KeymapEditError::MissingMode(mode) => modal::keymap_missing_mode(&input_mode_to_visual_string(*mode)),
-                KeymapEditError::MissingBinding { mode, key } => modal::keymap_missing_binding(&input_mode_to_visual_string(*mode), &keybinding_to_visual_string(key)),
+                KeymapEditError::Conflict { mode, key, command } => modal::keymap_conflict(input_mode_to_visual_string(*mode), &keybinding_to_visual_string(key), &command_to_visual_string(command)),
+                KeymapEditError::MissingMode(mode) => modal::keymap_missing_mode(input_mode_to_visual_string(*mode)),
+                KeymapEditError::MissingBinding { mode, key } => modal::keymap_missing_binding(input_mode_to_visual_string(*mode), &keybinding_to_visual_string(key)),
                 KeymapEditError::CommandChanged { mode, key, expected, actual } => {
-                    modal::keymap_binding_changed(&input_mode_to_visual_string(*mode), &keybinding_to_visual_string(key), &command_to_visual_string(expected), &command_to_visual_string(actual))
+                    modal::keymap_binding_changed(input_mode_to_visual_string(*mode), &keybinding_to_visual_string(key), &command_to_visual_string(expected), &command_to_visual_string(actual))
                 },
             };
             for line in wrap_words(message, 64) {

@@ -155,7 +155,7 @@ fn graph_service_updates_worktrees_from_command() {
 
     let updated = vec![WorktreeEntry {
         name: "repo".to_string(),
-        path: path.clone(),
+        path,
         branch: Some("master".to_string()),
         head: Some(head),
         alias: None,

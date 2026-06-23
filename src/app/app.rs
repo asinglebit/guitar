@@ -959,7 +959,7 @@ impl App {
             env::args().skip(1).find(|arg| !arg.starts_with('-')).unwrap_or_else(|| ".".to_string())
         };
         let canonical_path = std::fs::canonicalize(path).unwrap_or_else(|_| PathBuf::from("."));
-        let absolute_path: PathBuf = try_into_git_repo_root(&canonical_path).unwrap_or(canonical_path.clone());
+        let absolute_path: PathBuf = try_into_git_repo_root(&canonical_path).unwrap_or(canonical_path);
 
         // Failure keeps the app usable by falling back to the splash screen.
         let repo = match open(&absolute_path) {
@@ -1136,10 +1136,8 @@ impl App {
                     self.spawn_reload_metadata(generation);
                 }
 
-                if is_first {
-                    if self.viewport == Viewport::Splash {
-                        self.viewport = Viewport::Graph;
-                    }
+                if is_first && self.viewport == Viewport::Splash {
+                    self.viewport = Viewport::Graph;
                 }
 
                 if is_complete {
@@ -1228,10 +1226,11 @@ impl App {
                     (PendingGraphLookup::CacheGraphRow, GraphLookupResult::GraphRow(Some(row))) => {
                         let index = row.index;
                         self.cache_graph_row(row);
-                        if index == self.graph_selected && index != 0 {
-                            if let Some(identity) = self.graph_identity_at(index) {
-                                self.refresh_current_diff_for_identity(repo, identity);
-                            }
+                        if index == self.graph_selected
+                            && index != 0
+                            && let Some(identity) = self.graph_identity_at(index)
+                        {
+                            self.refresh_current_diff_for_identity(repo, identity);
                         }
                     },
                     (PendingGraphLookup::OpenInspector, GraphLookupResult::GraphRow(Some(row))) => {
@@ -1253,7 +1252,7 @@ impl App {
             },
             GraphEvent::Heatmap { generation, heatmap } => {
                 if generation == self.graph.generation {
-                    self.heatmap = heatmap;
+                    self.heatmap = *heatmap;
                 }
             },
             GraphEvent::Worktrees { generation, version, worktrees } => {

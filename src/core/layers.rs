@@ -88,7 +88,7 @@ impl<'a> LayersContext<'a> {
             self.merges.push(LayerToken { symbol: " ", color: Color::Black });
         }
 
-        if is_empty(&self.merges[token_index].symbol) {
+        if is_empty(self.merges[token_index].symbol) {
             let color = self.color.get_lane_ref(lane);
             self.merges[token_index] = LayerToken { symbol: sym, color };
         }
@@ -114,9 +114,9 @@ impl<'a> LayersContext<'a> {
             let token = self
                 .commits
                 .get(token_index)
-                .filter(|token| !is_empty(&token.symbol))
-                .or_else(|| self.merges.get(token_index).filter(|token| !is_empty(&token.symbol)))
-                .or_else(|| self.pipes.get(token_index).filter(|token| !is_empty(&token.symbol)));
+                .filter(|token| !is_empty(token.symbol))
+                .or_else(|| self.merges.get(token_index).filter(|token| !is_empty(token.symbol)))
+                .or_else(|| self.pipes.get(token_index).filter(|token| !is_empty(token.symbol)));
 
             let (symbol, color) = token.map(|token| (token.symbol, token.color)).unwrap_or((" ", Color::Black));
             spans.push(Span::styled(symbol, Style::default().fg(color)));
@@ -125,7 +125,7 @@ impl<'a> LayersContext<'a> {
 }
 
 fn trim_empty(tokens: &mut Vec<LayerToken<'_>>) {
-    while tokens.last().is_some_and(|token| is_empty(&token.symbol)) {
+    while tokens.last().is_some_and(|token| is_empty(token.symbol)) {
         tokens.pop();
     }
 }

@@ -449,10 +449,10 @@ fn graph_projection_cache_key_tracks_ref_visibility() {
     let mut terminal = Terminal::new(backend).unwrap();
 
     draw_graph_once(&mut app, &repo, &mut terminal);
-    assert_eq!(app.graph.graph_projection.key.unwrap().show_ref_labels, true);
+    assert!(app.graph.graph_projection.key.unwrap().show_ref_labels);
 
     app.layout_config.is_graph_refs = false;
     draw_graph_once(&mut app, &repo, &mut terminal);
 
-    assert_eq!(app.graph.graph_projection.key.unwrap().show_ref_labels, false);
+    assert!(!app.graph.graph_projection.key.unwrap().show_ref_labels);
 }

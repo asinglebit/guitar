@@ -54,7 +54,7 @@ pub fn get_tag_oids(repo: &gix::Repository, oids: &mut Oids) -> HashMap<u32, Vec
         };
         let Some(id) = reference.try_id() else { continue };
         let id = id.detach();
-        let Ok(header) = repo.objects.header(&id) else { continue };
+        let Ok(header) = repo.objects.header(id) else { continue };
         if header.kind() != gix::object::Kind::Commit {
             continue;
         }

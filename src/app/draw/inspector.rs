@@ -112,7 +112,7 @@ impl App {
                     Line::default(),
                     Line::from(Span::styled(format!("{} {}", inspector::COMMITTED_BY(), committer.name().unwrap_or(common::UNKNOWN())), Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
                     Line::from(Span::styled(committer.email().unwrap_or("").to_string(), Style::default().fg(self.theme.COLOR_TEXT))),
-                    Line::from(Span::styled(timestamp_to_utc(committer.when()).to_string(), Style::default().fg(self.theme.COLOR_TEXT))),
+                    Line::from(Span::styled(timestamp_to_utc(committer.when()), Style::default().fg(self.theme.COLOR_TEXT))),
                     Line::default(),
                     Line::from(Span::styled(inspector::MESSAGE_SUMMARY(), Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
                 ]);

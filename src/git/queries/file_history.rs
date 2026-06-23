@@ -206,7 +206,7 @@ fn raw_tree_changes(repo: &gix::Repository, parent_tree: &gix::Tree<'_>, tree: &
     let mut options = gix::diff::Options::default();
     options.track_path();
 
-    repo.diff_tree_to_tree(Some(parent_tree), Some(tree), Some(options)).map_err(|error| git2::Error::from_str(&error.to_string())).map(|changes| changes.iter().cloned().collect())
+    repo.diff_tree_to_tree(Some(parent_tree), Some(tree), Some(options)).map_err(|error| git2::Error::from_str(&error.to_string())).map(|changes| changes.to_vec())
 }
 
 fn file_status_from_change(change: &ChangeDetached, path: &str) -> Option<FileStatus> {

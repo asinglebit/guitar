@@ -30,29 +30,23 @@ impl App {
         let divider_width = label_width.saturating_add(3);
         let mut items = Vec::with_capacity(menu.items.len().saturating_add(2));
         items.push(ListItem::new(Line::from(Span::styled("", Style::default().bg(menu_bg)))).style(Style::default().bg(menu_bg)));
-        items.extend(
-            menu.items
-                .iter()
-                .enumerate()
-                .map(|(index, item)| {
-                    if item.action == ContextMenuAction::Divider {
-                        let text = format!(" {} ", self.symbols.border.horizontal.repeat(divider_width));
-                        return ListItem::new(Line::from(Span::styled(text, Style::default().fg(self.theme.COLOR_BORDER).bg(menu_bg)))).style(Style::default().bg(menu_bg));
-                    }
-                    if item.action == ContextMenuAction::Spacer {
-                        return ListItem::new(Line::from(Span::styled("", Style::default().bg(menu_bg)))).style(Style::default().bg(menu_bg));
-                    }
+        items.extend(menu.items.iter().enumerate().map(|(index, item)| {
+            if item.action == ContextMenuAction::Divider {
+                let text = format!(" {} ", self.symbols.border.horizontal.repeat(divider_width));
+                return ListItem::new(Line::from(Span::styled(text, Style::default().fg(self.theme.COLOR_BORDER).bg(menu_bg)))).style(Style::default().bg(menu_bg));
+            }
+            if item.action == ContextMenuAction::Spacer {
+                return ListItem::new(Line::from(Span::styled("", Style::default().bg(menu_bg)))).style(Style::default().bg(menu_bg));
+            }
 
-                    let enabled = item.enabled;
-                    let selected = enabled && index == menu.selected;
-                    let style = Style::default().fg(if enabled { self.theme.COLOR_TEXT } else { self.theme.COLOR_GREY_600 }).bg(if selected { selected_bg } else { menu_bg });
-                    let marker = if selected { &self.symbols.modal.selected } else { &self.symbols.modal.unselected };
-                    let text = format!(" {marker} {:<width$}  ", item.label, width = label_width);
+            let enabled = item.enabled;
+            let selected = enabled && index == menu.selected;
+            let style = Style::default().fg(if enabled { self.theme.COLOR_TEXT } else { self.theme.COLOR_GREY_600 }).bg(if selected { selected_bg } else { menu_bg });
+            let marker = if selected { &self.symbols.modal.selected } else { &self.symbols.modal.unselected };
+            let text = format!(" {marker} {:<width$}  ", item.label, width = label_width);
 
-                    ListItem::new(Line::from(Span::styled(text, style))).style(style)
-                })
-                .collect::<Vec<_>>(),
-        );
+            ListItem::new(Line::from(Span::styled(text, style))).style(style)
+        }));
         items.push(ListItem::new(Line::from(Span::styled("", Style::default().bg(menu_bg)))).style(Style::default().bg(menu_bg)));
 
         let block = Block::default()

@@ -1232,12 +1232,12 @@ impl App {
                 }
             },
             Focus::ModalDeleteBranch => {
-                if let Some(repo) = &self.repo {
-                    if let Some(alias) = self.graph_alias_at(self.graph_selected) {
-                        let current = get_current_branch(repo);
-                        let branch_names = self.graph_deletable_branch_choices(alias, current.as_deref());
-                        Self::wrap_modal_selection(&mut self.modal_delete_branch_selected, branch_names.len(), Direction::Up);
-                    }
+                if let Some(repo) = &self.repo
+                    && let Some(alias) = self.graph_alias_at(self.graph_selected)
+                {
+                    let current = get_current_branch(repo);
+                    let branch_names = self.graph_deletable_branch_choices(alias, current.as_deref());
+                    Self::wrap_modal_selection(&mut self.modal_delete_branch_selected, branch_names.len(), Direction::Up);
                 }
             },
             Focus::ModalDeleteTag => {
@@ -1322,12 +1322,12 @@ impl App {
                 }
             },
             Focus::ModalDeleteBranch => {
-                if let Some(repo) = &self.repo {
-                    if let Some(alias) = self.graph_alias_at(self.graph_selected) {
-                        let current = get_current_branch(repo);
-                        let branch_names = self.graph_deletable_branch_choices(alias, current.as_deref());
-                        Self::wrap_modal_selection(&mut self.modal_delete_branch_selected, branch_names.len(), Direction::Down);
-                    }
+                if let Some(repo) = &self.repo
+                    && let Some(alias) = self.graph_alias_at(self.graph_selected)
+                {
+                    let current = get_current_branch(repo);
+                    let branch_names = self.graph_deletable_branch_choices(alias, current.as_deref());
+                    Self::wrap_modal_selection(&mut self.modal_delete_branch_selected, branch_names.len(), Direction::Down);
                 }
             },
             Focus::ModalDeleteTag => {

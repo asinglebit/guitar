@@ -104,15 +104,11 @@ impl App {
                     self.finish_mouse_drag();
                 }
             },
-            MouseEventKind::ScrollUp => {
-                if self.context_menu.is_none() {
-                    self.handle_mouse_scroll(mouse_event.column, mouse_event.row, Direction::Up);
-                }
+            MouseEventKind::ScrollUp if self.context_menu.is_none() => {
+                self.handle_mouse_scroll(mouse_event.column, mouse_event.row, Direction::Up);
             },
-            MouseEventKind::ScrollDown => {
-                if self.context_menu.is_none() {
-                    self.handle_mouse_scroll(mouse_event.column, mouse_event.row, Direction::Down);
-                }
+            MouseEventKind::ScrollDown if self.context_menu.is_none() => {
+                self.handle_mouse_scroll(mouse_event.column, mouse_event.row, Direction::Down);
             },
             _ => {},
         }
@@ -765,7 +761,7 @@ impl App {
     }
 
     fn rounding_divide(numerator: usize, denominator: usize) -> usize {
-        if denominator == 0 { 0 } else { numerator.saturating_add(denominator / 2) / denominator }
+        numerator.saturating_add(denominator / 2).checked_div(denominator).unwrap_or(0)
     }
 
     fn apply_scrollbar_drag(&mut self, drag: ScrollbarDrag, row: u16) {

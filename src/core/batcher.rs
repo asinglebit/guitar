@@ -52,7 +52,7 @@ impl Batcher {
             };
 
             let Ok(info) = result else { continue };
-            out.push(WalkCommit { oid: Oid::from_bytes(info.id.as_slice()).unwrap(), parent_ids: info.parent_ids, commit_time: info.commit_time.map(Into::into) });
+            out.push(WalkCommit { oid: Oid::from_bytes(info.id.as_slice()).unwrap(), parent_ids: info.parent_ids, commit_time: info.commit_time });
         }
         out.len() - before
     }

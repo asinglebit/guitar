@@ -45,6 +45,10 @@ impl OidStore {
         self.len
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
     fn capacity(&self) -> usize {
         self.chunks.iter().map(Vec::capacity).sum()
     }

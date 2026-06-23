@@ -113,20 +113,14 @@ pub fn diff_to_hunks(diff: Diff) -> Result<Vec<Hunk>, git2::Error> {
     diff.print(Patch, |_, hunk_opt, line| {
         if let Some(hunk) = hunk_opt {
             hunks.push(Hunk {
-                header: HunkHeader {
-                    old_start: hunk.old_start(),
-                    old_lines: hunk.old_lines(),
-                    new_start: hunk.new_start(),
-                    new_lines: hunk.new_lines(),
-                    raw_header: sanitize(decode(hunk.header())).to_string(),
-                },
+                header: HunkHeader { old_start: hunk.old_start(), old_lines: hunk.old_lines(), new_start: hunk.new_start(), new_lines: hunk.new_lines(), raw_header: sanitize(decode(hunk.header())) },
                 lines: Vec::new(),
             });
         }
 
         // Lines arrive after their hunk header, so append to the latest hunk.
         if let Some(last) = hunks.last_mut() {
-            last.lines.push(LineChange { origin: line.origin(), content: sanitize(decode(line.content())).to_string() });
+            last.lines.push(LineChange { origin: line.origin(), content: sanitize(decode(line.content())) });
         }
 
         true
