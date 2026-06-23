@@ -271,10 +271,11 @@ impl Buffer {
         }
 
         // Planned mergers split a lane so the second parent can draw toward its target later.
-        if let Some(merger_idx) = self.curr.iter().position(|inner| self.mergers.iter().any(|alias| *alias == inner.alias)) {
-            if let Some(merger_pos) = self.mergers.iter().position(|alias| *alias == self.curr[merger_idx].alias) {
-                self.mergers.remove(merger_pos);
-            }
+        if !self.mergers.is_empty()
+            && let Some(merger_idx) = self.curr.iter().position(|inner| self.mergers.iter().any(|alias| *alias == inner.alias))
+        {
+            let merger_alias = self.curr[merger_idx].alias;
+            self.mergers.retain(|alias| *alias != merger_alias);
 
             let mut clone = self.curr[merger_idx].clone();
             clone.parent_a = clone.parent_b;
@@ -378,6 +379,9 @@ impl Buffer {
     }
 
     fn purge_unstored_mergers(&mut self) {
+        if self.mergers.is_empty() {
+            return;
+        }
         self.mergers.retain(|alias| self.curr.iter().any(|chunk| !chunk.is_dummy() && chunk.alias == *alias));
     }
 

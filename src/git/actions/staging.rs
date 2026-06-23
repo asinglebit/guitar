@@ -51,8 +51,7 @@ fn stage_submodule_pointer_change(repo: &Repository, submodule: &crate::core::su
     let path = submodule.path.as_path();
     let name = submodule.name.as_str();
     let status = submodule_status_for(repo, name, path);
-    let has_pointer_change =
-        status.is_wd_added() || status.is_wd_deleted() || status.is_wd_modified() || submodule.workdir.zip(submodule.index).is_some_and(|(workdir, index)| workdir != index);
+    let has_pointer_change = status.is_wd_added() || status.is_wd_deleted() || status.is_wd_modified() || submodule.workdir.zip(submodule.index).is_some_and(|(workdir, index)| workdir != index);
 
     if !has_pointer_change {
         return Ok(());

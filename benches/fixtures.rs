@@ -407,6 +407,32 @@ pub fn repo_walk_many_refs_fixture(commits: usize, refs: usize, amount: usize) -
 }
 
 #[allow(dead_code)]
+pub fn repo_walk_many_tags_fixture(commits: usize, tags: usize, amount: usize) -> RepoWalkFixture {
+    let (temp, mut repo) = repo_walk_repo("repo-walk-many-tags");
+    let sig = signature();
+    let mut tips = Vec::with_capacity(commits);
+    let mut parent = commit_worktree(&mut repo, "root.txt", "root", &sig, &[]);
+    tips.push(parent);
+
+    for index in 1..commits {
+        parent = commit_worktree(&mut repo, &format!("linear-{index}.txt"), &format!("linear {index}"), &sig, &[parent]);
+        tips.push(parent);
+    }
+
+    for index in 0..tags {
+        let oid = tips[index % tips.len()];
+        let commit = repo.find_commit(oid).unwrap();
+        if index.is_multiple_of(2) {
+            repo.tag_lightweight(&format!("lightweight-{index:04}"), commit.as_object(), false).unwrap();
+        } else {
+            repo.tag(&format!("annotated-{index:04}"), commit.as_object(), &sig, &format!("annotated {index}"), false).unwrap();
+        }
+    }
+
+    repo_walk_fixture(temp, amount, HashSet::new(), commits)
+}
+
+#[allow(dead_code)]
 pub fn repo_walk_hidden_branches_fixture(visible_commits: usize, hidden_branches: usize, hidden_commits: usize, amount: usize) -> RepoWalkFixture {
     let (temp, mut repo) = repo_walk_repo("repo-walk-hidden");
     let sig = signature();
