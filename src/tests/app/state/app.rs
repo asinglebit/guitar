@@ -1,7 +1,7 @@
 use super::*;
 use crate::core::graph_service::{GraphCommand, GraphEvent, GraphFileHistoryRow, GraphLookupKind, GraphLookupResult, GraphPane, GraphRow};
 use crate::git::queries::helpers::{FileStatus, UncommittedChanges};
-use crate::git::test_support::{TestDir, commit_file, init_repo_at, parent_with_submodule, stage_path, write_workdir_file};
+use crate::git::test_support::{TestDir, commit_file, parent_with_submodule, stage_path, temp_repo, write_workdir_file};
 use git2::Repository;
 use ratatui::{Terminal, backend::TestBackend, layout::Rect};
 use std::{
@@ -13,12 +13,6 @@ use std::{
     },
     time::{Duration, Instant},
 };
-
-fn temp_repo(name: &str) -> (TestDir, Repository) {
-    let dir = TestDir::new(name);
-    let repo = init_repo_at(dir.path());
-    (dir, repo)
-}
 
 fn app_with_repo(repo: Rc<Repository>) -> App {
     App { repo: Some(crate::app::app::RepoHandle::from_repo(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() }

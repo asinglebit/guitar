@@ -1,69 +1,23 @@
 use super::*;
-use crate::app::app::{RemoteInputAction, SettingsSelection, SettingsSelectionKind, Viewport};
+use crate::app::app::{RemoteInputAction, RepoHandle, SettingsSelection, SettingsSelectionKind, Viewport};
 use crate::core::graph_service::GraphCommand;
 use crate::git::actions::network::NetworkRequest;
 use crate::git::queries::remotes::{GUITAR_DEFAULT_REMOTE_CONFIG, PUSH_DEFAULT_CONFIG};
+use crate::git::test_support::{commit_named_files as commit_files, temp_repo};
 use crate::helpers::keymap::{Command, InputMode, KeyBinding, Keymaps};
-use git2::{Repository, Signature};
+use git2::Repository;
 use indexmap::IndexMap;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use std::{
-    fs,
-    path::{Path, PathBuf},
-    rc::Rc,
-    time::{SystemTime, UNIX_EPOCH},
-};
-
-fn temp_repo(name: &str) -> (PathBuf, Repository) {
-    let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-    let path = std::env::temp_dir().join(format!("guitar-input-modals-{name}-{id}"));
-    fs::create_dir_all(&path).unwrap();
-    let repo = Repository::init(&path).unwrap();
-    {
-        let mut config = repo.config().unwrap();
-        config.set_str("user.name", "Test User").unwrap();
-        config.set_str("user.email", "test@example.com").unwrap();
-    }
-    (path, repo)
-}
-
-fn write_file(root: &Path, file: &str) {
-    let path = root.join(file);
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).unwrap();
-    }
-    fs::write(path, "content\n").unwrap();
-}
-
-fn commit_files(repo: &Repository, files: &[&str], message: &str) {
-    let workdir = repo.workdir().unwrap().to_path_buf();
-    for file in files {
-        write_file(&workdir, file);
-    }
-
-    let mut index = repo.index().unwrap();
-    for file in files {
-        index.add_path(Path::new(file)).unwrap();
-    }
-    index.write().unwrap();
-    let tree_oid = index.write_tree().unwrap();
-    let tree = repo.find_tree(tree_oid).unwrap();
-    let sig = Signature::now("Test User", "test@example.com").unwrap();
-    let parent = repo.head().ok().and_then(|head| head.peel_to_commit().ok());
-    let parents: Vec<&git2::Commit<'_>> = parent.iter().collect();
-    repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents).unwrap();
-}
+use std::{path::PathBuf, rc::Rc};
 
 fn modal_app(name: &str) -> App {
     let (_path, repo) = temp_repo(name);
     commit_files(&repo, &["src/app/draw/search.rs", "src/app/draw/status.rs", "src/app/draw/stashes.rs"], "files");
-    App {
-        repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))),
-        viewport: Viewport::Graph,
-        focus: Focus::ModalFileSearch,
-        modal_file_search_return_focus: Focus::Branches,
-        ..Default::default()
-    }
+    App { repo: Some(repo_handle(repo)), viewport: Viewport::Graph, focus: Focus::ModalFileSearch, modal_file_search_return_focus: Focus::Branches, ..Default::default() }
+}
+
+fn repo_handle(repo: Repository) -> RepoHandle {
+    RepoHandle::from_repo(Rc::new(repo))
 }
 
 fn key(code: KeyCode, modifiers: KeyModifiers) -> KeyEvent {
@@ -95,7 +49,7 @@ fn shutdown_graph_worker(app: &mut App) {
 #[test]
 fn file_search_esc_closes_and_restores_prior_focus() {
     let (_path, repo) = temp_repo("esc");
-    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), viewport: Viewport::Graph, focus: Focus::Reflogs, ..Default::default() };
+    let mut app = App { repo: Some(repo_handle(repo)), viewport: Viewport::Graph, focus: Focus::Reflogs, ..Default::default() };
     app.on_find_file();
     app.modal_input.set_value("search");
     app.modal_file_search_results.push(crate::git::queries::files::FileSearchResult { path: "src/app/draw/search.rs".to_string(), score: 1, matched_indices: vec![13] });
@@ -189,7 +143,7 @@ fn rename_branch_submit_renames_and_clears_modal_state() {
     let mut app = App {
         path: Some(path.display().to_string()),
         recent: vec![path.display().to_string()],
-        repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))),
+        repo: Some(repo_handle(repo)),
         viewport: Viewport::Graph,
         focus: Focus::ModalRenameBranch,
         modal_rename_branch_source: Some("feature".to_string()),
@@ -217,13 +171,7 @@ fn rename_branch_error_returns_to_input_with_text_preserved() {
     repo.branch("existing", &target, false).unwrap();
     drop(target);
 
-    let mut app = App {
-        repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))),
-        viewport: Viewport::Graph,
-        focus: Focus::ModalRenameBranch,
-        modal_rename_branch_source: Some("feature".to_string()),
-        ..Default::default()
-    };
+    let mut app = App { repo: Some(repo_handle(repo)), viewport: Viewport::Graph, focus: Focus::ModalRenameBranch, modal_rename_branch_source: Some("feature".to_string()), ..Default::default() };
     app.modal_input.set_value("existing");
 
     app.handle_modal_key_event(key(KeyCode::Enter, KeyModifiers::NONE));
@@ -242,13 +190,7 @@ fn rename_branch_error_returns_to_input_with_text_preserved() {
 #[test]
 fn rename_branch_esc_closes_and_clears_modal_state() {
     let (_path, repo) = temp_repo("rename-esc");
-    let mut app = App {
-        repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))),
-        viewport: Viewport::Graph,
-        focus: Focus::ModalRenameBranch,
-        modal_rename_branch_source: Some("feature".to_string()),
-        ..Default::default()
-    };
+    let mut app = App { repo: Some(repo_handle(repo)), viewport: Viewport::Graph, focus: Focus::ModalRenameBranch, modal_rename_branch_source: Some("feature".to_string()), ..Default::default() };
     app.modal_input.set_value("topic");
 
     app.handle_modal_key_event(key(KeyCode::Esc, KeyModifiers::NONE));
@@ -261,15 +203,9 @@ fn rename_branch_esc_closes_and_clears_modal_state() {
 fn remote_app(name: &str) -> (PathBuf, App) {
     let (path, repo) = temp_repo(name);
     commit_files(&repo, &["file.txt"], "initial");
+    let path = path.path().to_path_buf();
     let path_string = path.display().to_string();
-    let app = App {
-        path: Some(path_string.clone()),
-        recent: vec![path_string],
-        repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))),
-        viewport: Viewport::Settings,
-        focus: Focus::Viewport,
-        ..Default::default()
-    };
+    let app = App { path: Some(path_string.clone()), recent: vec![path_string], repo: Some(repo_handle(repo)), viewport: Viewport::Settings, focus: Focus::Viewport, ..Default::default() };
     (path, app)
 }
 
@@ -375,7 +311,7 @@ fn graph_lane_limit_shortcut_reloads_open_repo_and_preserves_settings_position()
     let mut app = App {
         path: Some(repo_path.clone()),
         recent: vec![repo_path],
-        repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))),
+        repo: Some(repo_handle(repo)),
         viewport: Viewport::Settings,
         focus: Focus::Viewport,
         settings_selected: 12,
@@ -406,7 +342,7 @@ fn graph_lane_limit_input_reloads_open_repo_and_preserves_settings_position() {
     let mut app = App {
         path: Some(repo_path.clone()),
         recent: vec![repo_path],
-        repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))),
+        repo: Some(repo_handle(repo)),
         viewport: Viewport::Settings,
         focus: Focus::ModalGraphLaneLimit,
         settings_selected: 12,

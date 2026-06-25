@@ -1,5 +1,5 @@
 use super::*;
-use crate::app::app::{GraphWindowCache, PaneWindowCache};
+use crate::app::app::{GraphWindowCache, PaneWindowCache, RepoHandle};
 use crate::core::{
     chunk::{LaneRef, NONE},
     graph_service::{GraphCommand, GraphEvent, GraphFileHistoryRow, GraphLookupKind, GraphLookupResult, GraphPane, GraphPaneRow, GraphReflogLabel, GraphRow},
@@ -11,6 +11,7 @@ use crate::{
         state::layout::Layout,
     },
     git::queries::helpers::FileStatus,
+    git::test_support::{commit_named_file as commit_file, temp_json_path, temp_named_dir, temp_repo},
     helpers::{
         keymap::{Command, InputMode, KeyBinding, KeymapSelection, Keymaps, load_keymaps_from_path},
         layout::LayoutConfig,
@@ -18,7 +19,6 @@ use crate::{
         symbols::SymbolTheme,
     },
 };
-use git2::{Repository, Signature};
 use indexmap::IndexMap;
 use ratatui::{
     crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
@@ -28,29 +28,26 @@ use std::{
     fs,
     path::{Path, PathBuf},
     rc::Rc,
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 fn temp_non_repo_path(name: &str) -> String {
-    let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-    let path = std::env::temp_dir().join(format!("guitar-input-navigation-{name}-{id}"));
-    fs::create_dir_all(&path).unwrap();
-    path.display().to_string()
+    temp_named_dir("guitar-input-navigation", name).display().to_string()
 }
 
 fn temp_keymap_path(name: &str) -> std::path::PathBuf {
-    let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-    std::env::temp_dir().join(format!("guitar-input-navigation-{name}-{id}")).join("keymap.json")
+    temp_named_dir("guitar-input-navigation", name).join("keymap.json")
 }
 
 fn temp_recent_path(name: &str) -> std::path::PathBuf {
-    let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-    std::env::temp_dir().join(format!("guitar-input-navigation-{name}-{id}")).join("recent.json")
+    temp_named_dir("guitar-input-navigation", name).join("recent.json")
 }
 
 fn temp_language_path(name: &str) -> std::path::PathBuf {
-    let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-    std::env::temp_dir().join(format!("guitar-input-navigation-{name}-{id}")).join("language.json")
+    temp_named_dir("guitar-input-navigation", name).join("language.json")
+}
+
+fn repo_handle(repo: git2::Repository) -> RepoHandle {
+    RepoHandle::from_repo(Rc::new(repo))
 }
 
 fn minimal_keymaps() -> Keymaps {
@@ -63,29 +60,6 @@ fn minimal_keymaps() -> Keymaps {
     maps.insert(InputMode::Normal, normal);
     maps.insert(InputMode::Action, action);
     maps
-}
-
-fn temp_repo(name: &str) -> (std::path::PathBuf, Repository) {
-    let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-    let path = std::env::temp_dir().join(format!("guitar-input-navigation-{name}-{id}"));
-    fs::create_dir_all(&path).unwrap();
-    let repo = crate::git::test_support::init_repo_at(&path);
-    (path, repo)
-}
-
-fn commit_file(repo: &Repository, file: &str, message: &str) -> git2::Oid {
-    let workdir = repo.workdir().unwrap().to_path_buf();
-    fs::write(workdir.join(file), format!("{message}\n")).unwrap();
-
-    let mut index = repo.index().unwrap();
-    index.add_path(Path::new(file)).unwrap();
-    index.write().unwrap();
-    let tree_oid = index.write_tree().unwrap();
-    let tree = repo.find_tree(tree_oid).unwrap();
-    let sig = Signature::now("Test User", "test@example.com").unwrap();
-    let parent = repo.head().ok().and_then(|head| head.peel_to_commit().ok());
-    let parents: Vec<&git2::Commit<'_>> = parent.iter().collect();
-    repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents).unwrap()
 }
 
 fn recent_repo_keymaps() -> Keymaps {
@@ -196,8 +170,7 @@ fn graph_app_with_history() -> (App, git2::Oid, git2::Oid, git2::Oid) {
     let parent_oid = commit_file(&repo, "parent.txt", "parent");
     let child_oid = commit_file(&repo, "child.txt", "child");
 
-    let mut app =
-        App { path: Some(path.display().to_string()), repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+    let mut app = App { path: Some(path.display().to_string()), repo: Some(repo_handle(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
     let root_alias = app.oids.get_alias_by_oid(root_oid);
     let parent_alias = app.oids.get_alias_by_oid(parent_oid);
     let child_alias = app.oids.get_alias_by_oid(child_oid);
@@ -522,7 +495,7 @@ fn branch_toggle_uses_git_branch_universe_when_pane_window_is_partial() {
 
     let mut app = App {
         path: Some(path.display().to_string()),
-        repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))),
+        repo: Some(repo_handle(repo)),
         recent_save_path: Some(temp_recent_path("branch-window-toggle")),
         viewport: Viewport::Graph,
         focus: Focus::Branches,
@@ -553,7 +526,7 @@ fn reload_all_branches_clears_hidden_branch_layer() {
 fn search_pane_navigation_uses_result_count() {
     let (_path, repo) = temp_repo("search-nav");
     let oid = commit_file(&repo, "target.txt", "target");
-    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), focus: Focus::Search, ..Default::default() };
+    let mut app = App { repo: Some(repo_handle(repo)), focus: Focus::Search, ..Default::default() };
     app.layout.search.height = 5;
     app.search_rows = (0..10).map(|idx| search_history_row(idx, oid)).collect();
 
@@ -615,7 +588,7 @@ fn splash_recent_repository_cases_cover_remove_move_and_boundaries() {
     let current = repo_path.display().to_string();
     let (mut app, path) = splash_recent_app(&[current.as_str(), "/repo/other"], 0, "remove-current");
     app.path = Some(current.clone());
-    app.repo = Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo)));
+    app.repo = Some(repo_handle(repo));
     assert_splash_recent_case("remove-current", app, path, remove_recent_repository, &["/repo/other"], 0, true, Some(current.as_str()), true);
 
     let (app, path) = splash_recent_app(&[], 7, "remove-empty");
@@ -663,7 +636,7 @@ fn settings_recent_repository_cases_cover_remove_move_and_noops() {
 #[test]
 fn empty_branch_pane_select_and_narrow_are_noops() {
     let (_path, repo) = temp_repo("empty-branches");
-    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), viewport: Viewport::Graph, focus: Focus::Branches, ..Default::default() };
+    let mut app = App { repo: Some(repo_handle(repo)), viewport: Viewport::Graph, focus: Focus::Branches, ..Default::default() };
 
     app.on_select();
     assert_eq!(app.focus, Focus::Branches);
@@ -675,7 +648,7 @@ fn empty_branch_pane_select_and_narrow_are_noops() {
 fn assert_offscreen_pane_narrow_requests_walker_row(focus: Focus, pane: GraphPane, selection: usize) {
     let (_path, repo) = temp_repo("offscreen-pane");
     let (tx, rx) = std::sync::mpsc::channel();
-    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), graph_tx: Some(tx), viewport: Viewport::Graph, focus, ..Default::default() };
+    let mut app = App { repo: Some(repo_handle(repo)), graph_tx: Some(tx), viewport: Viewport::Graph, focus, ..Default::default() };
     app.graph.generation = 7;
 
     match pane {
@@ -711,7 +684,7 @@ fn offscreen_pane_narrow_requests_selected_row_from_walker() {
 fn offscreen_graph_narrow_requests_row_before_opening_inspector() {
     let (_path, repo) = temp_repo("offscreen-inspector");
     let (tx, rx) = std::sync::mpsc::channel();
-    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), graph_tx: Some(tx), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+    let mut app = App { repo: Some(repo_handle(repo)), graph_tx: Some(tx), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
     app.graph.generation = 7;
     app.graph_selected = 42;
     app.layout_config.is_zen = false;
@@ -735,7 +708,7 @@ fn offscreen_graph_narrow_requests_row_before_opening_inspector() {
 fn zen_offscreen_graph_narrow_opens_inspector_while_requesting_row() {
     let (_path, repo) = temp_repo("zen-offscreen-inspector");
     let (tx, rx) = std::sync::mpsc::channel();
-    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), graph_tx: Some(tx), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+    let mut app = App { repo: Some(repo_handle(repo)), graph_tx: Some(tx), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
     app.graph.generation = 7;
     app.graph_selected = 42;
     app.layout_config.is_zen = true;
@@ -760,7 +733,7 @@ fn zen_graph_narrow_promotes_cached_window_row_before_opening_inspector() {
     let (_path, repo) = temp_repo("zen-cached-inspector");
     let oid = commit_file(&repo, "cached.txt", "cached");
     let (tx, rx) = std::sync::mpsc::channel();
-    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), graph_tx: Some(tx), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+    let mut app = App { repo: Some(repo_handle(repo)), graph_tx: Some(tx), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
     app.graph.generation = 7;
     app.graph.total = 43;
     app.graph_selected = 42;
@@ -880,7 +853,7 @@ fn zen_pane_row_jump_uses_inner_graph_height_for_centering() {
 fn pane_alias_fallback_jump_centers_selected_graph_row() {
     let (_path, repo) = temp_repo("pane-alias-center");
     let oid = commit_file(&repo, "feature.txt", "feature");
-    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), viewport: Viewport::Graph, focus: Focus::Branches, ..Default::default() };
+    let mut app = App { repo: Some(repo_handle(repo)), viewport: Viewport::Graph, focus: Focus::Branches, ..Default::default() };
     let alias = app.oids.get_alias_by_oid(oid);
     app.oids.sorted_aliases = vec![NONE; 100];
     app.oids.sorted_aliases[40] = alias;
@@ -927,15 +900,7 @@ fn settings_tab_commands_cycle_tabs_and_reset_selection() {
     let mut keymaps = minimal_keymaps();
     keymaps.get_mut(&InputMode::Normal).unwrap().insert(KeyBinding::new(KeyCode::Tab, KeyModifiers::NONE), Command::FocusNextPane);
     keymaps.get_mut(&InputMode::Normal).unwrap().insert(KeyBinding::new(KeyCode::BackTab, KeyModifiers::SHIFT), Command::FocusPreviousPane);
-    let mut app = App {
-        repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))),
-        viewport: Viewport::Settings,
-        focus: Focus::Viewport,
-        settings_tab: SettingsTab::General,
-        settings_selected: 99,
-        keymaps,
-        ..Default::default()
-    };
+    let mut app = App { repo: Some(repo_handle(repo)), viewport: Viewport::Settings, focus: Focus::Viewport, settings_tab: SettingsTab::General, settings_selected: 99, keymaps, ..Default::default() };
     app.layout.graph = Rect::new(0, 0, 120, 40);
     app.layout.app = Rect::new(0, 0, 120, 40);
     app.settings_scroll.set(12);
@@ -995,10 +960,7 @@ fn settings_selection_cases_cover_layout_theme_language_and_reset() {
         |app| assert!(app.layout_config.is_submodules),
     );
 
-    let symbol_theme_path = {
-        let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-        std::env::temp_dir().join(format!("guitar-symbol-theme-select-{id}.json"))
-    };
+    let symbol_theme_path = temp_json_path("guitar-symbol-theme-select", "settings");
     assert_settings_selection_case(
         "symbol-theme-selection",
         SettingsSelectionKind::SymbolTheme(1),
@@ -1117,15 +1079,7 @@ fn graph_reflog_shift_digit_shortcut_toggles_and_reloads() {
     let path = path.display().to_string();
     let mut keymaps = minimal_keymaps();
     keymaps.get_mut(&InputMode::Normal).unwrap().insert(KeyBinding::new(KeyCode::Char('0'), KeyModifiers::SHIFT), Command::ToggleGraphReflogs);
-    let mut app = App {
-        path: Some(path.clone()),
-        recent: vec![path],
-        repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))),
-        viewport: Viewport::Graph,
-        focus: Focus::Branches,
-        keymaps,
-        ..Default::default()
-    };
+    let mut app = App { path: Some(path.clone()), recent: vec![path], repo: Some(repo_handle(repo)), viewport: Viewport::Graph, focus: Focus::Branches, keymaps, ..Default::default() };
     app.layout_config.is_graph_reflogs = false;
 
     app.handle_key_event(KeyEvent::new(KeyCode::Char('0'), KeyModifiers::SHIFT));
