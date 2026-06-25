@@ -1,11 +1,8 @@
 use crate::{
     app::app::{App, Focus, RemoteInputAction},
-    git::{
-        actions::{
-            network::NetworkRequest,
-            remotes::{add_remote, delete_remote, rename_remote, set_default_remote, set_remote_push_url, set_remote_url},
-        },
-        queries::remotes::list_remotes,
+    git::actions::{
+        network::NetworkRequest,
+        remotes::{add_remote, delete_remote, rename_remote, set_default_remote, set_remote_push_url, set_remote_url},
     },
     helpers::{
         branch_visibility::save_branch_visibility,
@@ -137,21 +134,12 @@ impl App {
     }
 
     fn prefill_remote_url(&mut self, push_url: bool) {
-        let Some(repo) = self.repo.clone() else {
-            self.modal_input.clear();
-            return;
-        };
         let Some(target) = self.modal_remote_target.as_deref() else {
             self.modal_input.clear();
             return;
         };
 
-        let repo_path = repo.workdir().unwrap_or(repo.path());
-        let value = list_remotes(repo_path)
-            .ok()
-            .and_then(|remotes| remotes.into_iter().find(|remote| remote.name == target))
-            .map(|remote| if push_url { remote.push_url.unwrap_or_default() } else { remote.url })
-            .unwrap_or_default();
+        let value = self.remotes.iter().find(|remote| remote.name == target).map(|remote| if push_url { remote.push_url.clone().unwrap_or_default() } else { remote.url.clone() }).unwrap_or_default();
         self.modal_input.set_value(value);
     }
 
@@ -271,14 +259,10 @@ impl App {
 
     fn rewrite_hidden_remote_prefix(&mut self, old_remote: &str, new_remote: Option<&str>) {
         let prefix = format!("{old_remote}/");
-        let updated = self
-            .branches
-            .hidden_branch_names
-            .iter()
-            .filter_map(|name| if let Some(suffix) = name.strip_prefix(&prefix) { new_remote.map(|remote| format!("{remote}/{suffix}")) } else { Some(name.clone()) })
+        self.branches.hidden_branch_names = std::mem::take(&mut self.branches.hidden_branch_names)
+            .into_iter()
+            .filter_map(|name| if name.starts_with(&prefix) { new_remote.map(|remote| format!("{remote}/{}", &name[prefix.len()..])) } else { Some(name) })
             .collect();
-
-        self.branches.hidden_branch_names = updated;
         if let Some(path) = &self.path {
             save_branch_visibility(path, &self.branches.hidden_branch_names);
         }

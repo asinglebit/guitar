@@ -29,17 +29,20 @@ impl App {
             return;
         }
 
-        let command = self.keymaps.get(&self.mode).and_then(|mode_map| command_for_key_binding(mode_map, &key_binding));
-        if let Some(command) = command {
-            if self.viewport == Viewport::Splash && self.focus == Focus::Viewport {
-                self.dispatch_splash_command(&command);
-            } else {
-                self.dispatch_command(&command);
-            }
+        if let Some(command) = self.keymaps.get(&self.mode).and_then(|mode_map| command_for_key_binding(mode_map, &key_binding)) {
+            self.dispatch_keymap_command(&command);
         }
 
         if current_mode == InputMode::Action {
             self.mode = InputMode::Normal;
+        }
+    }
+
+    fn dispatch_keymap_command(&mut self, command: &Command) {
+        if self.viewport == Viewport::Splash && self.focus == Focus::Viewport {
+            self.dispatch_splash_command(command);
+        } else {
+            self.dispatch_command(command);
         }
     }
 

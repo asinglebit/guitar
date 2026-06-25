@@ -40,8 +40,17 @@ pub enum ViewerMode {
 
 impl Default for App {
     fn default() -> Self {
+        Self::with_symbol_theme_loaded(SymbolTheme::default(), false)
+    }
+}
+
+impl App {
+    pub fn with_symbol_theme(symbols: SymbolTheme) -> Self {
+        Self::with_symbol_theme_loaded(symbols, true)
+    }
+
+    fn with_symbol_theme_loaded(symbols: SymbolTheme, symbol_theme_loaded: bool) -> Self {
         let theme = Theme::default();
-        let symbols = SymbolTheme::default();
         let language = Language::English;
         set_active_language(language);
         let color = Rc::new(RefCell::new(ColorPicker::from_theme(&theme)));
@@ -63,8 +72,10 @@ impl Default for App {
             last_input_direction: None,
             theme,
             symbols,
+            symbol_theme_loaded,
             language,
             heatmap,
+            remotes: Vec::new(),
 
             // User
             name: String::new(),
@@ -74,6 +85,7 @@ impl Default for App {
             color,
             graph: Default::default(),
             graph_tx: None,
+            graph_event_tx: None,
             graph_rx: None,
             walker_cancel: None,
             walker_handle: None,
@@ -93,6 +105,8 @@ impl Default for App {
             current_diff: Vec::new(),
             current_diff_identity: None,
             is_uncommitted_loaded: false,
+            is_uncommitted_detail_loaded: false,
+            is_uncommitted_detail_loading: false,
             file_name: None,
             viewer_lines: Vec::new(),
             viewer_split_rows: Vec::new(),

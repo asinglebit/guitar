@@ -55,7 +55,7 @@ impl App {
     }
 
     fn save_keymaps_for_app(&self, keymaps: &crate::helpers::keymap::Keymaps) -> Result<(), Box<dyn std::error::Error>> {
-        if let Some(path) = &self.keymap_save_path { save_keymaps_to_path(path.as_path(), keymaps) } else { save_keymaps(keymaps) }
+        self.keymap_save_path.as_ref().map_or_else(|| save_keymaps(keymaps), |path| save_keymaps_to_path(path.as_path(), keymaps))
     }
 
     fn confirm_key_capture(&mut self) {
@@ -623,8 +623,9 @@ impl App {
                             self.current_diff_identity = None;
                             if let Some(repo) = self.repo.clone()
                                 && let Some(identity) = self.graph_identity_at(self.graph_selected)
+                                && let Some(oid) = self.graph_oid_for_identity(identity)
                             {
-                                self.current_diff = get_filenames_diff_at_oid(&repo, identity.oid);
+                                self.current_diff = get_filenames_diff_at_oid(&repo, oid);
                                 self.current_diff_identity = Some(identity);
                             }
                             self.modal_input.clear();

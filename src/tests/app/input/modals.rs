@@ -57,7 +57,13 @@ fn commit_files(repo: &Repository, files: &[&str], message: &str) {
 fn modal_app(name: &str) -> App {
     let (_path, repo) = temp_repo(name);
     commit_files(&repo, &["src/app/draw/search.rs", "src/app/draw/status.rs", "src/app/draw/stashes.rs"], "files");
-    App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::ModalFileSearch, modal_file_search_return_focus: Focus::Branches, ..Default::default() }
+    App {
+        repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))),
+        viewport: Viewport::Graph,
+        focus: Focus::ModalFileSearch,
+        modal_file_search_return_focus: Focus::Branches,
+        ..Default::default()
+    }
 }
 
 fn key(code: KeyCode, modifiers: KeyModifiers) -> KeyEvent {
@@ -89,7 +95,7 @@ fn shutdown_graph_worker(app: &mut App) {
 #[test]
 fn file_search_esc_closes_and_restores_prior_focus() {
     let (_path, repo) = temp_repo("esc");
-    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Reflogs, ..Default::default() };
+    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), viewport: Viewport::Graph, focus: Focus::Reflogs, ..Default::default() };
     app.on_find_file();
     app.modal_input.set_value("search");
     app.modal_file_search_results.push(crate::git::queries::files::FileSearchResult { path: "src/app/draw/search.rs".to_string(), score: 1, matched_indices: vec![13] });
@@ -183,7 +189,7 @@ fn rename_branch_submit_renames_and_clears_modal_state() {
     let mut app = App {
         path: Some(path.display().to_string()),
         recent: vec![path.display().to_string()],
-        repo: Some(Rc::new(repo)),
+        repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))),
         viewport: Viewport::Graph,
         focus: Focus::ModalRenameBranch,
         modal_rename_branch_source: Some("feature".to_string()),
@@ -211,7 +217,13 @@ fn rename_branch_error_returns_to_input_with_text_preserved() {
     repo.branch("existing", &target, false).unwrap();
     drop(target);
 
-    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::ModalRenameBranch, modal_rename_branch_source: Some("feature".to_string()), ..Default::default() };
+    let mut app = App {
+        repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))),
+        viewport: Viewport::Graph,
+        focus: Focus::ModalRenameBranch,
+        modal_rename_branch_source: Some("feature".to_string()),
+        ..Default::default()
+    };
     app.modal_input.set_value("existing");
 
     app.handle_modal_key_event(key(KeyCode::Enter, KeyModifiers::NONE));
@@ -230,7 +242,13 @@ fn rename_branch_error_returns_to_input_with_text_preserved() {
 #[test]
 fn rename_branch_esc_closes_and_clears_modal_state() {
     let (_path, repo) = temp_repo("rename-esc");
-    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::ModalRenameBranch, modal_rename_branch_source: Some("feature".to_string()), ..Default::default() };
+    let mut app = App {
+        repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))),
+        viewport: Viewport::Graph,
+        focus: Focus::ModalRenameBranch,
+        modal_rename_branch_source: Some("feature".to_string()),
+        ..Default::default()
+    };
     app.modal_input.set_value("topic");
 
     app.handle_modal_key_event(key(KeyCode::Esc, KeyModifiers::NONE));
@@ -244,7 +262,14 @@ fn remote_app(name: &str) -> (PathBuf, App) {
     let (path, repo) = temp_repo(name);
     commit_files(&repo, &["file.txt"], "initial");
     let path_string = path.display().to_string();
-    let app = App { path: Some(path_string.clone()), recent: vec![path_string], repo: Some(Rc::new(repo)), viewport: Viewport::Settings, focus: Focus::Viewport, ..Default::default() };
+    let app = App {
+        path: Some(path_string.clone()),
+        recent: vec![path_string],
+        repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))),
+        viewport: Viewport::Settings,
+        focus: Focus::Viewport,
+        ..Default::default()
+    };
     (path, app)
 }
 
@@ -350,7 +375,7 @@ fn graph_lane_limit_shortcut_reloads_open_repo_and_preserves_settings_position()
     let mut app = App {
         path: Some(repo_path.clone()),
         recent: vec![repo_path],
-        repo: Some(Rc::new(repo)),
+        repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))),
         viewport: Viewport::Settings,
         focus: Focus::Viewport,
         settings_selected: 12,
@@ -381,7 +406,7 @@ fn graph_lane_limit_input_reloads_open_repo_and_preserves_settings_position() {
     let mut app = App {
         path: Some(repo_path.clone()),
         recent: vec![repo_path],
-        repo: Some(Rc::new(repo)),
+        repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))),
         viewport: Viewport::Settings,
         focus: Focus::ModalGraphLaneLimit,
         settings_selected: 12,

@@ -6,7 +6,11 @@ use crate::{
         walker::Walker,
         worktrees::{WorktreeEntry, Worktrees},
     },
-    git::queries::{file_history::changed_file_status_at_commit_from_repo, helpers::FileStatus, reflogs::HeadReflogEntry},
+    git::queries::{
+        file_history::changed_file_status_at_commit_from_repo,
+        helpers::{FileStatus, UncommittedChanges},
+        reflogs::HeadReflogEntry,
+    },
     helpers::{
         heatmap::{DAYS, WEEKS},
         localisation::{empty, errors, status as status_text},
@@ -213,6 +217,8 @@ pub enum GraphEvent {
     FileHistory { generation: Generation, request_id: RequestId, path: String, rows: Vec<GraphFileHistoryRow>, error: Option<String> },
     LookupResult { generation: Generation, request_id: RequestId, result: GraphLookupResult },
     Worktrees { generation: Generation, version: GraphVersion, worktrees: Vec<WorktreeEntry> },
+    Uncommitted { generation: Generation, result: Result<UncommittedChanges, String> },
+    UncommittedDetails { generation: Generation, result: Result<UncommittedChanges, String> },
     Heatmap { generation: Generation, heatmap: [[usize; WEEKS]; DAYS] },
     Error { generation: Generation, message: String },
 }

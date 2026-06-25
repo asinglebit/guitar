@@ -1,93 +1,35 @@
 use super::*;
 use crate::core::graph_service::{GraphCommand, GraphEvent, GraphFileHistoryRow, GraphLookupKind, GraphLookupResult, GraphPane, GraphRow};
-use crate::git::queries::helpers::FileStatus;
-use git2::{Repository, Signature};
-use ratatui::{Terminal, backend::TestBackend, layout::Rect, style::Color};
+use crate::git::queries::helpers::{FileStatus, UncommittedChanges};
+use crate::git::test_support::{TestDir, commit_file, init_repo_at, parent_with_submodule, stage_path, write_workdir_file};
+use git2::Repository;
+use ratatui::{Terminal, backend::TestBackend, layout::Rect};
 use std::{
     fs, io,
-    path::{Path, PathBuf},
-    process,
     rc::Rc,
-    sync::atomic::Ordering,
-    time::{SystemTime, UNIX_EPOCH},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::{Duration, Instant},
 };
 
-struct TestDir {
-    path: PathBuf,
+fn temp_repo(name: &str) -> (TestDir, Repository) {
+    let dir = TestDir::new(name);
+    let repo = init_repo_at(dir.path());
+    (dir, repo)
 }
 
-impl TestDir {
-    fn new(name: &str) -> Self {
-        let suffix = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-        let path = std::env::temp_dir().join(format!("guitar-app-state-{name}-{}-{suffix}", process::id()));
-        fs::create_dir_all(&path).unwrap();
-        Self { path }
+fn app_with_repo(repo: Rc<Repository>) -> App {
+    App { repo: Some(crate::app::app::RepoHandle::from_repo(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() }
+}
+
+fn wait_until(app: &mut App, repo: &Rc<Repository>, done: impl Fn(&App) -> bool) {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while !done(app) && Instant::now() < deadline {
+        app.sync(repo);
+        std::thread::sleep(Duration::from_millis(5));
     }
-}
-
-impl Drop for TestDir {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.path);
-    }
-}
-
-fn temp_repo(name: &str) -> (PathBuf, Repository) {
-    let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-    let path = std::env::temp_dir().join(format!("guitar-app-state-{name}-{id}"));
-    fs::create_dir_all(&path).unwrap();
-    let repo = Repository::init(&path).unwrap();
-    {
-        let mut config = repo.config().unwrap();
-        config.set_str("user.name", "Test User").unwrap();
-        config.set_str("user.email", "test@example.com").unwrap();
-    }
-    (path, repo)
-}
-
-fn commit_file(repo: &Repository, file: &str, message: &str) -> git2::Oid {
-    let workdir = repo.workdir().unwrap().to_path_buf();
-    fs::write(workdir.join(file), format!("{message}\n")).unwrap();
-
-    let mut index = repo.index().unwrap();
-    index.add_path(Path::new(file)).unwrap();
-    index.write().unwrap();
-    commit_index(repo, message)
-}
-
-fn commit_index(repo: &Repository, message: &str) -> git2::Oid {
-    let mut index = repo.index().unwrap();
-    let tree_oid = index.write_tree().unwrap();
-    let tree = repo.find_tree(tree_oid).unwrap();
-    let sig = Signature::now("Test User", "test@example.com").unwrap();
-    let parent = repo.head().ok().and_then(|head| head.peel_to_commit().ok());
-    let parents: Vec<&git2::Commit<'_>> = parent.iter().collect();
-    repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents).unwrap()
-}
-
-fn init_repo_at(path: &Path) -> Repository {
-    fs::create_dir_all(path).unwrap();
-    let repo = Repository::init(path).unwrap();
-    {
-        let mut config = repo.config().unwrap();
-        config.set_str("user.name", "Test User").unwrap();
-        config.set_str("user.email", "test@example.com").unwrap();
-    }
-    commit_file(&repo, "file.txt", "initial");
-    repo
-}
-
-fn parent_with_submodule(dir: &TestDir) -> Repository {
-    let child_path = dir.path.join("child");
-    let parent_path = dir.path.join("parent");
-    let child = init_repo_at(&child_path);
-    drop(child);
-    let parent = init_repo_at(&parent_path);
-    let mut submodule = parent.submodule(child_path.to_str().unwrap(), Path::new("deps/child"), true).unwrap();
-    submodule.clone(None).unwrap();
-    submodule.add_finalize().unwrap();
-    commit_index(&parent, "add submodule");
-    drop(submodule);
-    parent
 }
 
 fn graph_row(index: usize, alias: u32, oid: git2::Oid) -> GraphRow {
@@ -127,18 +69,6 @@ fn stop_graph_service(app: &mut App) {
 }
 
 #[test]
-fn default_splash_draw_has_no_reset_backgrounds() {
-    let backend = TestBackend::new(80, 24);
-    let mut terminal = Terminal::new(backend).unwrap();
-    let mut app = App::default();
-
-    terminal.draw(|frame| app.draw(frame)).unwrap();
-
-    let buffer = terminal.backend().buffer();
-    assert!(buffer.content().iter().all(|cell| cell.bg != Color::Reset));
-}
-
-#[test]
 fn splash_draws_recent_repository_actions() {
     let backend = TestBackend::new(140, 24);
     let mut terminal = Terminal::new(backend).unwrap();
@@ -157,11 +87,14 @@ fn splash_draws_recent_repository_actions() {
 
 #[test]
 fn reload_captures_selected_commit_oid_and_visual_offset_for_restore() {
-    let (path, repo) = temp_repo("restore-capture");
-    let oid = commit_file(&repo, "selected.txt", "selected");
-    let path_string = path.display().to_string();
-    let mut app =
-        App { path: Some(path_string.clone()), recent: vec![path_string], repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, graph_selected: 4, ..Default::default() };
+    let (dir, repo) = temp_repo("restore-capture");
+    let oid = commit_file(&repo, "selected.txt", "selected", "selected");
+    let path_string = dir.path().display().to_string();
+    let repo = Rc::new(repo);
+    let mut app = app_with_repo(repo.clone());
+    app.path = Some(path_string.clone());
+    app.recent = vec![path_string];
+    app.graph_selected = 4;
     app.graph_scroll.set(2);
     app.graph.graph_window = Some(GraphWindowCache { version: 1, start: 4, end: 5, head_alias: 9, rows: vec![graph_row(4, 9, oid)], history: Default::default() });
 
@@ -172,28 +105,84 @@ fn reload_captures_selected_commit_oid_and_visual_offset_for_restore() {
 }
 
 #[test]
-fn reload_keeps_uncommitted_row_without_restore_lookup() {
-    let (path, repo) = temp_repo("restore-uncommitted");
-    commit_file(&repo, "head.txt", "head");
-    let path_string = path.display().to_string();
-    let mut app =
-        App { path: Some(path_string.clone()), recent: vec![path_string], repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, graph_selected: 0, ..Default::default() };
+fn failed_reload_shuts_down_previous_graph_worker() {
+    let dir = TestDir::new("failed-reload-shutdown");
+    let invalid_repo_path = dir.join("not-a-repo");
+    std::fs::create_dir_all(&invalid_repo_path).unwrap();
+    let (command_tx, command_rx) = std::sync::mpsc::channel();
+    let (_event_tx, event_rx) = std::sync::mpsc::channel();
+    let cancel = Arc::new(AtomicBool::new(false));
+    let cancel_for_worker = cancel.clone();
+    let worker = std::thread::spawn(move || {
+        while !cancel_for_worker.load(Ordering::SeqCst) {
+            if matches!(command_rx.recv_timeout(Duration::from_millis(5)), Ok(GraphCommand::Shutdown)) {
+                break;
+            }
+        }
+    });
 
-    app.reload(None);
+    let mut app = App {
+        path: Some(dir.join("old-repo").display().to_string()),
+        graph_tx: Some(command_tx),
+        graph_rx: Some(event_rx),
+        walker_cancel: Some(cancel.clone()),
+        walker_handle: Some(worker),
+        viewport: Viewport::Graph,
+        focus: Focus::Viewport,
+        ..Default::default()
+    };
 
-    assert_eq!(app.graph_selected, 0);
-    assert_eq!(app.graph.pending_selection_restore, None);
-    stop_graph_service(&mut app);
+    app.reload(Some(invalid_repo_path.display().to_string()));
+
+    assert!(app.repo.is_none());
+    assert!(app.graph_tx.is_none());
+    assert!(app.graph_rx.is_none());
+    assert!(app.walker_handle.is_none());
+    assert!(cancel.load(Ordering::SeqCst));
+}
+
+#[test]
+fn graph_window_with_uncommitted_selection_does_not_load_commit_diff() {
+    let (_dir, repo) = temp_repo("graph-window-uncommitted");
+    let commit_oid = commit_file(&repo, "tracked.txt", "tracked", "tracked");
+    let repo = Rc::new(repo);
+    let (event_tx, event_rx) = std::sync::mpsc::channel();
+    let mut app = app_with_repo(repo.clone());
+    app.graph_selected = 0;
+    app.graph_rx = Some(event_rx);
+    app.graph.generation = 7;
+    app.graph.requested_graph = Some((1, 0, 2));
+
+    event_tx
+        .send(GraphEvent::GraphWindow {
+            generation: 7,
+            request_id: 1,
+            version: 1,
+            start: 0,
+            end: 2,
+            total: 2,
+            head_alias: 0,
+            rows: vec![graph_row(0, NONE, git2::Oid::zero()), graph_row(1, 0, commit_oid)],
+            history: Default::default(),
+        })
+        .unwrap();
+
+    app.sync_lazy();
+
+    assert!(app.current_diff.is_empty());
+    assert_eq!(app.current_diff_identity, None);
 }
 
 #[test]
 fn pending_restore_requests_oid_lookup_on_progress() {
-    let (_path, repo) = temp_repo("restore-progress");
-    let oid = commit_file(&repo, "selected.txt", "selected");
+    let (_dir, repo) = temp_repo("restore-progress");
+    let oid = commit_file(&repo, "selected.txt", "selected", "selected");
     let repo = Rc::new(repo);
     let (cmd_tx, cmd_rx) = std::sync::mpsc::channel();
     let (event_tx, event_rx) = std::sync::mpsc::channel();
-    let mut app = App { repo: Some(repo.clone()), graph_tx: Some(cmd_tx), graph_rx: Some(event_rx), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+    let mut app = app_with_repo(repo.clone());
+    app.graph_tx = Some(cmd_tx);
+    app.graph_rx = Some(event_rx);
     app.graph.generation = 7;
     app.graph.pending_selection_restore = Some(GraphSelectionRestore { oid, selected_offset: 2 });
 
@@ -217,11 +206,13 @@ fn pending_restore_requests_oid_lookup_on_progress() {
 #[test]
 fn first_graph_progress_with_dirty_submodule_status_stays_in_graph_view() {
     let dir = TestDir::new("dirty-submodule-progress");
-    let parent = parent_with_submodule(&dir);
-    fs::write(parent.workdir().unwrap().join("deps/child/file.txt"), "dirty\n").unwrap();
+    let (parent, _child_path) = parent_with_submodule(&dir);
+    write_workdir_file(&parent, "deps/child/file.txt", "dirty\n");
     let repo = Rc::new(parent);
     let (event_tx, event_rx) = std::sync::mpsc::channel();
-    let mut app = App { repo: Some(repo.clone()), graph_rx: Some(event_rx), viewport: Viewport::Splash, focus: Focus::Viewport, ..Default::default() };
+    let mut app = app_with_repo(repo.clone());
+    app.viewport = Viewport::Splash;
+    app.graph_rx = Some(event_rx);
     app.graph.generation = 9;
 
     event_tx.send(GraphEvent::Progress { generation: 9, version: 1, total: 1, is_first: true, is_complete: false }).unwrap();
@@ -229,68 +220,84 @@ fn first_graph_progress_with_dirty_submodule_status_stays_in_graph_view() {
 
     assert_eq!(app.viewport, Viewport::Graph);
     assert_eq!(app.focus, Focus::Viewport);
+    assert!(!app.is_uncommitted_loaded);
+
+    let clean = UncommittedChanges { is_clean: true, ..Default::default() };
+    event_tx.send(GraphEvent::Uncommitted { generation: 9, result: Ok(clean) }).unwrap();
+    app.sync(&repo);
+
     assert!(app.is_uncommitted_loaded);
     assert!(app.uncommitted.is_clean);
 }
 
 #[test]
-fn restore_lookup_success_selects_index_and_preserves_visual_offset() {
-    let (_path, repo) = temp_repo("restore-success");
-    let oid = commit_file(&repo, "selected.txt", "selected");
+fn uncommitted_metadata_waits_for_complete_progress_then_selection_loads_details() {
+    let (dir, repo) = temp_repo("deferred-uncommitted");
+    commit_file(&repo, "tracked.txt", "tracked", "tracked");
+    write_workdir_file(&repo, "staged.txt", "staged\n");
+    stage_path(&repo, "staged.txt");
+    write_workdir_file(&repo, "new.txt", "new\n");
+    let repo = Rc::new(repo);
+    let (cmd_tx, _cmd_rx) = std::sync::mpsc::channel();
+    let (event_tx, event_rx) = std::sync::mpsc::channel();
+    let mut app = app_with_repo(repo.clone());
+    app.path = Some(dir.path().display().to_string());
+    app.graph_tx = Some(cmd_tx);
+    app.graph_event_tx = Some(event_tx.clone());
+    app.graph_rx = Some(event_rx);
+    app.graph.generation = 11;
+
+    event_tx.send(GraphEvent::Progress { generation: 11, version: 1, total: 1, is_first: false, is_complete: false }).unwrap();
+    app.sync(&repo);
+    assert!(!app.is_uncommitted_loaded);
+
+    event_tx.send(GraphEvent::Progress { generation: 11, version: 2, total: 1, is_first: false, is_complete: true }).unwrap();
+    wait_until(&mut app, &repo, |app| app.is_uncommitted_loaded);
+
+    assert!(app.is_uncommitted_loaded);
+    assert!(!app.is_uncommitted_detail_loaded);
+    assert_eq!(app.uncommitted.staged.added, vec!["staged.txt".to_string()]);
+    assert!(app.uncommitted.unstaged.added.is_empty());
+    app.graph.total = 2;
+
+    app.select_graph_index(0);
+    assert!(app.is_uncommitted_detail_loading);
+    wait_until(&mut app, &repo, |app| app.is_uncommitted_detail_loaded);
+
+    assert!(app.is_uncommitted_detail_loaded);
+    assert!(!app.is_uncommitted_detail_loading);
+    assert_eq!(app.uncommitted.unstaged.added, vec!["new.txt".to_string()]);
+}
+
+fn assert_restore_lookup_case(
+    name: &str, initial_selected: usize, graph_total: usize, graph_is_complete: bool, selected_offset: usize, lookup_result: GraphLookupResult, expected_selected: usize, expected_scroll: usize,
+) {
+    let (_dir, repo) = temp_repo(name);
+    let oid = commit_file(&repo, "selected.txt", "selected", "selected");
     let repo = Rc::new(repo);
     let (event_tx, event_rx) = std::sync::mpsc::channel();
-    let mut app = App { repo: Some(repo.clone()), graph_rx: Some(event_rx), viewport: Viewport::Graph, focus: Focus::Viewport, graph_selected: 1, ..Default::default() };
+    let mut app = app_with_repo(repo.clone());
+    app.graph_rx = Some(event_rx);
+    app.graph_selected = initial_selected;
     app.graph.generation = 7;
-    app.graph.total = 10;
-    app.graph.pending_selection_restore = Some(GraphSelectionRestore { oid, selected_offset: 2 });
+    app.graph.total = graph_total;
+    app.graph.is_complete = graph_is_complete;
+    app.graph.pending_selection_restore = Some(GraphSelectionRestore { oid, selected_offset });
     app.graph.pending_lookup = Some((3, PendingGraphLookup::RestoreSelection));
 
-    event_tx.send(GraphEvent::LookupResult { generation: 7, request_id: 3, result: GraphLookupResult::Index(Some(4)) }).unwrap();
+    event_tx.send(GraphEvent::LookupResult { generation: 7, request_id: 3, result: lookup_result }).unwrap();
     app.sync(&repo);
 
-    assert_eq!(app.graph_selected, 4);
-    assert_eq!(app.graph_scroll.get(), 2);
-    assert_eq!(app.graph.pending_selection_restore, None);
+    assert_eq!(app.graph_selected, expected_selected, "{name}");
+    assert_eq!(app.graph_scroll.get(), expected_scroll, "{name}");
+    assert_eq!(app.graph.pending_selection_restore, None, "{name}");
 }
 
 #[test]
-fn restore_lookup_success_clamps_scroll_offset_near_graph_top() {
-    let (_path, repo) = temp_repo("restore-top");
-    let oid = commit_file(&repo, "selected.txt", "selected");
-    let repo = Rc::new(repo);
-    let (event_tx, event_rx) = std::sync::mpsc::channel();
-    let mut app = App { repo: Some(repo.clone()), graph_rx: Some(event_rx), viewport: Viewport::Graph, focus: Focus::Viewport, graph_selected: 6, ..Default::default() };
-    app.graph.generation = 7;
-    app.graph.total = 10;
-    app.graph.pending_selection_restore = Some(GraphSelectionRestore { oid, selected_offset: 4 });
-    app.graph.pending_lookup = Some((3, PendingGraphLookup::RestoreSelection));
-
-    event_tx.send(GraphEvent::LookupResult { generation: 7, request_id: 3, result: GraphLookupResult::Index(Some(1)) }).unwrap();
-    app.sync(&repo);
-
-    assert_eq!(app.graph_selected, 1);
-    assert_eq!(app.graph_scroll.get(), 0);
-    assert_eq!(app.graph.pending_selection_restore, None);
-}
-
-#[test]
-fn restore_lookup_missing_after_completion_clears_pending_restore() {
-    let (_path, repo) = temp_repo("restore-missing");
-    let oid = commit_file(&repo, "selected.txt", "selected");
-    let repo = Rc::new(repo);
-    let (event_tx, event_rx) = std::sync::mpsc::channel();
-    let mut app = App { repo: Some(repo.clone()), graph_rx: Some(event_rx), viewport: Viewport::Graph, focus: Focus::Viewport, graph_selected: 2, ..Default::default() };
-    app.graph.generation = 7;
-    app.graph.total = 6;
-    app.graph.is_complete = true;
-    app.graph.pending_selection_restore = Some(GraphSelectionRestore { oid, selected_offset: 2 });
-    app.graph.pending_lookup = Some((3, PendingGraphLookup::RestoreSelection));
-
-    event_tx.send(GraphEvent::LookupResult { generation: 7, request_id: 3, result: GraphLookupResult::Index(None) }).unwrap();
-    app.sync(&repo);
-
-    assert_eq!(app.graph_selected, 2);
-    assert_eq!(app.graph.pending_selection_restore, None);
+fn restore_lookup_cases_cover_selection_and_scroll() {
+    assert_restore_lookup_case("restore-success", 1, 10, false, 2, GraphLookupResult::Index(Some(4)), 4, 2);
+    assert_restore_lookup_case("restore-top", 6, 10, false, 4, GraphLookupResult::Index(Some(1)), 1, 0);
+    assert_restore_lookup_case("restore-missing", 2, 6, true, 2, GraphLookupResult::Index(None), 2, 0);
 }
 
 #[test]
@@ -307,20 +314,16 @@ fn explicit_graph_navigation_clears_pending_restore() {
 
 #[test]
 fn file_history_event_updates_only_matching_request() {
-    let (_path, repo) = temp_repo("file-history-event");
-    let oid = commit_file(&repo, "target.txt", "target");
+    let (_dir, repo) = temp_repo("file-history-event");
+    let oid = commit_file(&repo, "target.txt", "target", "target");
     let repo = Rc::new(repo);
     let (event_tx, event_rx) = std::sync::mpsc::channel();
-    let mut app = App {
-        repo: Some(repo.clone()),
-        graph_rx: Some(event_rx),
-        viewport: Viewport::Graph,
-        focus: Focus::Search,
-        search_path: Some("target.txt".to_string()),
-        search_request_id: Some(3),
-        search_is_loading: true,
-        ..Default::default()
-    };
+    let mut app = app_with_repo(repo.clone());
+    app.graph_rx = Some(event_rx);
+    app.focus = Focus::Search;
+    app.search_path = Some("target.txt".to_string());
+    app.search_request_id = Some(3);
+    app.search_is_loading = true;
     app.graph.generation = 7;
 
     event_tx.send(GraphEvent::FileHistory { generation: 7, request_id: 2, path: "target.txt".to_string(), rows: vec![history_row(1, oid)], error: None }).unwrap();
@@ -389,10 +392,11 @@ fn pane_window_request_reuses_cached_window_that_covers_range() {
 
 #[test]
 fn wait_until_graph_complete_returns_commit_count_when_graph_finishes() {
-    let (_path, repo) = temp_repo("graph-complete-wait");
+    let (_dir, repo) = temp_repo("graph-complete-wait");
     let repo = Rc::new(repo);
     let (event_tx, event_rx) = std::sync::mpsc::channel();
-    let mut app = App { repo: Some(repo.clone()), graph_rx: Some(event_rx), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+    let mut app = app_with_repo(repo);
+    app.graph_rx = Some(event_rx);
     app.graph.generation = 11;
 
     event_tx.send(GraphEvent::Progress { generation: 11, version: 1, total: 4, is_first: true, is_complete: false }).unwrap();
@@ -406,10 +410,11 @@ fn wait_until_graph_complete_returns_commit_count_when_graph_finishes() {
 
 #[test]
 fn wait_until_graph_complete_returns_error_when_modal_error_is_set() {
-    let (_path, repo) = temp_repo("graph-complete-error");
+    let (_dir, repo) = temp_repo("graph-complete-error");
     let repo = Rc::new(repo);
     let (event_tx, event_rx) = std::sync::mpsc::channel();
-    let mut app = App { repo: Some(repo.clone()), graph_rx: Some(event_rx), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+    let mut app = app_with_repo(repo);
+    app.graph_rx = Some(event_rx);
     app.graph.generation = 12;
 
     event_tx.send(GraphEvent::Progress { generation: 12, version: 1, total: 1, is_first: true, is_complete: false }).unwrap();

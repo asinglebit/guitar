@@ -140,7 +140,7 @@ fn opening_checked_out_submodule_pushes_stack_entry_and_reloads_submodule() {
     let child_path = fs::canonicalize(entries[0].absolute_path.clone()).unwrap();
     let mut app = App {
         path: Some(parent_path.display().to_string()),
-        repo: Some(Rc::new(parent)),
+        repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(parent))),
         viewport: Viewport::Graph,
         focus: Focus::Submodules,
         submodules: Submodules::from_entries(entries),
@@ -173,7 +173,7 @@ fn opening_nested_submodule_appends_to_existing_stack() {
     nested.absolute_path = grandchild_path.clone();
     let mut app = App {
         path: Some(child_path.display().to_string()),
-        repo: Some(Rc::new(child)),
+        repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(child))),
         viewport: Viewport::Graph,
         focus: Focus::Submodules,
         submodules: Submodules::from_entries(vec![nested]),
@@ -201,7 +201,7 @@ fn return_to_parent_repository_pops_one_stack_entry_and_reloads_parent() {
     drop(parent);
     let mut app = App {
         path: Some(child_path.display().to_string()),
-        repo: Some(Rc::new(child)),
+        repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(child))),
         viewport: Viewport::Graph,
         focus: Focus::Submodules,
         submodule_stack: vec![SubmoduleStackEntry::new(parent_path.clone(), PathBuf::from("deps/child"), "deps/child".into())],
@@ -237,7 +237,7 @@ fn action_keys_dispatch_update_and_sync_submodule() {
 
     let mut update_app = App {
         path: Some(parent_path.clone()),
-        repo: Some(Rc::new(parent)),
+        repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(parent))),
         viewport: Viewport::Graph,
         focus: Focus::Submodules,
         submodules: Submodules::from_entries(entries),
@@ -260,7 +260,7 @@ fn action_keys_dispatch_update_and_sync_submodule() {
     let entries = list_submodules(&parent).unwrap();
     let mut sync_app = App {
         path: Some(parent_path),
-        repo: Some(Rc::new(parent)),
+        repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(parent))),
         viewport: Viewport::Graph,
         focus: Focus::Submodules,
         submodules: Submodules::from_entries(entries),

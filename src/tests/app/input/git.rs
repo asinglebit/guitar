@@ -1,7 +1,9 @@
 use super::*;
 use crate::core::chunk::NONE;
 use crate::core::reflogs::HeadReflogAliasEntry;
+use crate::git::actions::cherrypicking::{CherrypickOutcome, start_cherrypick};
 use crate::git::actions::merging::{MergeOutcome, start_merge};
+use crate::git::actions::rebasing::{RebaseOutcome, start_rebase};
 use crate::git::actions::remotes::set_default_remote;
 use crate::git::actions::reverting::{RevertOutcome, start_revert};
 use crate::git::auth::{AuthChallenge, AuthProtocol};
@@ -107,6 +109,10 @@ fn checkout_branch(repo: &Repository, name: &str) {
     repo.checkout_head(Some(CheckoutBuilder::default().force())).unwrap();
 }
 
+fn current_branch_name(repo: &Repository) -> String {
+    repo.head().unwrap().shorthand().unwrap().to_string()
+}
+
 fn file_search_keymaps() -> crate::helpers::keymap::Keymaps {
     let mut maps = IndexMap::new();
     let mut normal = IndexMap::new();
@@ -119,7 +125,7 @@ fn file_search_keymaps() -> crate::helpers::keymap::Keymaps {
 #[test]
 fn shift_f_opens_file_search_modal_from_repo_views() {
     let (_path, repo) = temp_repo("file-search-shortcut");
-    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Branches, keymaps: file_search_keymaps(), ..Default::default() };
+    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), viewport: Viewport::Graph, focus: Focus::Branches, keymaps: file_search_keymaps(), ..Default::default() };
 
     app.handle_key_event(KeyEvent::new(KeyCode::Char('F'), KeyModifiers::SHIFT));
 
@@ -132,11 +138,11 @@ fn file_search_modal_does_not_open_from_splash_or_settings() {
     let (_path, repo) = temp_repo("file-search-blocked");
     let repo = Rc::new(repo);
 
-    let mut splash = App { repo: Some(repo.clone()), viewport: Viewport::Splash, focus: Focus::Viewport, ..Default::default() };
+    let mut splash = App { repo: Some(crate::app::app::RepoHandle::from_repo(repo.clone())), viewport: Viewport::Splash, focus: Focus::Viewport, ..Default::default() };
     splash.on_find_file();
     assert_eq!(splash.focus, Focus::Viewport);
 
-    let mut settings = App { repo: Some(repo), viewport: Viewport::Settings, focus: Focus::Viewport, ..Default::default() };
+    let mut settings = App { repo: Some(crate::app::app::RepoHandle::from_repo(repo)), viewport: Viewport::Settings, focus: Focus::Viewport, ..Default::default() };
     settings.on_find_file();
     assert_eq!(settings.focus, Focus::Viewport);
 }
@@ -149,7 +155,7 @@ fn status_panes_stage_and_unstage_submodule_pointer_change() {
 
     let mut app = App {
         path: Some(parent_path.display().to_string()),
-        repo: Some(Rc::new(parent)),
+        repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(parent))),
         viewport: Viewport::Graph,
         focus: Focus::StatusBottom,
         graph_selected: 0,
@@ -178,14 +184,36 @@ fn status_panes_stage_and_unstage_submodule_pointer_change() {
     assert_eq!(unstaged.unstaged.modified, vec!["deps/child".to_string()]);
 }
 
-#[test]
-fn fetch_all_uses_configured_default_remote() {
-    let (path, repo) = temp_repo("fetch-default-remote");
+fn app_with_default_remote(name: &str) -> (App, String, String) {
+    let (path, repo) = temp_repo(name);
     commit(&repo, "file.txt", "initial");
     let _remote_path = add_local_bare_remote(&repo, "upstream");
     set_default_remote(&repo, "upstream").unwrap();
+    let branch = current_branch_name(&repo);
     let path_string = path.display().to_string();
-    let mut app = App { path: Some(path_string.clone()), repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+    let app = App { path: Some(path_string.clone()), repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+    (app, path_string, branch)
+}
+
+fn assert_active_operation_routes(app: &mut App, kind: OperationKind, continue_action: impl FnOnce(&mut App)) {
+    continue_action(app);
+
+    assert_eq!(app.focus, Focus::ModalOperationProgress);
+    assert_eq!(app.modal_operation_kind, kind);
+    assert_eq!(app.pending_operation_action, Some(PendingOperationAction::Continue));
+
+    app.focus = Focus::Viewport;
+    app.pending_operation_action = None;
+    app.on_abort_operation();
+
+    assert_eq!(app.focus, Focus::ModalOperationProgress);
+    assert_eq!(app.modal_operation_kind, kind);
+    assert_eq!(app.pending_operation_action, Some(PendingOperationAction::Abort));
+}
+
+#[test]
+fn fetch_all_uses_configured_default_remote() {
+    let (mut app, path_string, _) = app_with_default_remote("fetch-default-remote");
 
     app.on_fetch_all();
 
@@ -195,27 +223,17 @@ fn fetch_all_uses_configured_default_remote() {
 
 #[test]
 fn force_push_uses_configured_default_remote() {
-    let (path, repo) = temp_repo("push-default-remote");
-    commit(&repo, "file.txt", "initial");
-    let _remote_path = add_local_bare_remote(&repo, "upstream");
-    set_default_remote(&repo, "upstream").unwrap();
-    let path_string = path.display().to_string();
-    let mut app = App { path: Some(path_string.clone()), repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+    let (mut app, path_string, branch) = app_with_default_remote("push-default-remote");
 
     app.on_force_push();
 
-    assert_eq!(app.pending_network_request, Some(NetworkRequest::PushBranch { repo_path: path_string, remote_name: "upstream".to_string(), branch: "master".to_string(), force: true }));
+    assert_eq!(app.pending_network_request, Some(NetworkRequest::PushBranch { repo_path: path_string, remote_name: "upstream".to_string(), branch, force: true }));
     join_network_worker(&mut app);
 }
 
 #[test]
 fn push_tags_uses_configured_default_remote() {
-    let (path, repo) = temp_repo("push-tags-default-remote");
-    commit(&repo, "file.txt", "initial");
-    let _remote_path = add_local_bare_remote(&repo, "upstream");
-    set_default_remote(&repo, "upstream").unwrap();
-    let path_string = path.display().to_string();
-    let mut app = App { path: Some(path_string.clone()), repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+    let (mut app, path_string, _) = app_with_default_remote("push-tags-default-remote");
 
     app.on_push_tags();
 
@@ -228,7 +246,7 @@ fn cherrypick_opens_message_modal_with_prefilled_summary() {
     let (_path, repo) = temp_repo("cherrypick-modal");
     let oid = commit(&repo, "file.txt", "original summary\n\nbody");
 
-    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, graph_selected: 1, ..Default::default() };
+    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), viewport: Viewport::Graph, focus: Focus::Viewport, graph_selected: 1, ..Default::default() };
     let alias = app.oids.get_alias_by_oid(oid);
     app.oids.sorted_aliases = vec![NONE, alias];
 
@@ -244,7 +262,7 @@ fn revert_opens_message_modal_with_prefilled_summary() {
     let (_path, repo) = temp_repo("revert-modal");
     let oid = commit(&repo, "file.txt", "original summary\n\nbody");
 
-    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, graph_selected: 1, ..Default::default() };
+    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), viewport: Viewport::Graph, focus: Focus::Viewport, graph_selected: 1, ..Default::default() };
     let alias = app.oids.get_alias_by_oid(oid);
     app.oids.sorted_aliases = vec![NONE, alias];
 
@@ -259,9 +277,10 @@ fn revert_opens_message_modal_with_prefilled_summary() {
 fn revert_rejects_merge_commits_before_opening_modal() {
     let (_path, repo) = temp_repo("revert-merge-modal");
     commit_with_content(&repo, "base.txt", "base\n", "base");
+    let main_branch = current_branch_name(&repo);
     checkout_new_branch(&repo, "feature");
     let feature = commit_with_content(&repo, "feature.txt", "feature\n", "feature");
-    checkout_branch(&repo, "master");
+    checkout_branch(&repo, &main_branch);
     let main = commit_with_content(&repo, "main.txt", "main\n", "main");
 
     let merge = {
@@ -274,7 +293,7 @@ fn revert_rejects_merge_commits_before_opening_modal() {
         repo.commit(Some("HEAD"), &sig, &sig, "merge", &tree, &[&main_commit, &feature_commit]).unwrap()
     };
 
-    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, graph_selected: 1, ..Default::default() };
+    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), viewport: Viewport::Graph, focus: Focus::Viewport, graph_selected: 1, ..Default::default() };
     let alias = app.oids.get_alias_by_oid(merge);
     app.oids.sorted_aliases = vec![NONE, alias];
 
@@ -290,7 +309,7 @@ fn merge_queues_selected_commit_operation() {
     let (_path, repo) = temp_repo("merge-queue");
     let oid = commit(&repo, "file.txt", "merge target");
 
-    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, graph_selected: 1, ..Default::default() };
+    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), viewport: Viewport::Graph, focus: Focus::Viewport, graph_selected: 1, ..Default::default() };
     let alias = app.oids.get_alias_by_oid(oid);
     app.oids.sorted_aliases = vec![NONE, alias];
 
@@ -310,20 +329,40 @@ fn revert_state_routes_continue_and_abort_operations() {
 
     assert_eq!(start_revert(&repo, feature, "reverted: feature").unwrap(), RevertOutcome::Conflict);
 
-    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
-    app.on_revert();
+    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+    assert_active_operation_routes(&mut app, OperationKind::Revert, |app| app.on_revert());
+    let _ = fs::remove_dir_all(path);
+}
 
-    assert_eq!(app.focus, Focus::ModalOperationProgress);
-    assert_eq!(app.modal_operation_kind, OperationKind::Revert);
-    assert_eq!(app.pending_operation_action, Some(PendingOperationAction::Continue));
+#[test]
+fn cherrypick_state_routes_continue_and_abort_operations() {
+    let (path, repo) = temp_repo("cherrypick-active-operation");
+    commit_with_content(&repo, "file.txt", "base\n", "base");
+    let feature = commit_with_content(&repo, "file.txt", "feature\n", "feature");
+    commit_with_content(&repo, "file.txt", "main\n", "main");
 
-    app.focus = Focus::Viewport;
-    app.pending_operation_action = None;
-    app.on_abort_operation();
+    assert_eq!(start_cherrypick(&repo, feature, "cherrypicked: feature").unwrap(), CherrypickOutcome::Conflict);
 
-    assert_eq!(app.focus, Focus::ModalOperationProgress);
-    assert_eq!(app.modal_operation_kind, OperationKind::Revert);
-    assert_eq!(app.pending_operation_action, Some(PendingOperationAction::Abort));
+    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+    assert_active_operation_routes(&mut app, OperationKind::Cherrypick, |app| app.on_continue_operation());
+    let _ = fs::remove_dir_all(path);
+}
+
+#[test]
+fn rebase_state_routes_continue_and_abort_operations() {
+    let (path, repo) = temp_repo("rebase-active-operation");
+    commit_with_content(&repo, "file.txt", "base\n", "base");
+    let base_branch = repo.head().unwrap().shorthand().unwrap().to_string();
+    checkout_new_branch(&repo, "feature");
+    commit_with_content(&repo, "file.txt", "feature\n", "feature");
+    checkout_branch(&repo, &base_branch);
+    let main = commit_with_content(&repo, "file.txt", "main\n", "main");
+    checkout_branch(&repo, "feature");
+
+    assert_eq!(start_rebase(&repo, main).unwrap(), RebaseOutcome::Conflict);
+
+    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+    assert_active_operation_routes(&mut app, OperationKind::Rebase, |app| app.on_rebase());
     let _ = fs::remove_dir_all(path);
 }
 
@@ -331,27 +370,16 @@ fn revert_state_routes_continue_and_abort_operations() {
 fn merge_state_routes_continue_and_abort_operations() {
     let (path, repo) = temp_repo("merge-active-operation");
     commit_with_content(&repo, "file.txt", "base\n", "base");
+    let main_branch = current_branch_name(&repo);
     checkout_new_branch(&repo, "feature");
     let feature = commit_with_content(&repo, "file.txt", "feature\n", "feature");
-    checkout_branch(&repo, "master");
+    checkout_branch(&repo, &main_branch);
     commit_with_content(&repo, "file.txt", "main\n", "main");
 
     assert_eq!(start_merge(&repo, feature).unwrap(), MergeOutcome::Conflict);
 
-    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
-    app.on_continue_operation();
-
-    assert_eq!(app.focus, Focus::ModalOperationProgress);
-    assert_eq!(app.modal_operation_kind, OperationKind::Merge);
-    assert_eq!(app.pending_operation_action, Some(PendingOperationAction::Continue));
-
-    app.focus = Focus::Viewport;
-    app.pending_operation_action = None;
-    app.on_abort_operation();
-
-    assert_eq!(app.focus, Focus::ModalOperationProgress);
-    assert_eq!(app.modal_operation_kind, OperationKind::Merge);
-    assert_eq!(app.pending_operation_action, Some(PendingOperationAction::Abort));
+    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+    assert_active_operation_routes(&mut app, OperationKind::Merge, |app| app.on_continue_operation());
     let _ = fs::remove_dir_all(path);
 }
 
@@ -361,7 +389,7 @@ fn create_branch_from_reflog_uses_reflog_commit_target() {
     let graph_oid = commit(&repo, "graph.txt", "graph");
     let reflog_oid = commit(&repo, "reflog.txt", "reflog");
 
-    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Reflogs, graph_selected: 1, ..Default::default() };
+    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), viewport: Viewport::Graph, focus: Focus::Reflogs, graph_selected: 1, ..Default::default() };
     let graph_alias = app.oids.get_alias_by_oid(graph_oid);
     let reflog_alias = app.oids.get_alias_by_oid(reflog_oid);
     app.oids.sorted_aliases = vec![NONE, graph_alias, reflog_alias];
@@ -381,6 +409,42 @@ fn create_branch_from_reflog_uses_reflog_commit_target() {
 }
 
 #[test]
+fn create_worktree_from_graph_uses_the_name_for_branch_and_default_path() {
+    let (path, repo) = temp_repo("create-worktree-modal");
+    let oid = commit(&repo, "file.txt", "initial");
+    let path_string = path.display().to_string();
+    let expected_path = path.parent().unwrap().join(format!("{}-feature", path.file_name().unwrap().to_string_lossy())).display().to_string();
+
+    let mut app = App {
+        path: Some(path_string.clone()),
+        repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))),
+        viewport: Viewport::Graph,
+        focus: Focus::Viewport,
+        graph_selected: 1,
+        ..Default::default()
+    };
+    let alias = app.oids.get_alias_by_oid(oid);
+    app.oids.sorted_aliases = vec![NONE, alias];
+
+    app.on_create_worktree();
+
+    assert_eq!(app.focus, Focus::ModalCreateWorktreeName);
+
+    app.modal_input.set_value("feature");
+    app.handle_modal_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert_eq!(app.focus, Focus::ModalCreateWorktreePath);
+    assert_eq!(app.modal_worktree_name, "feature");
+    assert_eq!(app.modal_input.value(), expected_path);
+
+    app.handle_modal_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+    assert_eq!(app.focus, Focus::Viewport);
+    assert!(app.modal_input.value().is_empty());
+    assert!(Repository::open(&path_string).unwrap().find_worktree("feature").is_ok());
+}
+
+#[test]
 fn rename_branch_from_pane_opens_prefilled_modal_for_local_branch() {
     let (_path, repo) = temp_repo("rename-pane-local");
     let oid = commit(&repo, "file.txt", "initial");
@@ -388,7 +452,7 @@ fn rename_branch_from_pane_opens_prefilled_modal_for_local_branch() {
     repo.branch("feature", &target, false).unwrap();
     drop(target);
 
-    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Branches, ..Default::default() };
+    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), viewport: Viewport::Graph, focus: Focus::Branches, ..Default::default() };
     app.branches.sorted = vec![(1, "feature".to_string())];
 
     app.on_rename_branch();
@@ -401,7 +465,7 @@ fn rename_branch_from_pane_opens_prefilled_modal_for_local_branch() {
 #[test]
 fn rename_branch_from_pane_rejects_remote_branch() {
     let (_path, repo) = temp_repo("rename-pane-remote");
-    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Branches, ..Default::default() };
+    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), viewport: Viewport::Graph, focus: Focus::Branches, ..Default::default() };
     app.branches.sorted = vec![(1, "origin/feature".to_string())];
 
     app.on_rename_branch();
@@ -419,7 +483,7 @@ fn rename_branch_from_graph_single_local_label_opens_modal() {
     repo.branch("feature", &target, false).unwrap();
     drop(target);
 
-    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, graph_selected: 1, ..Default::default() };
+    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), viewport: Viewport::Graph, focus: Focus::Viewport, graph_selected: 1, ..Default::default() };
     let alias = app.oids.get_alias_by_oid(oid);
     app.oids.sorted_aliases = vec![NONE, alias];
     app.branches.sorted = vec![(alias, "feature".to_string())];
@@ -439,7 +503,7 @@ fn rename_branch_from_graph_multiple_local_labels_uses_branch_choice_modal() {
     repo.branch("topic", &target, false).unwrap();
     drop(target);
 
-    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, graph_selected: 1, ..Default::default() };
+    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), viewport: Viewport::Graph, focus: Focus::Viewport, graph_selected: 1, ..Default::default() };
     let alias = app.oids.get_alias_by_oid(oid);
     app.oids.sorted_aliases = vec![NONE, alias];
     app.branches.sorted = vec![(alias, "feature".to_string()), (alias, "topic".to_string())];
@@ -463,7 +527,7 @@ fn rename_branch_from_graph_rejects_remote_only_labels() {
     let oid = commit(&repo, "file.txt", "initial");
     repo.reference("refs/remotes/origin/feature", oid, true, "remote").unwrap();
 
-    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, graph_selected: 1, ..Default::default() };
+    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), viewport: Viewport::Graph, focus: Focus::Viewport, graph_selected: 1, ..Default::default() };
     let alias = app.oids.get_alias_by_oid(oid);
     app.oids.sorted_aliases = vec![NONE, alias];
     app.branches.sorted = vec![(alias, "origin/feature".to_string())];
@@ -518,6 +582,33 @@ fn submitting_https_auth_stores_session_secret_and_retries_request() {
     let handle = app.network_handle.take().expect("retry should start a worker");
     let _ = handle.join();
     assert!(app.auth_session.has_secret_for(&challenge, Some("octo")));
+}
+
+#[test]
+fn submitting_ssh_auth_stores_session_secret_and_retries_request() {
+    let challenge = AuthChallenge {
+        url: "ssh://git@github.com/asinglebit/guitar.git".to_string(),
+        username: Some("git".to_string()),
+        protocol: AuthProtocol::Ssh,
+        operation: "Fetch".to_string(),
+        key_path: Some(PathBuf::from("/tmp/id_ed25519")),
+    };
+    let mut app = App {
+        pending_network_request: Some(NetworkRequest::Fetch { repo_path: "/tmp/missing".to_string(), remote_name: "origin".to_string() }),
+        pending_auth_prompt: Some(challenge.clone()),
+        focus: Focus::ModalAuth,
+        ..Default::default()
+    };
+    app.auth_secret_input.set_value("passphrase");
+
+    app.submit_auth_prompt();
+
+    assert_eq!(app.pending_auth_prompt, None);
+    assert_eq!(app.network_auth_attempts, 1);
+    assert_eq!(app.focus, Focus::ModalNetworkProgress);
+    let handle = app.network_handle.take().expect("retry should start a worker");
+    let _ = handle.join();
+    assert!(app.auth_session.has_secret_for(&challenge, Some("git")));
 }
 
 #[test]

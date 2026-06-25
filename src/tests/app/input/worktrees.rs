@@ -1,5 +1,6 @@
 use super::*;
 use crate::core::{
+    oids::git2_to_gix_oid,
     submodules::SubmoduleStackEntry,
     worktrees::{WorktreeEntry, WorktreeKind, Worktrees},
 };
@@ -13,7 +14,7 @@ fn worktree_entry(name: &str, head: gix::ObjectId) -> WorktreeEntry {
         name: name.into(),
         path: PathBuf::from(format!("/tmp/{name}")),
         branch: Some(name.into()),
-        head: Some(head),
+        head: Some(git2_to_gix_oid(head)),
         alias: None,
         kind: WorktreeKind::Linked,
         is_current: false,
@@ -27,7 +28,7 @@ fn worktree_entry(name: &str, head: gix::ObjectId) -> WorktreeEntry {
 fn app_with_graph_worktrees(entries: Vec<WorktreeEntry>) -> App {
     let mut app = App { viewport: Viewport::Graph, focus: Focus::Viewport, graph_selected: 1, ..Default::default() };
 
-    let head = entries.first().and_then(|entry| entry.head).unwrap_or_else(|| test_oid(1));
+    let head = entries.first().and_then(|entry| entry.head).unwrap_or_else(|| git2_to_gix_oid(test_oid(1)));
     let alias = app.oids.get_alias_by_oid(head);
     let uncommitted = app.oids.sorted_aliases[0];
     app.oids.sorted_aliases = vec![uncommitted, alias];

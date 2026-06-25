@@ -26,7 +26,7 @@ use ratatui::{
 };
 use std::{
     fs,
-    path::Path,
+    path::{Path, PathBuf},
     rc::Rc,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -88,13 +88,116 @@ fn commit_file(repo: &Repository, file: &str, message: &str) -> git2::Oid {
     repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents).unwrap()
 }
 
+fn recent_repo_keymaps() -> Keymaps {
+    let mut keymaps = minimal_keymaps();
+    let normal = keymaps.get_mut(&InputMode::Normal).unwrap();
+    normal.insert(KeyBinding::new(KeyCode::Char('d'), KeyModifiers::NONE), Command::RemoveRecentRepository);
+    normal.insert(KeyBinding::new(KeyCode::Char('K'), KeyModifiers::SHIFT), Command::MoveRecentRepositoryUp);
+    normal.insert(KeyBinding::new(KeyCode::Char('J'), KeyModifiers::SHIFT), Command::MoveRecentRepositoryDown);
+    keymaps
+}
+
+fn recent_strings(recent: &[&str]) -> Vec<String> {
+    recent.iter().map(|repo| (*repo).to_string()).collect()
+}
+
+fn recent_repo_saved(path: &Path) -> Vec<String> {
+    facet_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
+}
+
+fn recent_repo_selection(line: usize, recent_index: usize) -> SettingsSelection {
+    SettingsSelection { line, kind: SettingsSelectionKind::RecentRepository(recent_index) }
+}
+
+fn splash_recent_app(recent: &[&str], splash_selected: usize, save_name: &str) -> (App, PathBuf) {
+    let path = temp_recent_path(save_name);
+    let app = App {
+        viewport: Viewport::Splash,
+        focus: Focus::Viewport,
+        keymaps: recent_repo_keymaps(),
+        recent: recent_strings(recent),
+        splash_selected,
+        recent_save_path: Some(path.clone()),
+        ..Default::default()
+    };
+    (app, path)
+}
+
+fn settings_recent_app(recent: &[&str], settings_selected: usize, recent_index: usize, save_name: &str) -> (App, PathBuf) {
+    let path = temp_recent_path(save_name);
+    let app = App {
+        viewport: Viewport::Settings,
+        focus: Focus::Viewport,
+        keymaps: recent_repo_keymaps(),
+        recent: recent_strings(recent),
+        settings_selected,
+        settings_selections: vec![recent_repo_selection(settings_selected, recent_index)],
+        recent_save_path: Some(path.clone()),
+        ..Default::default()
+    };
+    (app, path)
+}
+
+fn press_remove_recent_repository(app: &mut App) {
+    app.handle_key_event(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
+}
+
+fn press_move_recent_repository_up(app: &mut App) {
+    app.handle_key_event(KeyEvent::new(KeyCode::Char('K'), KeyModifiers::SHIFT));
+}
+
+fn press_move_recent_repository_down(app: &mut App) {
+    app.handle_key_event(KeyEvent::new(KeyCode::Char('J'), KeyModifiers::SHIFT));
+}
+
+fn remove_recent_repository(app: &mut App) {
+    app.on_remove_recent_repository();
+}
+
+fn move_recent_repository_up(app: &mut App) {
+    app.on_move_recent_repository_up();
+}
+
+fn move_recent_repository_down(app: &mut App) {
+    app.on_move_recent_repository_down();
+}
+
+fn assert_splash_recent_case(
+    name: &str, mut app: App, path: PathBuf, action: fn(&mut App), expected_recent: &[&str], expected_selected: usize, expect_saved: bool, expected_path: Option<&str>, expect_repo_open: bool,
+) {
+    action(&mut app);
+    assert_eq!(app.recent, recent_strings(expected_recent), "{name}");
+    assert_eq!(app.splash_selected, expected_selected, "{name}");
+    assert_eq!(app.repo.is_some(), expect_repo_open, "{name}");
+    if let Some(expected_path) = expected_path {
+        assert_eq!(app.path.as_deref(), Some(expected_path), "{name}");
+    }
+    if expect_saved {
+        assert_eq!(recent_repo_saved(&path), recent_strings(expected_recent), "{name}");
+    } else {
+        assert!(!path.exists(), "{name}");
+    }
+}
+
+fn assert_settings_recent_case(name: &str, mut app: App, path: PathBuf, action: fn(&mut App), expected_recent: &[&str], expected_selected: usize, expect_saved: bool) {
+    action(&mut app);
+    assert_eq!(app.recent, recent_strings(expected_recent), "{name}");
+    assert_eq!(app.settings_selected, expected_selected, "{name}");
+    if expect_saved {
+        assert_eq!(recent_repo_saved(&path), recent_strings(expected_recent), "{name}");
+    } else {
+        assert!(!path.exists(), "{name}");
+    }
+}
+
 fn graph_app_with_history() -> (App, git2::Oid, git2::Oid, git2::Oid) {
     let (path, repo) = temp_repo("history");
     let root_oid = commit_file(&repo, "root.txt", "root");
     let parent_oid = commit_file(&repo, "parent.txt", "parent");
     let child_oid = commit_file(&repo, "child.txt", "child");
 
-    let mut app = App { path: Some(path.display().to_string()), repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+    let mut app =
+        App { path: Some(path.display().to_string()), repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
     let root_alias = app.oids.get_alias_by_oid(root_oid);
     let parent_alias = app.oids.get_alias_by_oid(parent_oid);
     let child_alias = app.oids.get_alias_by_oid(child_oid);
@@ -120,6 +223,26 @@ fn search_history_row(graph_index: usize, oid: git2::Oid) -> GraphFileHistoryRow
     GraphFileHistoryRow { graph_index, oid, summary: "history".to_string(), status: FileStatus::Modified }
 }
 
+fn graph_row(index: usize, alias: u32, oid: git2::Oid, summary: &str, reflog: Option<GraphReflogLabel>) -> GraphRow {
+    GraphRow {
+        index,
+        alias,
+        oid,
+        summary: summary.to_string(),
+        committer_date: String::new(),
+        committer_name: String::new(),
+        is_merge: false,
+        has_any_branch: false,
+        branches: Default::default(),
+        tags: Default::default(),
+        is_stash: false,
+        stash_lane: None,
+        worktrees: Default::default(),
+        has_current_worktree: false,
+        reflog,
+    }
+}
+
 fn branch_app() -> App {
     let mut app = App { path: Some(temp_non_repo_path("branches")), viewport: Viewport::Graph, ..Default::default() };
     app.branches.sorted = vec![(0, "feature".to_string()), (1, "main".to_string())];
@@ -133,6 +256,35 @@ fn hidden_branches(app: &App) -> Vec<String> {
     let mut branches: Vec<String> = app.branches.hidden_branch_names.iter().cloned().collect();
     branches.sort();
     branches
+}
+
+fn settings_selection_app(kind: SettingsSelectionKind) -> App {
+    App { viewport: Viewport::Settings, focus: Focus::Viewport, settings_selected: 12, settings_selections: vec![SettingsSelection { line: 12, kind }], ..Default::default() }
+}
+
+fn assert_settings_selection_case<Setup, Assert>(name: &str, kind: SettingsSelectionKind, expected_scroll: usize, setup: Setup, assert: Assert)
+where
+    Setup: FnOnce(&mut App),
+    Assert: FnOnce(&App),
+{
+    let mut app = settings_selection_app(kind);
+    setup(&mut app);
+    app.on_select();
+
+    assert_eq!(app.viewport, Viewport::Settings, "{name}");
+    assert_eq!(app.focus, Focus::Viewport, "{name}");
+    assert_eq!(app.settings_selected, 12, "{name}");
+    assert_eq!(app.settings_scroll.get(), expected_scroll, "{name}");
+    assert(&app);
+}
+
+fn assert_esc_case<Assert>(name: &str, mut app: App, expected_focus: Focus, assert: Assert)
+where
+    Assert: FnOnce(&App),
+{
+    app.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert_eq!(app.focus, expected_focus, "{name}");
+    assert(&app);
 }
 
 fn directional_focus_app() -> App {
@@ -361,15 +513,16 @@ fn graph_toggle_multiple_branch_commit_opens_toggle_modal() {
 fn branch_toggle_uses_git_branch_universe_when_pane_window_is_partial() {
     let (path, repo) = temp_repo("branch-window-toggle");
     let oid = commit_file(&repo, "main.txt", "main");
-    let current_branch = repo.head().unwrap().shorthand().unwrap().to_string();
+    let base_branch = repo.head().unwrap().shorthand().unwrap().to_string();
     {
         let commit = repo.find_commit(oid).unwrap();
         repo.branch("feature", &commit, false).unwrap();
+        repo.branch("release", &commit, false).unwrap();
     }
 
     let mut app = App {
         path: Some(path.display().to_string()),
-        repo: Some(Rc::new(repo)),
+        repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))),
         recent_save_path: Some(temp_recent_path("branch-window-toggle")),
         viewport: Viewport::Graph,
         focus: Focus::Branches,
@@ -377,11 +530,11 @@ fn branch_toggle_uses_git_branch_universe_when_pane_window_is_partial() {
         ..Default::default()
     };
     app.graph.branches_window =
-        Some(PaneWindowCache { version: 1, start: 1, end: 2, total: 3, rows: vec![GraphPaneRow::Branch { alias: 1, name: current_branch.clone(), is_local: true, lane: None, graph_index: Some(1) }] });
+        Some(PaneWindowCache { version: 1, start: 1, end: 2, total: 3, rows: vec![GraphPaneRow::Branch { alias: 1, name: base_branch.clone(), is_local: true, lane: None, graph_index: Some(1) }] });
 
     app.on_toggle_branch();
 
-    assert_eq!(hidden_branches(&app), vec![current_branch]);
+    assert_eq!(hidden_branches(&app), vec![base_branch]);
 }
 
 #[test]
@@ -400,7 +553,7 @@ fn reload_all_branches_clears_hidden_branch_layer() {
 fn search_pane_navigation_uses_result_count() {
     let (_path, repo) = temp_repo("search-nav");
     let oid = commit_file(&repo, "target.txt", "target");
-    let mut app = App { repo: Some(Rc::new(repo)), focus: Focus::Search, ..Default::default() };
+    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), focus: Focus::Search, ..Default::default() };
     app.layout.search.height = 5;
     app.search_rows = (0..10).map(|idx| search_history_row(idx, oid)).collect();
 
@@ -441,258 +594,66 @@ fn search_narrow_jumps_to_related_graph_commit() {
 fn empty_recent_splash_scrolls_keep_selection_at_zero() {
     let mut app = App { viewport: Viewport::Splash, focus: Focus::Viewport, ..Default::default() };
     app.layout.graph.height = 10;
-    app.splash_selected = 3;
+    let actions: [fn(&mut App); 4] = [App::on_scroll_down, App::on_scroll_page_down, App::on_scroll_half_page_down, App::on_scroll_to_end];
 
-    app.on_scroll_down();
-    assert_eq!(app.splash_selected, 0);
-
-    app.splash_selected = 3;
-    app.on_scroll_page_down();
-    assert_eq!(app.splash_selected, 0);
-
-    app.splash_selected = 3;
-    app.on_scroll_half_page_down();
-    assert_eq!(app.splash_selected, 0);
-
-    app.splash_selected = 3;
-    app.on_scroll_to_end();
-    assert_eq!(app.splash_selected, 0);
+    for action in actions {
+        app.splash_selected = 3;
+        action(&mut app);
+        assert_eq!(app.splash_selected, 0);
+    }
 }
 
 #[test]
-fn splash_d_key_removes_selected_recent_repository_and_persists() {
-    let path = temp_recent_path("remove-middle");
-    let mut keymaps = minimal_keymaps();
-    keymaps.get_mut(&InputMode::Normal).unwrap().insert(KeyBinding::new(KeyCode::Char('d'), KeyModifiers::NONE), Command::RemoveRecentRepository);
-    let mut app = App {
-        viewport: Viewport::Splash,
-        focus: Focus::Viewport,
-        keymaps,
-        recent: vec!["/repo/a".into(), "/repo/b".into(), "/repo/c".into()],
-        splash_selected: 1,
-        recent_save_path: Some(path.clone()),
-        ..Default::default()
-    };
+fn splash_recent_repository_cases_cover_remove_move_and_boundaries() {
+    let (app, path) = splash_recent_app(&["/repo/a", "/repo/b", "/repo/c"], 1, "remove-middle");
+    assert_splash_recent_case("remove-middle", app, path, press_remove_recent_repository, &["/repo/a", "/repo/c"], 1, true, None, false);
 
-    app.handle_key_event(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
+    let (app, path) = splash_recent_app(&["/repo/a", "/repo/b"], 1, "remove-last");
+    assert_splash_recent_case("remove-last", app, path, remove_recent_repository, &["/repo/a"], 0, true, None, false);
 
-    assert_eq!(app.recent, vec!["/repo/a".to_string(), "/repo/c".to_string()]);
-    assert_eq!(app.splash_selected, 1);
-    let saved: Vec<String> = facet_json::from_str(&fs::read_to_string(path).unwrap()).unwrap();
-    assert_eq!(saved, app.recent);
-}
-
-#[test]
-fn splash_remove_recent_last_item_selects_previous() {
-    let mut app = App {
-        viewport: Viewport::Splash,
-        focus: Focus::Viewport,
-        recent: vec!["/repo/a".into(), "/repo/b".into()],
-        splash_selected: 1,
-        recent_save_path: Some(temp_recent_path("remove-last")),
-        ..Default::default()
-    };
-
-    app.on_remove_recent_repository();
-
-    assert_eq!(app.recent, vec!["/repo/a".to_string()]);
-    assert_eq!(app.splash_selected, 0);
-}
-
-#[test]
-fn splash_remove_recent_current_repo_keeps_repo_open() {
     let (repo_path, repo) = temp_repo("remove-current");
     let current = repo_path.display().to_string();
-    let mut app = App {
-        path: Some(current.clone()),
-        repo: Some(Rc::new(repo)),
-        viewport: Viewport::Splash,
-        focus: Focus::Viewport,
-        recent: vec![current.clone(), "/repo/other".into()],
-        splash_selected: 0,
-        recent_save_path: Some(temp_recent_path("remove-current")),
-        ..Default::default()
-    };
+    let (mut app, path) = splash_recent_app(&[current.as_str(), "/repo/other"], 0, "remove-current");
+    app.path = Some(current.clone());
+    app.repo = Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo)));
+    assert_splash_recent_case("remove-current", app, path, remove_recent_repository, &["/repo/other"], 0, true, Some(current.as_str()), true);
 
-    app.on_remove_recent_repository();
+    let (app, path) = splash_recent_app(&[], 7, "remove-empty");
+    assert_splash_recent_case("remove-empty", app, path, remove_recent_repository, &[], 0, false, None, false);
 
-    assert_eq!(app.recent, vec!["/repo/other".to_string()]);
-    assert_eq!(app.path.as_deref(), Some(current.as_str()));
-    assert!(app.repo.is_some());
-    assert_eq!(app.viewport, Viewport::Splash);
-}
-
-#[test]
-fn splash_remove_recent_empty_list_normalizes_selection_without_saving() {
-    let path = temp_recent_path("remove-empty");
-    let mut app = App { viewport: Viewport::Splash, focus: Focus::Viewport, splash_selected: 7, recent_save_path: Some(path.clone()), ..Default::default() };
-
-    app.on_remove_recent_repository();
-
-    assert!(app.recent.is_empty());
-    assert_eq!(app.splash_selected, 0);
-    assert!(!path.exists());
-}
-
-#[test]
-fn splash_remove_recent_noops_while_loading() {
-    let path = temp_recent_path("remove-loading");
-    let mut app =
-        App { viewport: Viewport::Splash, focus: Focus::Viewport, recent: vec!["/repo/a".into(), "/repo/b".into()], splash_selected: 1, recent_save_path: Some(path.clone()), ..Default::default() };
+    let (app, path) = splash_recent_app(&["/repo/a", "/repo/b"], 1, "remove-loading");
     app.spinner.running.store(true, std::sync::atomic::Ordering::SeqCst);
+    assert_splash_recent_case("remove-loading", app, path, remove_recent_repository, &["/repo/a", "/repo/b"], 1, false, None, false);
 
-    app.on_remove_recent_repository();
+    let (app, path) = splash_recent_app(&["/repo/a", "/repo/b", "/repo/c"], 1, "move-up");
+    assert_splash_recent_case("move-up", app, path, press_move_recent_repository_up, &["/repo/b", "/repo/a", "/repo/c"], 0, true, None, false);
 
-    assert_eq!(app.recent, vec!["/repo/a".to_string(), "/repo/b".to_string()]);
-    assert_eq!(app.splash_selected, 1);
-    assert!(!path.exists());
+    let (app, path) = splash_recent_app(&["/repo/a", "/repo/b", "/repo/c"], 1, "move-down");
+    assert_splash_recent_case("move-down", app, path, press_move_recent_repository_down, &["/repo/a", "/repo/c", "/repo/b"], 2, true, None, false);
+
+    let (app, path) = splash_recent_app(&["/repo/a", "/repo/b"], 0, "move-boundary-up");
+    assert_splash_recent_case("move-boundary-up", app, path, move_recent_repository_up, &["/repo/a", "/repo/b"], 0, false, None, false);
+
+    let (app, path) = splash_recent_app(&["/repo/a", "/repo/b"], 1, "move-boundary-down");
+    assert_splash_recent_case("move-boundary-down", app, path, move_recent_repository_down, &["/repo/a", "/repo/b"], 1, false, None, false);
 }
 
 #[test]
-fn splash_shift_k_moves_selected_recent_repository_up_and_persists() {
-    let path = temp_recent_path("move-up");
-    let mut keymaps = minimal_keymaps();
-    keymaps.get_mut(&InputMode::Normal).unwrap().insert(KeyBinding::new(KeyCode::Char('K'), KeyModifiers::SHIFT), Command::MoveRecentRepositoryUp);
-    let mut app = App {
-        viewport: Viewport::Splash,
-        focus: Focus::Viewport,
-        keymaps,
-        recent: vec!["/repo/a".into(), "/repo/b".into(), "/repo/c".into()],
-        splash_selected: 1,
-        recent_save_path: Some(path.clone()),
-        ..Default::default()
-    };
+fn settings_recent_repository_cases_cover_remove_move_and_noops() {
+    let (app, path) = settings_recent_app(&["/repo/a", "/repo/b", "/repo/c"], 12, 1, "settings-remove");
+    assert_settings_recent_case("settings-remove", app, path, remove_recent_repository, &["/repo/a", "/repo/c"], 12, true);
 
-    app.handle_key_event(KeyEvent::new(KeyCode::Char('K'), KeyModifiers::SHIFT));
+    let (app, path) = settings_recent_app(&["/repo/a", "/repo/b", "/repo/c"], 12, 1, "settings-move-up");
+    assert_settings_recent_case("settings-move-up", app, path, move_recent_repository_up, &["/repo/b", "/repo/a", "/repo/c"], 11, true);
 
-    assert_eq!(app.recent, vec!["/repo/b".to_string(), "/repo/a".to_string(), "/repo/c".to_string()]);
-    assert_eq!(app.splash_selected, 0);
-    let saved: Vec<String> = facet_json::from_str(&fs::read_to_string(path).unwrap()).unwrap();
-    assert_eq!(saved, app.recent);
-}
+    let (app, path) = settings_recent_app(&["/repo/a", "/repo/b", "/repo/c"], 12, 1, "settings-move-down");
+    assert_settings_recent_case("settings-move-down", app, path, move_recent_repository_down, &["/repo/a", "/repo/c", "/repo/b"], 13, true);
 
-#[test]
-fn splash_shift_j_moves_selected_recent_repository_down_and_persists() {
-    let path = temp_recent_path("move-down");
-    let mut keymaps = minimal_keymaps();
-    keymaps.get_mut(&InputMode::Normal).unwrap().insert(KeyBinding::new(KeyCode::Char('J'), KeyModifiers::SHIFT), Command::MoveRecentRepositoryDown);
-    let mut app = App {
-        viewport: Viewport::Splash,
-        focus: Focus::Viewport,
-        keymaps,
-        recent: vec!["/repo/a".into(), "/repo/b".into(), "/repo/c".into()],
-        splash_selected: 1,
-        recent_save_path: Some(path.clone()),
-        ..Default::default()
-    };
-
-    app.handle_key_event(KeyEvent::new(KeyCode::Char('J'), KeyModifiers::SHIFT));
-
-    assert_eq!(app.recent, vec!["/repo/a".to_string(), "/repo/c".to_string(), "/repo/b".to_string()]);
-    assert_eq!(app.splash_selected, 2);
-    let saved: Vec<String> = facet_json::from_str(&fs::read_to_string(path).unwrap()).unwrap();
-    assert_eq!(saved, app.recent);
-}
-
-#[test]
-fn splash_move_recent_boundary_noops_without_saving() {
-    let path = temp_recent_path("move-boundary");
-    let mut app =
-        App { viewport: Viewport::Splash, focus: Focus::Viewport, recent: vec!["/repo/a".into(), "/repo/b".into()], splash_selected: 0, recent_save_path: Some(path.clone()), ..Default::default() };
-
-    app.on_move_recent_repository_up();
-    assert_eq!(app.recent, vec!["/repo/a".to_string(), "/repo/b".to_string()]);
-    assert_eq!(app.splash_selected, 0);
-    assert!(!path.exists());
-
-    app.splash_selected = 1;
-    app.on_move_recent_repository_down();
-    assert_eq!(app.recent, vec!["/repo/a".to_string(), "/repo/b".to_string()]);
-    assert_eq!(app.splash_selected, 1);
-    assert!(!path.exists());
-}
-
-#[test]
-fn settings_recent_repository_remove_persists_selected_row() {
-    let path = temp_recent_path("settings-remove");
-    let mut app = App {
-        viewport: Viewport::Settings,
-        focus: Focus::Viewport,
-        recent: vec!["/repo/a".into(), "/repo/b".into(), "/repo/c".into()],
-        settings_selected: 12,
-        settings_selections: vec![SettingsSelection { line: 12, kind: SettingsSelectionKind::RecentRepository(1) }],
-        recent_save_path: Some(path.clone()),
-        ..Default::default()
-    };
-
-    app.on_remove_recent_repository();
-
-    assert_eq!(app.recent, vec!["/repo/a".to_string(), "/repo/c".to_string()]);
-    assert_eq!(app.settings_selected, 12);
-    let saved: Vec<String> = facet_json::from_str(&fs::read_to_string(path).unwrap()).unwrap();
-    assert_eq!(saved, app.recent);
-}
-
-#[test]
-fn settings_recent_repository_move_up_and_down_persist_and_follow_row() {
-    let up_path = temp_recent_path("settings-move-up");
-    let mut up = App {
-        viewport: Viewport::Settings,
-        focus: Focus::Viewport,
-        recent: vec!["/repo/a".into(), "/repo/b".into(), "/repo/c".into()],
-        settings_selected: 12,
-        settings_selections: vec![SettingsSelection { line: 12, kind: SettingsSelectionKind::RecentRepository(1) }],
-        recent_save_path: Some(up_path.clone()),
-        ..Default::default()
-    };
-
-    up.on_move_recent_repository_up();
-
-    assert_eq!(up.recent, vec!["/repo/b".to_string(), "/repo/a".to_string(), "/repo/c".to_string()]);
-    assert_eq!(up.settings_selected, 11);
-    let saved: Vec<String> = facet_json::from_str(&fs::read_to_string(up_path).unwrap()).unwrap();
-    assert_eq!(saved, up.recent);
-
-    let down_path = temp_recent_path("settings-move-down");
-    let mut down = App {
-        viewport: Viewport::Settings,
-        focus: Focus::Viewport,
-        recent: vec!["/repo/a".into(), "/repo/b".into(), "/repo/c".into()],
-        settings_selected: 12,
-        settings_selections: vec![SettingsSelection { line: 12, kind: SettingsSelectionKind::RecentRepository(1) }],
-        recent_save_path: Some(down_path.clone()),
-        ..Default::default()
-    };
-
-    down.on_move_recent_repository_down();
-
-    assert_eq!(down.recent, vec!["/repo/a".to_string(), "/repo/c".to_string(), "/repo/b".to_string()]);
-    assert_eq!(down.settings_selected, 13);
-    let saved: Vec<String> = facet_json::from_str(&fs::read_to_string(down_path).unwrap()).unwrap();
-    assert_eq!(saved, down.recent);
-}
-
-#[test]
-fn settings_recent_repository_commands_noop_on_non_recent_rows() {
-    let path = temp_recent_path("settings-non-recent");
-    let mut keymaps = minimal_keymaps();
-    keymaps.get_mut(&InputMode::Normal).unwrap().insert(KeyBinding::new(KeyCode::Char('d'), KeyModifiers::NONE), Command::RemoveRecentRepository);
-    keymaps.get_mut(&InputMode::Normal).unwrap().insert(KeyBinding::new(KeyCode::Char('K'), KeyModifiers::SHIFT), Command::MoveRecentRepositoryUp);
-    keymaps.get_mut(&InputMode::Normal).unwrap().insert(KeyBinding::new(KeyCode::Char('J'), KeyModifiers::SHIFT), Command::MoveRecentRepositoryDown);
-    let mut app = App {
-        viewport: Viewport::Settings,
-        focus: Focus::Viewport,
-        keymaps,
-        recent: vec!["/repo/a".into(), "/repo/b".into()],
-        settings_selected: 12,
-        settings_selections: vec![SettingsSelection { line: 12, kind: SettingsSelectionKind::Info }],
-        recent_save_path: Some(path.clone()),
-        ..Default::default()
-    };
-
-    app.handle_key_event(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
-    app.handle_key_event(KeyEvent::new(KeyCode::Char('K'), KeyModifiers::SHIFT));
-    app.handle_key_event(KeyEvent::new(KeyCode::Char('J'), KeyModifiers::SHIFT));
+    let (mut app, path) = settings_recent_app(&["/repo/a", "/repo/b"], 12, 1, "settings-non-recent");
+    app.settings_selections = vec![SettingsSelection { line: 12, kind: SettingsSelectionKind::Info }];
+    remove_recent_repository(&mut app);
+    move_recent_repository_up(&mut app);
+    move_recent_repository_down(&mut app);
 
     assert_eq!(app.recent, vec!["/repo/a".to_string(), "/repo/b".to_string()]);
     assert_eq!(app.settings_selected, 12);
@@ -702,7 +663,7 @@ fn settings_recent_repository_commands_noop_on_non_recent_rows() {
 #[test]
 fn empty_branch_pane_select_and_narrow_are_noops() {
     let (_path, repo) = temp_repo("empty-branches");
-    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Branches, ..Default::default() };
+    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), viewport: Viewport::Graph, focus: Focus::Branches, ..Default::default() };
 
     app.on_select();
     assert_eq!(app.focus, Focus::Branches);
@@ -714,7 +675,7 @@ fn empty_branch_pane_select_and_narrow_are_noops() {
 fn assert_offscreen_pane_narrow_requests_walker_row(focus: Focus, pane: GraphPane, selection: usize) {
     let (_path, repo) = temp_repo("offscreen-pane");
     let (tx, rx) = std::sync::mpsc::channel();
-    let mut app = App { repo: Some(Rc::new(repo)), graph_tx: Some(tx), viewport: Viewport::Graph, focus, ..Default::default() };
+    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), graph_tx: Some(tx), viewport: Viewport::Graph, focus, ..Default::default() };
     app.graph.generation = 7;
 
     match pane {
@@ -750,7 +711,7 @@ fn offscreen_pane_narrow_requests_selected_row_from_walker() {
 fn offscreen_graph_narrow_requests_row_before_opening_inspector() {
     let (_path, repo) = temp_repo("offscreen-inspector");
     let (tx, rx) = std::sync::mpsc::channel();
-    let mut app = App { repo: Some(Rc::new(repo)), graph_tx: Some(tx), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), graph_tx: Some(tx), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
     app.graph.generation = 7;
     app.graph_selected = 42;
     app.layout_config.is_zen = false;
@@ -774,7 +735,7 @@ fn offscreen_graph_narrow_requests_row_before_opening_inspector() {
 fn zen_offscreen_graph_narrow_opens_inspector_while_requesting_row() {
     let (_path, repo) = temp_repo("zen-offscreen-inspector");
     let (tx, rx) = std::sync::mpsc::channel();
-    let mut app = App { repo: Some(Rc::new(repo)), graph_tx: Some(tx), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), graph_tx: Some(tx), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
     app.graph.generation = 7;
     app.graph_selected = 42;
     app.layout_config.is_zen = true;
@@ -799,35 +760,12 @@ fn zen_graph_narrow_promotes_cached_window_row_before_opening_inspector() {
     let (_path, repo) = temp_repo("zen-cached-inspector");
     let oid = commit_file(&repo, "cached.txt", "cached");
     let (tx, rx) = std::sync::mpsc::channel();
-    let mut app = App { repo: Some(Rc::new(repo)), graph_tx: Some(tx), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), graph_tx: Some(tx), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
     app.graph.generation = 7;
     app.graph.total = 43;
     app.graph_selected = 42;
     app.layout_config.is_zen = true;
-    app.graph.graph_window = Some(GraphWindowCache {
-        version: 1,
-        start: 42,
-        end: 43,
-        head_alias: 99,
-        rows: vec![GraphRow {
-            index: 42,
-            alias: 99,
-            oid,
-            summary: "cached".to_string(),
-            committer_date: String::new(),
-            committer_name: String::new(),
-            is_merge: false,
-            has_any_branch: false,
-            branches: Default::default(),
-            tags: Default::default(),
-            is_stash: false,
-            stash_lane: None,
-            worktrees: Default::default(),
-            has_current_worktree: false,
-            reflog: None,
-        }],
-        history: Default::default(),
-    });
+    app.graph.graph_window = Some(GraphWindowCache { version: 1, start: 42, end: 43, head_alias: 99, rows: vec![graph_row(42, 99, oid, "cached", None)], history: Default::default() });
 
     app.on_narrow_scope();
 
@@ -838,7 +776,7 @@ fn zen_graph_narrow_promotes_cached_window_row_before_opening_inspector() {
     app.graph.graph_window = None;
     let identity = app.graph_identity_at(42).unwrap();
     assert_eq!(identity.alias, 99);
-    assert_eq!(identity.oid, oid);
+    assert_eq!(app.graph_oid_for_identity(identity), Some(oid));
 }
 
 #[test]
@@ -848,7 +786,15 @@ fn graph_row_lookup_result_opens_inspector_with_reflog() {
     let repo = Rc::new(repo);
     let (cmd_tx, _cmd_rx) = std::sync::mpsc::channel();
     let (event_tx, event_rx) = std::sync::mpsc::channel();
-    let mut app = App { repo: Some(repo.clone()), graph_tx: Some(cmd_tx), graph_rx: Some(event_rx), viewport: Viewport::Graph, focus: Focus::Viewport, graph_selected: 42, ..Default::default() };
+    let mut app = App {
+        repo: Some(crate::app::app::RepoHandle::from_repo(repo.clone())),
+        graph_tx: Some(cmd_tx),
+        graph_rx: Some(event_rx),
+        viewport: Viewport::Graph,
+        focus: Focus::Viewport,
+        graph_selected: 42,
+        ..Default::default()
+    };
     app.graph.generation = 7;
     app.graph.pending_lookup = Some((3, PendingGraphLookup::OpenInspector));
 
@@ -856,28 +802,19 @@ fn graph_row_lookup_result_opens_inspector_with_reflog() {
         .send(GraphEvent::LookupResult {
             generation: 7,
             request_id: 3,
-            result: GraphLookupResult::GraphRow(Some(GraphRow {
-                index: 42,
-                alias: 99,
+            result: GraphLookupResult::GraphRow(Some(graph_row(
+                42,
+                99,
                 oid,
-                summary: "commit".to_string(),
-                committer_date: String::new(),
-                committer_name: String::new(),
-                is_merge: false,
-                has_any_branch: false,
-                branches: Default::default(),
-                tags: Default::default(),
-                is_stash: false,
-                stash_lane: None,
-                worktrees: Default::default(),
-                has_current_worktree: false,
-                reflog: Some(GraphReflogLabel { selector: "HEAD@{0}".to_string(), message: "commit: commit".to_string(), lane: Some(LaneRef::new(2, false)) }),
-            })),
+                "commit",
+                Some(GraphReflogLabel { selector: "HEAD@{0}".to_string(), message: "commit: commit".to_string(), lane: Some(LaneRef::new(2, false)) }),
+            ))),
         })
         .unwrap();
     app.sync(&repo);
 
     assert_eq!(app.focus, Focus::Inspector);
+    assert!(app.layout_config.is_inspector);
     assert_eq!(app.graph_alias_at(42), Some(99));
     assert_eq!(app.graph_oid_at(42), Some(oid));
     assert_eq!(app.graph_row_at(42).and_then(|row| row.reflog.as_ref()).map(|entry| entry.selector.as_str()), Some("HEAD@{0}"));
@@ -943,7 +880,7 @@ fn zen_pane_row_jump_uses_inner_graph_height_for_centering() {
 fn pane_alias_fallback_jump_centers_selected_graph_row() {
     let (_path, repo) = temp_repo("pane-alias-center");
     let oid = commit_file(&repo, "feature.txt", "feature");
-    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Branches, ..Default::default() };
+    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))), viewport: Viewport::Graph, focus: Focus::Branches, ..Default::default() };
     let alias = app.oids.get_alias_by_oid(oid);
     app.oids.sorted_aliases = vec![NONE; 100];
     app.oids.sorted_aliases[40] = alias;
@@ -974,13 +911,7 @@ fn empty_delete_tag_modal_navigation_stays_at_zero() {
 #[test]
 fn settings_shortcut_selection_opens_key_capture() {
     let key_selection = KeymapSelection::new(InputMode::Normal, KeyBinding::new(KeyCode::Char('j'), KeyModifiers::NONE), Command::ScrollDown);
-    let mut app = App {
-        viewport: Viewport::Settings,
-        focus: Focus::Viewport,
-        settings_selected: 12,
-        settings_selections: vec![SettingsSelection { line: 12, kind: SettingsSelectionKind::KeyBinding(key_selection.clone()) }],
-        ..Default::default()
-    };
+    let mut app = settings_selection_app(SettingsSelectionKind::KeyBinding(key_selection.clone()));
 
     app.on_select();
 
@@ -996,7 +927,15 @@ fn settings_tab_commands_cycle_tabs_and_reset_selection() {
     let mut keymaps = minimal_keymaps();
     keymaps.get_mut(&InputMode::Normal).unwrap().insert(KeyBinding::new(KeyCode::Tab, KeyModifiers::NONE), Command::FocusNextPane);
     keymaps.get_mut(&InputMode::Normal).unwrap().insert(KeyBinding::new(KeyCode::BackTab, KeyModifiers::SHIFT), Command::FocusPreviousPane);
-    let mut app = App { repo: Some(Rc::new(repo)), viewport: Viewport::Settings, focus: Focus::Viewport, settings_tab: SettingsTab::General, settings_selected: 99, keymaps, ..Default::default() };
+    let mut app = App {
+        repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))),
+        viewport: Viewport::Settings,
+        focus: Focus::Viewport,
+        settings_tab: SettingsTab::General,
+        settings_selected: 99,
+        keymaps,
+        ..Default::default()
+    };
     app.layout.graph = Rect::new(0, 0, 120, 40);
     app.layout.app = Rect::new(0, 0, 120, 40);
     app.settings_scroll.set(12);
@@ -1031,116 +970,79 @@ fn toggle_help_opens_settings_on_general_tab() {
 }
 
 #[test]
-fn settings_layout_command_toggles_and_stays_in_settings() {
-    let mut app = App {
-        viewport: Viewport::Settings,
-        focus: Focus::Viewport,
-        settings_selected: 12,
-        settings_selections: vec![SettingsSelection { line: 12, kind: SettingsSelectionKind::LayoutCommand(Command::ToggleBranches) }],
-        ..Default::default()
-    };
-    app.layout_config.is_branches = true;
-    app.settings_scroll.set(4);
-
-    app.on_select();
-
-    assert!(!app.layout_config.is_branches);
-    assert_eq!(app.viewport, Viewport::Settings);
-    assert_eq!(app.focus, Focus::Viewport);
-    assert_eq!(app.settings_selected, 12);
-    assert_eq!(app.settings_scroll.get(), 4);
-}
-
-#[test]
-fn settings_submodule_layout_command_toggles_and_stays_in_settings() {
-    let mut app = App {
-        viewport: Viewport::Settings,
-        focus: Focus::Viewport,
-        settings_selected: 12,
-        settings_selections: vec![SettingsSelection { line: 12, kind: SettingsSelectionKind::LayoutCommand(Command::ToggleSubmodules) }],
-        ..Default::default()
-    };
-    app.layout_config.is_submodules = false;
-    app.settings_scroll.set(4);
-
-    app.on_select();
-
-    assert!(app.layout_config.is_submodules);
-    assert_eq!(app.viewport, Viewport::Settings);
-    assert_eq!(app.focus, Focus::Viewport);
-    assert_eq!(app.settings_selected, 12);
-    assert_eq!(app.settings_scroll.get(), 4);
-}
-
-#[test]
-fn settings_symbol_theme_selection_updates_persists_and_stays_in_settings() {
-    let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-    let path = std::env::temp_dir().join(format!("guitar-symbol-theme-select-{id}.json"));
-    let mut app = App {
-        viewport: Viewport::Settings,
-        focus: Focus::Viewport,
-        settings_selected: 12,
-        settings_selections: vec![SettingsSelection { line: 12, kind: SettingsSelectionKind::SymbolTheme(1) }],
-        symbol_theme_save_path: Some(path.clone()),
-        ..Default::default()
-    };
-    app.settings_scroll.set(4);
-
-    app.on_select();
-
-    assert_eq!(app.symbols, SymbolTheme::ascii());
-    assert_eq!(app.viewport, Viewport::Settings);
-    assert_eq!(app.focus, Focus::Viewport);
-    assert_eq!(app.settings_selected, 12);
-    assert_eq!(app.settings_scroll.get(), 4);
-    let saved = fs::read_to_string(path).unwrap();
-    assert!(saved.contains("\"label\": \"ascii\""));
-    assert!(saved.contains("\"rounded_top_left\": \"+\""));
-}
-
-#[test]
-fn settings_language_selection_updates_persists_and_stays_in_settings() {
+fn settings_selection_cases_cover_layout_theme_language_and_reset() {
     let _guard = crate::git::test_support::language_test_guard();
 
-    let path = temp_language_path("select");
-    let mut app = App {
-        viewport: Viewport::Settings,
-        focus: Focus::Viewport,
-        settings_selected: 12,
-        settings_selections: vec![SettingsSelection { line: 12, kind: SettingsSelectionKind::Language(1) }],
-        language_save_path: Some(path.clone()),
-        ..Default::default()
+    assert_settings_selection_case(
+        "layout-toggle-branches",
+        SettingsSelectionKind::LayoutCommand(Command::ToggleBranches),
+        4,
+        |app| {
+            app.layout_config.is_branches = true;
+            app.settings_scroll.set(4);
+        },
+        |app| assert!(!app.layout_config.is_branches),
+    );
+
+    assert_settings_selection_case(
+        "layout-toggle-submodules",
+        SettingsSelectionKind::LayoutCommand(Command::ToggleSubmodules),
+        4,
+        |app| {
+            app.layout_config.is_submodules = false;
+            app.settings_scroll.set(4);
+        },
+        |app| assert!(app.layout_config.is_submodules),
+    );
+
+    let symbol_theme_path = {
+        let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        std::env::temp_dir().join(format!("guitar-symbol-theme-select-{id}.json"))
     };
-    app.settings_scroll.set(4);
+    assert_settings_selection_case(
+        "symbol-theme-selection",
+        SettingsSelectionKind::SymbolTheme(1),
+        4,
+        |app| {
+            app.symbol_theme_save_path = Some(symbol_theme_path.clone());
+            app.settings_scroll.set(4);
+        },
+        |app| {
+            assert_eq!(app.symbols, SymbolTheme::ascii());
+            let saved = fs::read_to_string(&symbol_theme_path).unwrap();
+            assert!(saved.contains("\"label\": \"ascii\""));
+            assert!(saved.contains("\"rounded_top_left\": \"+\""));
+        },
+    );
 
-    app.on_select();
+    let language_path = temp_language_path("select");
+    assert_settings_selection_case(
+        "language-selection",
+        SettingsSelectionKind::Language(1),
+        4,
+        |app| {
+            app.language_save_path = Some(language_path.clone());
+            app.settings_scroll.set(4);
+        },
+        |app| {
+            assert_eq!(app.language, Language::Spanish);
+            assert_eq!(fs::read_to_string(&language_path).unwrap(), "\"spanish\"");
+        },
+    );
 
-    assert_eq!(app.language, Language::Spanish);
-    assert_eq!(app.viewport, Viewport::Settings);
-    assert_eq!(app.focus, Focus::Viewport);
-    assert_eq!(app.settings_selected, 12);
-    assert_eq!(app.settings_scroll.get(), 4);
-    assert_eq!(fs::read_to_string(path).unwrap(), "\"spanish\"");
-}
-
-#[test]
-fn settings_reset_layout_command_resets_and_stays_in_settings() {
-    let mut app = App {
-        viewport: Viewport::Settings,
-        focus: Focus::Viewport,
-        settings_selected: 12,
-        settings_selections: vec![SettingsSelection { line: 12, kind: SettingsSelectionKind::LayoutCommand(Command::ResetLayout) }],
-        ..Default::default()
-    };
-    app.layout_config.is_branches = false;
-    app.layout_config.is_shas = false;
-
-    app.on_select();
-
-    assert!(app.layout_config.is_branches);
-    assert!(app.layout_config.is_shas);
-    assert_eq!(app.viewport, Viewport::Settings);
-    assert_eq!(app.focus, Focus::Viewport);
+    assert_settings_selection_case(
+        "layout-reset",
+        SettingsSelectionKind::LayoutCommand(Command::ResetLayout),
+        0,
+        |app| {
+            app.layout_config.is_branches = false;
+            app.layout_config.is_shas = false;
+        },
+        |app| {
+            assert!(app.layout_config.is_branches);
+            assert!(app.layout_config.is_shas);
+        },
+    );
 }
 
 #[test]
@@ -1209,34 +1111,21 @@ fn graph_metadata_shifted_punctuation_aliases_toggle_display_flags() {
 }
 
 #[test]
-fn graph_metadata_legacy_ctrl_digit_aliases_toggle_display_flags() {
-    let mut keymaps = minimal_keymaps();
-    let normal = keymaps.get_mut(&InputMode::Normal).unwrap();
-    normal.insert(KeyBinding::new(KeyCode::Char('2'), KeyModifiers::SHIFT), Command::ToggleGraphDates);
-    normal.insert(KeyBinding::new(KeyCode::Char('3'), KeyModifiers::SHIFT), Command::ToggleGraphCommitters);
-    normal.insert(KeyBinding::new(KeyCode::Char('4'), KeyModifiers::SHIFT), Command::ToggleGraphRefs);
-    let mut app = App { viewport: Viewport::Graph, focus: Focus::Viewport, keymaps, ..Default::default() };
-    app.layout_config.is_graph_dates = false;
-    app.layout_config.is_graph_committers = false;
-    app.layout_config.is_graph_refs = true;
-
-    app.handle_key_event(KeyEvent::new(KeyCode::Char('2'), KeyModifiers::CONTROL));
-    app.handle_key_event(KeyEvent::new(KeyCode::Char('3'), KeyModifiers::CONTROL));
-    app.handle_key_event(KeyEvent::new(KeyCode::Char('4'), KeyModifiers::CONTROL));
-
-    assert!(app.layout_config.is_graph_dates);
-    assert!(app.layout_config.is_graph_committers);
-    assert!(!app.layout_config.is_graph_refs);
-}
-
-#[test]
 fn graph_reflog_shift_digit_shortcut_toggles_and_reloads() {
     let (path, repo) = temp_repo("graph-reflog-shortcut");
     commit_file(&repo, "head.txt", "head");
     let path = path.display().to_string();
     let mut keymaps = minimal_keymaps();
     keymaps.get_mut(&InputMode::Normal).unwrap().insert(KeyBinding::new(KeyCode::Char('0'), KeyModifiers::SHIFT), Command::ToggleGraphReflogs);
-    let mut app = App { path: Some(path.clone()), recent: vec![path], repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Branches, keymaps, ..Default::default() };
+    let mut app = App {
+        path: Some(path.clone()),
+        recent: vec![path],
+        repo: Some(crate::app::app::RepoHandle::from_repo(Rc::new(repo))),
+        viewport: Viewport::Graph,
+        focus: Focus::Branches,
+        keymaps,
+        ..Default::default()
+    };
     app.layout_config.is_graph_reflogs = false;
 
     app.handle_key_event(KeyEvent::new(KeyCode::Char('0'), KeyModifiers::SHIFT));
@@ -1345,77 +1234,67 @@ fn key_capture_can_assign_enter_key() {
 }
 
 #[test]
-fn key_capture_esc_closes_without_capturing_key() {
+fn escape_cases_cover_key_capture_modal_resets_and_progress() {
     let key_selection = KeymapSelection::new(InputMode::Normal, KeyBinding::new(KeyCode::Char('j'), KeyModifiers::NONE), Command::ScrollDown);
-    let mut app = App { viewport: Viewport::Settings, focus: Focus::ModalKeyCapture, keymaps: minimal_keymaps(), modal_key_capture_selection: Some(key_selection), ..Default::default() };
+    assert_esc_case(
+        "key-capture-esc",
+        App { viewport: Viewport::Settings, focus: Focus::ModalKeyCapture, keymaps: minimal_keymaps(), modal_key_capture_selection: Some(key_selection), ..Default::default() },
+        Focus::Viewport,
+        |app| {
+            assert_eq!(app.modal_key_capture_selection, None);
+            assert_eq!(app.modal_key_capture_candidate, None);
+            assert_eq!(app.modal_key_capture_error, None);
+        },
+    );
 
-    app.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert_esc_case(
+        "settings-exit-with-raw-esc",
+        App { viewport: Viewport::Settings, focus: Focus::Viewport, keymaps: Keymaps::new(), settings_selected: 12, settings_tab: SettingsTab::Shortcuts, ..Default::default() },
+        Focus::Viewport,
+        |app| {
+            assert_eq!(app.viewport, Viewport::Graph);
+            assert_eq!(app.mode, InputMode::Normal);
+        },
+    );
 
-    assert_eq!(app.focus, Focus::Viewport);
-    assert_eq!(app.modal_key_capture_selection, None);
-    assert_eq!(app.modal_key_capture_candidate, None);
-    assert_eq!(app.modal_key_capture_error, None);
-}
+    assert_esc_case("checkout-modal-esc", App { focus: Focus::ModalCheckout, modal_checkout_selected: 3, ..Default::default() }, Focus::Viewport, |app| assert_eq!(app.modal_checkout_selected, 0));
 
-#[test]
-fn raw_esc_exits_settings_even_without_keymap_binding() {
-    let mut app = App { viewport: Viewport::Settings, focus: Focus::Viewport, keymaps: Keymaps::new(), settings_selected: 12, settings_tab: SettingsTab::Shortcuts, ..Default::default() };
+    assert_esc_case("solo-modal-esc", App { focus: Focus::ModalSolo, modal_solo_selected: 2, modal_branch_action: BranchModalAction::Rename, ..Default::default() }, Focus::Viewport, |app| {
+        assert_eq!(app.modal_solo_selected, 0);
+        assert_eq!(app.modal_branch_action, BranchModalAction::Solo);
+    });
 
-    app.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert_esc_case("delete-branch-modal-esc", App { focus: Focus::ModalDeleteBranch, modal_delete_branch_selected: 4, ..Default::default() }, Focus::Viewport, |app| {
+        assert_eq!(app.modal_delete_branch_selected, 0)
+    });
 
-    assert_eq!(app.viewport, Viewport::Graph);
-    assert_eq!(app.focus, Focus::Viewport);
-    assert_eq!(app.mode, InputMode::Normal);
-}
+    assert_esc_case("delete-tag-modal-esc", App { focus: Focus::ModalDeleteTag, modal_delete_tag_selected: 5, ..Default::default() }, Focus::Viewport, |app| {
+        assert_eq!(app.modal_delete_tag_selected, 0)
+    });
 
-#[test]
-fn raw_esc_closes_choice_and_confirmation_modals() {
-    let mut checkout = App { focus: Focus::ModalCheckout, modal_checkout_selected: 3, ..Default::default() };
-    checkout.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-    assert_eq!(checkout.focus, Focus::Viewport);
-    assert_eq!(checkout.modal_checkout_selected, 0);
+    assert_esc_case(
+        "remote-action-modal-esc",
+        App { focus: Focus::ModalRemoteAction, modal_remote_selected: 3, modal_remote_target: Some("origin".into()), ..Default::default() },
+        Focus::Viewport,
+        |app| {
+            assert_eq!(app.modal_remote_selected, 0);
+            assert_eq!(app.modal_remote_target, None);
+        },
+    );
 
-    let mut solo = App { focus: Focus::ModalSolo, modal_solo_selected: 2, modal_branch_action: BranchModalAction::Rename, ..Default::default() };
-    solo.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-    assert_eq!(solo.focus, Focus::Viewport);
-    assert_eq!(solo.modal_solo_selected, 0);
-    assert_eq!(solo.modal_branch_action, BranchModalAction::Solo);
+    assert_esc_case(
+        "remote-delete-modal-esc",
+        App { focus: Focus::ModalRemoteDelete, modal_remote_selected: 5, modal_remote_target: Some("origin".into()), ..Default::default() },
+        Focus::Viewport,
+        |app| {
+            assert_eq!(app.modal_remote_selected, 0);
+            assert_eq!(app.modal_remote_target, None);
+        },
+    );
 
-    let mut delete_branch = App { focus: Focus::ModalDeleteBranch, modal_delete_branch_selected: 4, ..Default::default() };
-    delete_branch.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-    assert_eq!(delete_branch.focus, Focus::Viewport);
-    assert_eq!(delete_branch.modal_delete_branch_selected, 0);
+    assert_esc_case("live-progress-modal-esc", App { focus: Focus::ModalNetworkProgress, ..Default::default() }, Focus::ModalNetworkProgress, |_| {});
 
-    let mut delete_tag = App { focus: Focus::ModalDeleteTag, modal_delete_tag_selected: 5, ..Default::default() };
-    delete_tag.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-    assert_eq!(delete_tag.focus, Focus::Viewport);
-    assert_eq!(delete_tag.modal_delete_tag_selected, 0);
-}
-
-#[test]
-fn raw_esc_closes_remote_action_modals() {
-    let mut action = App { focus: Focus::ModalRemoteAction, modal_remote_selected: 3, modal_remote_target: Some("origin".into()), ..Default::default() };
-    action.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-    assert_eq!(action.focus, Focus::Viewport);
-    assert_eq!(action.modal_remote_selected, 0);
-    assert_eq!(action.modal_remote_target, None);
-
-    let mut delete = App { focus: Focus::ModalRemoteDelete, modal_remote_selected: 5, modal_remote_target: Some("origin".into()), ..Default::default() };
-    delete.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-    assert_eq!(delete.focus, Focus::Viewport);
-    assert_eq!(delete.modal_remote_selected, 0);
-    assert_eq!(delete.modal_remote_target, None);
-}
-
-#[test]
-fn raw_esc_does_not_dismiss_live_progress_modals() {
-    let mut network = App { focus: Focus::ModalNetworkProgress, ..Default::default() };
-    network.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-    assert_eq!(network.focus, Focus::ModalNetworkProgress);
-
-    let mut operation = App { focus: Focus::ModalOperationProgress, ..Default::default() };
-    operation.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-    assert_eq!(operation.focus, Focus::ModalOperationProgress);
+    assert_esc_case("operation-progress-modal-esc", App { focus: Focus::ModalOperationProgress, ..Default::default() }, Focus::ModalOperationProgress, |_| {});
 }
 
 #[test]
