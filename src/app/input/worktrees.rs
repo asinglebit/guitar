@@ -32,7 +32,7 @@ impl App {
                 .entries
                 .iter()
                 .enumerate()
-                .filter_map(|(idx, entry)| entry.head.and_then(|oid| self.oids.aliases.get(&oid)).is_some_and(|current| *current == alias).then_some(idx))
+                .filter_map(|(idx, entry)| entry.head.and_then(|oid| self.oids.get_existing_alias(oid)).is_some_and(|current| current == alias).then_some(idx))
                 .collect();
         }
 

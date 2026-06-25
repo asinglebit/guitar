@@ -97,7 +97,7 @@ fn walker_loads_commit_reachable_only_from_head_reflog() {
 
     let mut walker = Walker::new(path.display().to_string(), 100, HashSet::new(), true, 20).unwrap();
     walker.walk();
-    let lost_alias = walker.oids.aliases.get(&lost).copied().unwrap();
+    let lost_alias = walker.oids.get_existing_alias(lost).unwrap();
 
     assert!(walker.oids.get_sorted_aliases().contains(&lost_alias));
 }
@@ -112,7 +112,7 @@ fn walker_can_hide_commit_reachable_only_from_head_reflog() {
 
     let mut walker = Walker::new(path.display().to_string(), 100, HashSet::new(), false, 20).unwrap();
     walker.walk();
-    let lost_alias = walker.oids.aliases.get(&lost).copied().unwrap();
+    let lost_alias = walker.oids.get_existing_alias(lost).unwrap();
 
     assert!(!walker.oids.get_sorted_aliases().contains(&lost_alias));
     assert!(walker.head_reflog_entries.iter().any(|entry| entry.new_oid == lost));
@@ -136,9 +136,9 @@ fn walker_expires_new_right_merge_lane_before_next_rendered_row() {
     let mut walker = Walker::new(path.display().to_string(), 100, HashSet::new(), false, 20).unwrap();
     while walker.walk() {}
 
-    let merge_alias = walker.oids.aliases.get(&merge).copied().unwrap();
-    let head_alias = walker.oids.aliases.get(&left_tip).copied().unwrap();
-    let aliases = walker.oids.get_sorted_aliases().clone();
+    let merge_alias = walker.oids.get_existing_alias(merge).unwrap();
+    let head_alias = walker.oids.get_existing_alias(left_tip).unwrap();
+    let aliases = walker.oids.get_sorted_aliases();
     let merge_idx = aliases.iter().position(|alias| *alias == merge_alias).unwrap();
     assert!(merge_idx + 1 < aliases.len());
 
@@ -153,7 +153,7 @@ fn walker_expires_new_right_merge_lane_before_next_rendered_row() {
         .iter()
         .enumerate()
         .map(|(index, &alias)| {
-            let mut row = graph_row(index, alias, *walker.oids.get_oid_by_alias(alias));
+            let mut row = graph_row(index, alias, walker.oids.get_git2_oid_by_alias(alias));
             row.is_merge = alias == merge_alias;
             row
         })
@@ -180,8 +180,8 @@ fn walker_records_ref_stash_and_reflog_lanes_from_update_lane() {
     let mut walker = Walker::new(path.display().to_string(), 100, HashSet::new(), true, 20).unwrap();
     while walker.walk() {}
 
-    let base_alias = walker.oids.aliases.get(&base).copied().unwrap();
-    let stash_alias = walker.oids.aliases.get(&stash).copied().unwrap();
+    let base_alias = walker.oids.get_existing_alias(base).unwrap();
+    let stash_alias = walker.oids.get_existing_alias(stash).unwrap();
 
     assert!(walker.branches_lanes.contains_key(&base_alias));
     assert!(walker.tags_lanes.contains_key(&base_alias));
@@ -199,8 +199,8 @@ fn walker_keeps_stash_adjacent_to_its_base_parent() {
     while walker.walk() {}
 
     let aliases = walker.oids.get_sorted_aliases();
-    let base_alias = walker.oids.aliases.get(&base).copied().unwrap();
-    let stash_alias = walker.oids.aliases.get(&stash).copied().unwrap();
+    let base_alias = walker.oids.get_existing_alias(base).unwrap();
+    let stash_alias = walker.oids.get_existing_alias(stash).unwrap();
     let base_idx = aliases.iter().position(|alias| *alias == base_alias).unwrap();
     let stash_idx = aliases.iter().position(|alias| *alias == stash_alias).unwrap();
 

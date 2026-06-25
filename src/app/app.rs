@@ -1251,7 +1251,7 @@ impl App {
             return None;
         }
 
-        self.oids.get_sorted_aliases().get(index).map(|&alias| GraphIndexIdentity { index, alias, oid: *self.oids.get_oid_by_alias(alias) })
+        self.oids.get_sorted_aliases().get(index).map(|&alias| GraphIndexIdentity { index, alias, oid: self.oids.get_git2_oid_by_alias(alias) })
     }
 
     pub(crate) fn graph_alias_at(&self, index: usize) -> Option<u32> {
