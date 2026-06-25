@@ -772,7 +772,7 @@ fn alias_reflog_entry(entry: &HeadReflogEntry, new_alias: u32) -> HeadReflogAlia
         new_oid: gix_to_git2_oid(entry.new_oid),
         new_alias,
         message: entry.message.clone(),
-        time: git2::Time::new(entry.time.seconds, entry.time.offset / 60),
+        time: entry.time,
     }
 }
 

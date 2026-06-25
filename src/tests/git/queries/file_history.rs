@@ -1,17 +1,10 @@
 use super::*;
 use crate::{
     core::oids::git2_to_gix_oid,
-    git::test_support::{TestDir, commit_file, commit_index, init_repo_at, stage_path, write_workdir_file},
+    git::test_support::{commit_file, commit_index, stage_path, temp_repo, write_workdir_file},
 };
-use git2::{Oid, Repository};
-use std::{fs, path::PathBuf};
-
-fn temp_repo(name: &str) -> (TestDir, PathBuf, Repository) {
-    let dir = TestDir::new(name);
-    let path = dir.join("repo");
-    let repo = init_repo_at(&path);
-    (dir, path, repo)
-}
+use git2::Oid;
+use std::fs;
 
 fn file_status_from_repo(repo: &gix::Repository, oid: Oid, path: &str) -> Option<FileStatus> {
     super::changed_file_status_at_commit_from_repo(repo, git2_to_gix_oid(oid), path).unwrap()
@@ -19,7 +12,8 @@ fn file_status_from_repo(repo: &gix::Repository, oid: Oid, path: &str) -> Option
 
 #[test]
 fn root_add_modify_delete_and_non_matching_commits_are_classified() {
-    let (_dir, path, repo) = temp_repo("statuses");
+    let (dir, repo) = temp_repo("statuses");
+    let path = dir.join("repo");
     let root = commit_file(&repo, "tracked.txt", "one\n", "root");
     let other = commit_file(&repo, "other.txt", "other\n", "other");
     let modified = commit_file(&repo, "tracked.txt", "two\n", "modify");
@@ -39,7 +33,8 @@ fn root_add_modify_delete_and_non_matching_commits_are_classified() {
 
 #[test]
 fn rename_matches_old_and_new_selected_path() {
-    let (_dir, path, repo) = temp_repo("rename");
+    let (dir, repo) = temp_repo("rename");
+    let path = dir.join("repo");
     commit_file(&repo, "old.txt", "one\n", "root");
 
     fs::rename(path.join("old.txt"), path.join("new.txt")).unwrap();
@@ -56,7 +51,8 @@ fn rename_matches_old_and_new_selected_path() {
 
 #[test]
 fn copied_file_stays_an_added_change_in_file_history() {
-    let (_dir, path, repo) = temp_repo("copy");
+    let (dir, repo) = temp_repo("copy");
+    let path = dir.join("repo");
     commit_file(&repo, "source.txt", "one\n", "root");
 
     write_workdir_file(&repo, "copy.txt", "one\n");
@@ -71,7 +67,8 @@ fn copied_file_stays_an_added_change_in_file_history() {
 #[cfg(unix)]
 #[test]
 fn typechange_is_reported_as_deleted_in_file_history() {
-    let (_dir, path, repo) = temp_repo("typechange");
+    let (dir, repo) = temp_repo("typechange");
+    let path = dir.join("repo");
     commit_file(&repo, "link.txt", "one\n", "root");
 
     fs::remove_file(path.join("link.txt")).unwrap();
@@ -85,7 +82,8 @@ fn typechange_is_reported_as_deleted_in_file_history() {
 
 #[test]
 fn directory_like_file_names_remain_file_history_entries() {
-    let (_dir, path, repo) = temp_repo("directory-like");
+    let (dir, repo) = temp_repo("directory-like");
+    let path = dir.join("repo");
     commit_file(&repo, "docs/guide", "one\n", "root");
 
     write_workdir_file(&repo, "docs/guide", "two\n");
@@ -98,7 +96,8 @@ fn directory_like_file_names_remain_file_history_entries() {
 
 #[test]
 fn empty_and_normalized_paths_match_plain_inputs() {
-    let (_dir, path, repo) = temp_repo("normalize");
+    let (dir, repo) = temp_repo("normalize");
+    let path = dir.join("repo");
     let root = commit_file(&repo, "tracked.txt", "one\n", "root");
     let gix_repo = gix::open(&path).unwrap();
 

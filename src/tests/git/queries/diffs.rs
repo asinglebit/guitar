@@ -4,54 +4,13 @@ use crate::git::{
         rebasing::{RebaseOutcome, start_rebase},
         submodules::{stage_submodule_head, unstage_submodule},
     },
-    test_support::{TestDir, parent_with_submodule},
+    test_support::{
+        TestDir, checkout_branch, commit_file, commit_index, commit_staged_file as commit, diverge_file, parent_with_submodule, stage_path as stage, temp_repo, write_path_file as write,
+        write_workdir_file,
+    },
 };
-use git2::{Repository, build::CheckoutBuilder};
-use std::{
-    fs,
-    path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
-};
-
-fn temp_repo(name: &str) -> (PathBuf, Repository) {
-    let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-    let path = std::env::temp_dir().join(format!("guitar-diff-{name}-{id}"));
-    fs::create_dir_all(&path).unwrap();
-    let repo = crate::git::test_support::init_repo_at(&path);
-    (path, repo)
-}
-
-fn write(path: &Path, file: &str, content: &str) {
-    let file_path = path.join(file);
-    if let Some(parent) = file_path.parent() {
-        fs::create_dir_all(parent).unwrap();
-    }
-    fs::write(file_path, content).unwrap();
-}
-
-fn commit(repo: &Repository, file: &str, message: &str) -> Oid {
-    let mut index = repo.index().unwrap();
-    index.add_path(Path::new(file)).unwrap();
-    index.write().unwrap();
-    commit_index(repo, message)
-}
-
-fn commit_index(repo: &Repository, message: &str) -> Oid {
-    let mut index = repo.index().unwrap();
-    index.read(true).unwrap();
-    let tree_oid = index.write_tree().unwrap();
-    let tree = repo.find_tree(tree_oid).unwrap();
-    let sig = git2::Signature::now("Test User", "test@example.com").unwrap();
-    let parent = repo.head().ok().and_then(|head| head.peel_to_commit().ok());
-    let parents: Vec<&git2::Commit<'_>> = parent.iter().collect();
-    repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents).unwrap()
-}
-
-fn stage(repo: &Repository, file: &str) {
-    let mut index = repo.index().unwrap();
-    index.add_path(Path::new(file)).unwrap();
-    index.write().unwrap();
-}
+use git2::Repository;
+use std::{fs, path::PathBuf};
 
 fn assert_no_file_status_rows(changes: &UncommittedChanges) {
     assert!(changes.staged.modified.is_empty());
@@ -64,34 +23,14 @@ fn assert_no_file_status_rows(changes: &UncommittedChanges) {
     assert!(changes.is_clean);
 }
 
-fn checkout_new_branch(repo: &Repository, name: &str) {
-    let head = repo.head().unwrap().peel_to_commit().unwrap();
-    repo.branch(name, &head, false).unwrap();
-    repo.set_head(&format!("refs/heads/{name}")).unwrap();
-    repo.checkout_head(Some(CheckoutBuilder::default().force())).unwrap();
-}
-
-fn checkout_branch(repo: &Repository, name: &str) {
-    repo.set_head(&format!("refs/heads/{name}")).unwrap();
-    repo.checkout_head(Some(CheckoutBuilder::default().force())).unwrap();
-}
-
 fn assert_contains_path(paths: &[String], expected: &str) {
     assert!(paths.iter().any(|path| path == expected), "expected {expected} in {paths:?}");
 }
 
 #[test]
 fn workdir_diff_marks_conflicted_paths() {
-    let (path, repo) = temp_repo("conflict");
-    write(&path, "file.txt", "base\n");
-    commit(&repo, "file.txt", "base");
-    let main_branch = repo.head().unwrap().shorthand().unwrap().to_string();
-    checkout_new_branch(&repo, "feature");
-    write(&path, "file.txt", "feature\n");
-    commit(&repo, "file.txt", "feature");
-    checkout_branch(&repo, &main_branch);
-    write(&path, "file.txt", "main\n");
-    let main = commit(&repo, "file.txt", "main");
+    let (_dir, repo) = temp_repo("conflict");
+    let (_, main) = diverge_file(&repo, "file.txt");
     checkout_branch(&repo, "feature");
 
     assert_eq!(start_rebase(&repo, main).unwrap(), RebaseOutcome::Conflict);
@@ -109,16 +48,13 @@ fn workdir_diff_marks_conflicted_paths() {
     assert!(conflict.workdir.iter().any(|line| line.starts_with("<<<<<<<")));
     assert!(conflict.workdir.iter().any(|line| line.starts_with("=======")));
     assert!(conflict.workdir.iter().any(|line| line.starts_with(">>>>>>>")));
-
-    let _ = fs::remove_dir_all(path);
 }
 
 #[test]
 fn workdir_file_diff_emits_untracked_file_contents_as_added_lines() {
-    let (path, repo) = temp_repo("untracked-added-lines");
-    write(&path, "tracked.txt", "base\n");
-    commit(&repo, "tracked.txt", "initial");
-    write(&path, "new.txt", "alpha\nbeta\n");
+    let (_dir, repo) = temp_repo("untracked-added-lines");
+    commit_file(&repo, "tracked.txt", "base\n", "initial");
+    write_workdir_file(&repo, "new.txt", "alpha\nbeta\n");
 
     let hunks = get_file_diff_at_workdir(&repo, "new.txt").unwrap();
     let content_lines = hunks.iter().flat_map(|hunk| hunk.lines.iter()).filter(|line| line.origin != 'H').collect::<Vec<_>>();
@@ -126,31 +62,27 @@ fn workdir_file_diff_emits_untracked_file_contents_as_added_lines() {
     assert!(!content_lines.is_empty());
     assert_eq!(content_lines.iter().map(|line| line.origin).collect::<Vec<_>>(), vec!['+', '+']);
     assert_eq!(content_lines.iter().map(|line| line.content.as_str()).collect::<Vec<_>>(), vec!["alpha\n", "beta\n"]);
-
-    let _ = fs::remove_dir_all(path);
 }
 
-fn status_matrix_repo(name: &str) -> (PathBuf, Repository) {
-    let (path, repo) = temp_repo(name);
-    write(&path, "staged.txt", "base\n");
-    commit(&repo, "staged.txt", "staged base");
-    write(&path, "unstaged.txt", "base\n");
-    commit(&repo, "unstaged.txt", "unstaged base");
-    write(&path, "deleted.txt", "base\n");
-    commit(&repo, "deleted.txt", "deleted base");
+fn status_matrix_repo(name: &str) -> (TestDir, PathBuf, Repository) {
+    let (dir, repo) = temp_repo(name);
+    let path = repo.workdir().unwrap().to_path_buf();
+    commit_file(&repo, "staged.txt", "base\n", "staged base");
+    commit_file(&repo, "unstaged.txt", "base\n", "unstaged base");
+    commit_file(&repo, "deleted.txt", "base\n", "deleted base");
 
-    write(&path, "staged.txt", "staged\n");
+    write_workdir_file(&repo, "staged.txt", "staged\n");
     stage(&repo, "staged.txt");
-    write(&path, "unstaged.txt", "unstaged\n");
+    write_workdir_file(&repo, "unstaged.txt", "unstaged\n");
     fs::remove_file(path.join("deleted.txt")).unwrap();
-    write(&path, "new.txt", "new\n");
+    write_workdir_file(&repo, "new.txt", "new\n");
 
-    (path, repo)
+    (dir, path, repo)
 }
 
 #[test]
 fn workdir_and_staged_diffs_share_the_status_matrix_without_requerying_paths() {
-    let (path, repo) = status_matrix_repo("ordinary-statuses");
+    let (_dir, path, repo) = status_matrix_repo("ordinary-statuses");
 
     let workdir = get_filenames_diff_at_workdir(&repo).unwrap();
     let staged = get_staged_filenames_diff(&repo).unwrap();
@@ -177,13 +109,12 @@ fn workdir_and_staged_diffs_share_the_status_matrix_without_requerying_paths() {
         assert!(changes.is_staged);
         assert!(!changes.is_unstaged);
     }
-
-    let _ = fs::remove_dir_all(path);
 }
 
 #[test]
 fn workdir_diff_expands_untracked_directories_without_ignored_files() {
-    let (path, repo) = temp_repo("untracked-directory-ignore");
+    let (_dir, repo) = temp_repo("untracked-directory-ignore");
+    let path = repo.workdir().unwrap();
     write(&path, ".gitignore", "*.ignored\n");
     commit(&repo, ".gitignore", "ignore generated files");
     write(&path, "scratch/one.txt", "one\n");
@@ -196,8 +127,6 @@ fn workdir_diff_expands_untracked_directories_without_ignored_files() {
     assert_contains_path(&changes.unstaged.added, "scratch/nested/two.txt");
     assert!(!changes.unstaged.added.iter().any(|path| path == "scratch"));
     assert!(!changes.unstaged.added.iter().any(|path| path.ends_with("skip.ignored")));
-
-    let _ = fs::remove_dir_all(path);
 }
 
 #[test]

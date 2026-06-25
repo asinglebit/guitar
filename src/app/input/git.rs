@@ -790,11 +790,12 @@ impl App {
     }
 
     fn default_remote_for_network(&mut self, operation: &str) -> Option<String> {
-        let Some(repo) = self.repo.clone() else {
+        if self.repo.is_none() {
             return None;
-        };
+        }
 
-        match effective_default_remote(&repo) {
+        let repo_path = self.path.as_deref().unwrap_or(".");
+        match effective_default_remote(repo_path) {
             Some(remote_name) => Some(remote_name),
             None => {
                 self.show_error(errors::no_remotes_configured(operation));

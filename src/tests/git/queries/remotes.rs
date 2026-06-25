@@ -1,14 +1,6 @@
 use super::*;
-use crate::git::test_support::{TestDir, commit_file, init_repo_at};
+use crate::git::test_support::{TestDir, commit_file, temp_repo};
 use git2::{BranchType, Repository};
-use std::path::PathBuf;
-
-fn temp_repo(name: &str) -> (TestDir, PathBuf, Repository) {
-    let dir = TestDir::new(name);
-    let path = dir.join("repo");
-    let repo = init_repo_at(&path);
-    (dir, path, repo)
-}
 
 fn set_current_branch_upstream(repo: &Repository, remote: &str) {
     let oid = commit_file(repo, "file.txt", "content\n", "commit");
@@ -19,7 +11,8 @@ fn set_current_branch_upstream(repo: &Repository, remote: &str) {
 
 #[test]
 fn list_remotes_returns_sorted_names_and_urls() {
-    let (_dir, path, repo) = temp_repo("list");
+    let (dir, repo) = temp_repo("list");
+    let path = dir.join("repo");
     repo.remote("zeta", "https://example.com/zeta.git").unwrap();
     repo.remote("alpha", "https://example.com/alpha.git").unwrap();
     repo.remote_set_pushurl("alpha", Some("ssh://example.com/alpha.git")).unwrap();
@@ -37,7 +30,8 @@ fn list_remotes_returns_sorted_names_and_urls() {
 
 #[test]
 fn list_remotes_returns_empty_for_repo_without_remotes() {
-    let (_dir, path, _repo) = temp_repo("empty");
+    let (dir, _repo) = temp_repo("empty");
+    let path = dir.join("repo");
 
     assert!(list_remotes(path.as_path()).unwrap().is_empty());
 }
@@ -56,7 +50,8 @@ fn list_remotes_handles_bare_repo_paths() {
 
 #[test]
 fn effective_default_remote_prefers_origin_before_first_sorted_remote() {
-    let (_dir, path, repo) = temp_repo("origin-fallback");
+    let (dir, repo) = temp_repo("origin-fallback");
+    let path = dir.join("repo");
     repo.remote("zeta", "https://example.com/zeta.git").unwrap();
     repo.remote("origin", "https://example.com/origin.git").unwrap();
 
@@ -65,7 +60,8 @@ fn effective_default_remote_prefers_origin_before_first_sorted_remote() {
 
 #[test]
 fn effective_default_remote_uses_config_precedence() {
-    let (_dir, path, repo) = temp_repo("default-precedence");
+    let (dir, repo) = temp_repo("default-precedence");
+    let path = dir.join("repo");
     repo.remote("origin", "https://example.com/origin.git").unwrap();
     repo.remote("upstream", "https://example.com/upstream.git").unwrap();
     set_current_branch_upstream(&repo, "upstream");
@@ -87,7 +83,8 @@ fn effective_default_remote_uses_config_precedence() {
 
 #[test]
 fn effective_default_remote_from_remotes_matches_full_resolution() {
-    let (_dir, path, repo) = temp_repo("default-from-remotes");
+    let (dir, repo) = temp_repo("default-from-remotes");
+    let path = dir.join("repo");
     repo.remote("origin", "https://example.com/origin.git").unwrap();
     repo.remote("upstream", "https://example.com/upstream.git").unwrap();
     set_current_branch_upstream(&repo, "upstream");
@@ -99,7 +96,8 @@ fn effective_default_remote_from_remotes_matches_full_resolution() {
 
 #[test]
 fn effective_default_remote_ignores_stale_config_and_falls_back() {
-    let (_dir, path, repo) = temp_repo("default-stale");
+    let (dir, repo) = temp_repo("default-stale");
+    let path = dir.join("repo");
     repo.remote("zeta", "https://example.com/zeta.git").unwrap();
     repo.remote("alpha", "https://example.com/alpha.git").unwrap();
 
