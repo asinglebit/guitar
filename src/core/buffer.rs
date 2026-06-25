@@ -1,8 +1,7 @@
 use crate::core::chunk::{Chunk, LaneRef, NONE};
 use crate::core::graph_service::{GraphHistory, LaneSnapshot};
-use smallvec::{SmallVec, smallvec};
+use smallvec::SmallVec;
 
-const DELTA_CHUNK_SIZE: usize = 8_192;
 const DELTA_OP_CHUNK_SIZE: usize = 131_072;
 const CHECKPOINT_INTERVAL: usize = 16_384;
 
@@ -20,78 +19,59 @@ pub enum DeltaOp {
     ReplaceAndTruncate { index: u32, new: Chunk, len: u32 },
 }
 
-#[derive(Default, Clone, Debug, PartialEq, Eq)]
-pub enum DeltaOps {
-    #[default]
-    Empty,
-    One(DeltaOp),
-    Two(DeltaOp, DeltaOp),
-    Many(SmallVec<[DeltaOp; 8]>),
-}
-
-impl DeltaOps {
-    fn push(&mut self, op: DeltaOp) {
-        match std::mem::take(self) {
-            DeltaOps::Empty => *self = DeltaOps::One(op),
-            DeltaOps::One(first) => *self = DeltaOps::Two(first, op),
-            DeltaOps::Two(first, second) => *self = DeltaOps::Many(smallvec![first, second, op]),
-            DeltaOps::Many(mut ops) => {
-                ops.push(op);
-                *self = DeltaOps::Many(ops);
+impl DeltaOp {
+    fn apply(self, curr: &mut LaneSnapshot) {
+        match self {
+            DeltaOp::Insert { index, item } => {
+                curr.insert(index as usize, item);
+            },
+            DeltaOp::Remove { index } => {
+                curr.remove(index as usize);
+            },
+            DeltaOp::Replace { index, new } => {
+                curr[index as usize] = new;
+            },
+            DeltaOp::Truncate { len } => {
+                curr.truncate(len as usize);
+            },
+            DeltaOp::ReplaceAndTruncate { index, new, len } => {
+                curr[index as usize] = new;
+                curr.truncate(len as usize);
             },
         }
     }
+}
 
-    pub fn iter(&self) -> DeltaOpsIter<'_> {
-        match self {
-            DeltaOps::Empty => DeltaOpsIter::Empty,
-            DeltaOps::One(op) => DeltaOpsIter::One(Some(op)),
-            DeltaOps::Two(first, second) => DeltaOpsIter::Two([first, second].into_iter()),
-            DeltaOps::Many(ops) => DeltaOpsIter::Many(ops.iter()),
-        }
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
+pub struct DeltaOps(SmallVec<[DeltaOp; 8]>);
+
+impl DeltaOps {
+    fn push(&mut self, op: DeltaOp) {
+        self.0.push(op);
+    }
+
+    pub fn iter(&self) -> std::slice::Iter<'_, DeltaOp> {
+        self.0.iter()
     }
 
     fn len(&self) -> usize {
-        match self {
-            DeltaOps::Empty => 0,
-            DeltaOps::One(_) => 1,
-            DeltaOps::Two(_, _) => 2,
-            DeltaOps::Many(ops) => ops.len(),
-        }
+        self.0.len()
     }
 
     fn shrink_to_fit(&mut self) {
-        if let DeltaOps::Many(ops) = self {
-            ops.shrink_to_fit();
-        }
+        self.0.shrink_to_fit();
     }
-}
 
-pub enum DeltaOpsIter<'a> {
-    Empty,
-    One(Option<&'a DeltaOp>),
-    Two(std::array::IntoIter<&'a DeltaOp, 2>),
-    Many(std::slice::Iter<'a, DeltaOp>),
-}
-
-impl<'a> Iterator for DeltaOpsIter<'a> {
-    type Item = &'a DeltaOp;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            DeltaOpsIter::Empty => None,
-            DeltaOpsIter::One(op) => op.take(),
-            DeltaOpsIter::Two(iter) => iter.next(),
-            DeltaOpsIter::Many(iter) => iter.next(),
-        }
+    #[cfg(test)]
+    fn spilled(&self) -> bool {
+        self.0.spilled()
     }
 }
 
 #[derive(Clone, Default)]
 pub struct DeltaLog {
-    chunks: Vec<Vec<DeltaSpan>>,
+    spans: Vec<DeltaSpan>,
     op_chunks: Vec<Vec<DeltaOp>>,
-    len: usize,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -103,16 +83,16 @@ struct DeltaSpan {
 
 impl DeltaLog {
     pub fn len(&self) -> usize {
-        self.len
+        self.spans.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.len == 0
+        self.spans.is_empty()
     }
 
     #[cfg(test)]
     pub fn capacity(&self) -> usize {
-        self.chunks.iter().map(Vec::capacity).sum()
+        self.spans.capacity()
     }
 
     #[cfg(test)]
@@ -122,15 +102,7 @@ impl DeltaLog {
 
     fn push(&mut self, delta: Delta) {
         let span = self.store_ops(&delta.ops);
-        self.delta_chunk().push(span);
-        self.len += 1;
-    }
-
-    fn delta_chunk(&mut self) -> &mut Vec<DeltaSpan> {
-        if self.chunks.last().is_none_or(|chunk| chunk.len() == DELTA_CHUNK_SIZE) {
-            self.chunks.push(Vec::with_capacity(DELTA_CHUNK_SIZE));
-        }
-        self.chunks.last_mut().expect("delta log has a writable chunk")
+        self.spans.push(span);
     }
 
     fn store_ops(&mut self, ops: &DeltaOps) -> DeltaSpan {
@@ -143,26 +115,24 @@ impl DeltaLog {
             self.op_chunks.push(Vec::with_capacity(DELTA_OP_CHUNK_SIZE.max(len)));
         }
 
-        let chunk = self.op_chunks.last_mut().expect("delta op log has a writable chunk");
+        let chunk_idx = self.op_chunks.len() - 1;
+        let chunk = &mut self.op_chunks[chunk_idx];
         let start = chunk.len();
         chunk.extend(ops.iter().copied());
 
         DeltaSpan {
-            chunk: u16::try_from(self.op_chunks.len() - 1).expect("delta op chunk index exceeded u16::MAX"),
+            chunk: u16::try_from(chunk_idx).expect("delta op chunk index exceeded u16::MAX"),
             start: u32::try_from(start).expect("delta op arena chunk exceeded u32::MAX entries"),
             len: u16::try_from(len).expect("delta entry exceeded u16::MAX ops"),
         }
     }
 
     fn iter_range(&self, start: usize, end: usize) -> DeltaLogRangeIter<'_> {
-        DeltaLogRangeIter { log: self, next: start.min(self.len), end: end.min(self.len) }
+        DeltaLogRangeIter { log: self, next: start.min(self.len()), end: end.min(self.len()) }
     }
 
     fn shrink_to_fit(&mut self) {
-        for chunk in &mut self.chunks {
-            chunk.shrink_to_fit();
-        }
-        self.chunks.shrink_to_fit();
+        self.spans.shrink_to_fit();
         for chunk in &mut self.op_chunks {
             chunk.shrink_to_fit();
         }
@@ -170,25 +140,12 @@ impl DeltaLog {
     }
 
     fn reserve_entries(&mut self, entries: usize) {
-        let chunk_count = entries.div_ceil(DELTA_CHUNK_SIZE);
-        if chunk_count > self.chunks.capacity() {
-            self.chunks.reserve(chunk_count - self.chunks.capacity());
-        }
+        self.spans.reserve(entries.saturating_sub(self.spans.len()));
     }
 }
 
 struct DeltaView<'a> {
-    ops: DeltaOpsView<'a>,
-}
-
-struct DeltaOpsView<'a> {
     ops: &'a [DeltaOp],
-}
-
-impl<'a> DeltaOpsView<'a> {
-    fn iter(&self) -> std::slice::Iter<'a, DeltaOp> {
-        self.ops.iter()
-    }
 }
 
 struct DeltaLogRangeIter<'a> {
@@ -198,27 +155,25 @@ struct DeltaLogRangeIter<'a> {
 }
 
 impl<'a> Iterator for DeltaLogRangeIter<'a> {
-    type Item = DeltaView<'a>;
+    type Item = (usize, DeltaView<'a>);
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.next >= self.end {
             return None;
         }
 
-        let chunk_idx = self.next / DELTA_CHUNK_SIZE;
-        let delta_idx = self.next % DELTA_CHUNK_SIZE;
+        let idx = self.next;
         self.next += 1;
 
-        self.log.chunks.get(chunk_idx).and_then(|chunk| chunk.get(delta_idx)).map(|span| {
-            if span.len == 0 {
-                return DeltaView { ops: DeltaOpsView { ops: &[] } };
-            }
+        let span = self.log.spans.get(idx)?;
+        if span.len == 0 {
+            return Some((idx, DeltaView { ops: &[] }));
+        }
 
-            let ops = self.log.op_chunks.get(span.chunk as usize).expect("delta span references an existing op chunk");
-            let start = span.start as usize;
-            let end = start + span.len as usize;
-            DeltaView { ops: DeltaOpsView { ops: &ops[start..end] } }
-        })
+        let ops = self.log.op_chunks.get(span.chunk as usize)?;
+        let start = span.start as usize;
+        let end = start + span.len as usize;
+        Some((idx, DeltaView { ops: &ops[start..end] }))
     }
 }
 
@@ -393,9 +348,6 @@ impl Buffer {
     }
 
     fn purge_unstored_mergers(&mut self) {
-        if self.mergers.is_empty() {
-            return;
-        }
         self.mergers.retain(|alias| self.curr.iter().any(|chunk| !chunk.is_dummy() && chunk.alias == *alias));
     }
 
@@ -435,27 +387,8 @@ impl Buffer {
         let begin = checkpoint.map_or(0, |checkpoint| checkpoint.idx + 1);
         let end = end.min(self.deltas.len());
 
-        for (idx, delta) in (begin..end).zip(self.deltas.iter_range(begin, end)) {
-            for op in delta.ops.iter() {
-                match op {
-                    DeltaOp::Insert { index, item } => {
-                        curr.insert(*index as usize, *item);
-                    },
-                    DeltaOp::Remove { index } => {
-                        curr.remove(*index as usize);
-                    },
-                    DeltaOp::Replace { index, new } => {
-                        curr[*index as usize] = *new;
-                    },
-                    DeltaOp::Truncate { len } => {
-                        curr.truncate(*len as usize);
-                    },
-                    DeltaOp::ReplaceAndTruncate { index, new, len } => {
-                        curr[*index as usize] = *new;
-                        curr.truncate(*len as usize);
-                    },
-                }
-            }
+        for (idx, delta) in self.deltas.iter_range(begin, end) {
+            apply_delta(&mut curr, &delta);
             if idx >= start {
                 history.push(curr.clone());
             }
@@ -466,7 +399,14 @@ impl Buffer {
 }
 
 fn delta_index(index: usize) -> u32 {
-    u32::try_from(index).expect("graph delta index exceeded u32::MAX")
+    debug_assert!(index <= u32::MAX as usize);
+    index as u32
+}
+
+fn apply_delta(curr: &mut LaneSnapshot, delta: &DeltaView<'_>) {
+    for op in delta.ops.iter().copied() {
+        op.apply(curr);
+    }
 }
 
 #[cfg(test)]

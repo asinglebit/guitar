@@ -114,6 +114,10 @@ impl Oids {
         &self.sorted_aliases
     }
 
+    pub fn get_graph_index_by_alias(&self, alias: u32) -> Option<usize> {
+        self.sorted_aliases.iter().position(|&current| current == alias)
+    }
+
     pub fn append_sorted_alias(&mut self, alias: u32) {
         self.sorted_aliases.push(alias);
     }

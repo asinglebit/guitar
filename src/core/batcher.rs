@@ -187,7 +187,7 @@ impl CommitCursor {
 
         match find(self.commit_graph.as_ref(), &self.objects, oid.as_ref(), &mut self.commit_buf).map_err(gix_error).ok()? {
             Either::CachedCommit(commit) => {
-                let graph = self.commit_graph.as_ref().expect("cached commits are backed by a commit graph");
+                let graph = self.commit_graph.as_ref()?;
                 let parents = graph_parent_aliases(&mut self.queue, &mut self.seen, graph, commit, aliases)?;
                 Some(WalkedCommit::from_parents(oid, alias, parents, Some(commit_time)))
             },

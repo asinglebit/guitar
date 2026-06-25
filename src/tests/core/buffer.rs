@@ -162,13 +162,8 @@ fn common_many_op_delta_stays_inline() {
     ops.push(DeltaOp::Replace { index: 0, new: Chunk::commit(2, NONE, NONE) });
     ops.push(DeltaOp::Truncate { len: 1 });
 
-    match ops {
-        DeltaOps::Many(ops) => {
-            assert_eq!(ops.len(), 3);
-            assert!(!ops.spilled());
-        },
-        _ => panic!("third delta op should use compact many-op storage"),
-    }
+    assert_eq!(ops.len(), 3);
+    assert!(!ops.spilled());
 }
 
 #[test]
