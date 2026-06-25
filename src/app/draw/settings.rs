@@ -1,6 +1,6 @@
-use crate::git::queries::remotes::{effective_default_remote, list_remotes};
+use crate::git::queries::remotes::effective_default_remote_from_remotes;
 use crate::helpers::heatmap::heat_cell;
-use crate::helpers::keymap::{Command, InputMode, KeymapSelection, action_keymap_visible_entries, keybinding_to_visual_string};
+use crate::helpers::keymap::{Command, InputMode, KeymapSelection, ModeKeymap, action_keymap_visible_entries, keybinding_to_visual_string};
 use crate::helpers::layout::scrollbar_content_length;
 use crate::helpers::localisation::{Language, common, empty, settings as settings_text};
 use crate::helpers::palette::*;
@@ -15,12 +15,14 @@ use crate::{
 use ratatui::Frame;
 use ratatui::widgets::Borders;
 use ratatui::{
-    style::Style,
+    style::{Color, Style},
     text::{Line, Span},
     widgets::{Block, List, ListItem, Scrollbar, ScrollbarOrientation, ScrollbarState},
 };
 
-const SETTINGS_PANE_COMMANDS: &[(&str, Command, fn() -> &'static str)] = &[
+type SettingsCommandRow = (&'static str, Command, fn() -> &'static str);
+
+const SETTINGS_PANE_COMMANDS: &[SettingsCommandRow] = &[
     ("1", Command::ToggleBranches, settings_text::BRANCHES),
     ("2", Command::ToggleTags, settings_text::TAGS),
     ("3", Command::ToggleStashes, settings_text::STASHES),
@@ -33,7 +35,7 @@ const SETTINGS_PANE_COMMANDS: &[(&str, Command, fn() -> &'static str)] = &[
     ("0", Command::ResetLayout, settings_text::RESET_LAYOUT),
 ];
 
-const SETTINGS_GRAPH_COMMANDS: &[(&str, Command, fn() -> &'static str)] = &[
+const SETTINGS_GRAPH_COMMANDS: &[SettingsCommandRow] = &[
     (")", Command::ToggleGraphReflogs, settings_text::GRAPH_REFLOG_COMMITS),
     ("!", Command::ToggleShas, settings_text::SHAS),
     ("@", Command::ToggleGraphDates, settings_text::COMMITTER_DATE_TIME),
@@ -53,113 +55,65 @@ impl App {
             .unwrap_or_else(|| fallback.to_string())
     }
 
-    fn settings_layout_command_state(&self, command: &Command) -> String {
-        match command {
-            Command::ToggleBranches => {
-                if self.layout_config.is_branches {
-                    self.symbols.form.checkbox_on.clone()
-                } else {
-                    self.symbols.form.checkbox_off.clone()
-                }
-            },
-            Command::ToggleTags => {
-                if self.layout_config.is_tags {
-                    self.symbols.form.checkbox_on.clone()
-                } else {
-                    self.symbols.form.checkbox_off.clone()
-                }
-            },
-            Command::ToggleStashes => {
-                if self.layout_config.is_stashes {
-                    self.symbols.form.checkbox_on.clone()
-                } else {
-                    self.symbols.form.checkbox_off.clone()
-                }
-            },
-            Command::ToggleStatus => {
-                if self.layout_config.is_status {
-                    self.symbols.form.checkbox_on.clone()
-                } else {
-                    self.symbols.form.checkbox_off.clone()
-                }
-            },
-            Command::ToggleInspector => {
-                if self.layout_config.is_inspector {
-                    self.symbols.form.checkbox_on.clone()
-                } else {
-                    self.symbols.form.checkbox_off.clone()
-                }
-            },
-            Command::ToggleWorktrees => {
-                if self.layout_config.is_worktrees {
-                    self.symbols.form.checkbox_on.clone()
-                } else {
-                    self.symbols.form.checkbox_off.clone()
-                }
-            },
-            Command::ToggleSubmodules => {
-                if self.layout_config.is_submodules {
-                    self.symbols.form.checkbox_on.clone()
-                } else {
-                    self.symbols.form.checkbox_off.clone()
-                }
-            },
-            Command::ToggleReflogs => {
-                if self.layout_config.is_reflogs {
-                    self.symbols.form.checkbox_on.clone()
-                } else {
-                    self.symbols.form.checkbox_off.clone()
-                }
-            },
-            Command::ToggleSearch => {
-                if self.layout_config.is_search {
-                    self.symbols.form.checkbox_on.clone()
-                } else {
-                    self.symbols.form.checkbox_off.clone()
-                }
-            },
-            Command::ToggleShas => {
-                if self.layout_config.is_shas {
-                    self.symbols.form.checkbox_on.clone()
-                } else {
-                    self.symbols.form.checkbox_off.clone()
-                }
-            },
-            Command::ToggleGraphReflogs => {
-                if self.layout_config.is_graph_reflogs {
-                    self.symbols.form.checkbox_on.clone()
-                } else {
-                    self.symbols.form.checkbox_off.clone()
-                }
-            },
-            Command::ToggleGraphDates => {
-                if self.layout_config.is_graph_dates {
-                    self.symbols.form.checkbox_on.clone()
-                } else {
-                    self.symbols.form.checkbox_off.clone()
-                }
-            },
-            Command::ToggleGraphCommitters => {
-                if self.layout_config.is_graph_committers {
-                    self.symbols.form.checkbox_on.clone()
-                } else {
-                    self.symbols.form.checkbox_off.clone()
-                }
-            },
-            Command::ToggleGraphRefs => {
-                if self.layout_config.is_graph_refs {
-                    self.symbols.form.checkbox_on.clone()
-                } else {
-                    self.symbols.form.checkbox_off.clone()
-                }
-            },
-            Command::ResetLayout => settings_text::ENTER_ACTION().to_string(),
-            _ => String::new(),
+    fn settings_layout_command_marker(&self, command: &Command) -> &str {
+        let checkbox_enabled = match command {
+            Command::ToggleBranches => self.layout_config.is_branches,
+            Command::ToggleTags => self.layout_config.is_tags,
+            Command::ToggleStashes => self.layout_config.is_stashes,
+            Command::ToggleStatus => self.layout_config.is_status,
+            Command::ToggleInspector => self.layout_config.is_inspector,
+            Command::ToggleWorktrees => self.layout_config.is_worktrees,
+            Command::ToggleSubmodules => self.layout_config.is_submodules,
+            Command::ToggleReflogs => self.layout_config.is_reflogs,
+            Command::ToggleSearch => self.layout_config.is_search,
+            Command::ToggleShas => self.layout_config.is_shas,
+            Command::ToggleGraphReflogs => self.layout_config.is_graph_reflogs,
+            Command::ToggleGraphDates => self.layout_config.is_graph_dates,
+            Command::ToggleGraphCommitters => self.layout_config.is_graph_committers,
+            Command::ToggleGraphRefs => self.layout_config.is_graph_refs,
+            Command::ResetLayout => return settings_text::ENTER_ACTION(),
+            _ => return "",
+        };
+
+        self.settings_checkbox_marker(checkbox_enabled)
+    }
+
+    fn settings_checkbox_marker(&self, enabled: bool) -> &str {
+        match enabled {
+            true => self.symbols.form.checkbox_on.as_str(),
+            false => self.symbols.form.checkbox_off.as_str(),
+        }
+    }
+
+    fn settings_radio_marker(&self, selected: bool) -> &str {
+        match selected {
+            true => self.symbols.form.radio_on.as_str(),
+            false => self.symbols.form.radio_off.as_str(),
+        }
+    }
+
+    fn settings_row_style(&self, idx: usize, color: Color) -> Style {
+        self.settings_zebra_style(idx, Style::default().fg(color))
+    }
+
+    fn settings_zebra_style(&self, idx: usize, style: Style) -> Style {
+        match idx.is_multiple_of(2) {
+            true => style.bg(self.theme.background_or_default(self.theme.COLOR_GREY_900)),
+            false => style,
         }
     }
 
     fn settings_filled_line(&self, left: &str, right: &str, width: usize, style: Style) -> Line<'static> {
         Line::from(Span::styled(fill_width(left, right, width), style)).centered()
+    }
+
+    fn append_settings_keybinding_rows(&mut self, lines: &mut Vec<Line<'static>>, mode: InputMode, keymap: &ModeKeymap, width: usize) {
+        let rendered = render_keybindings(&self.theme, keymap, width);
+        for (idx, ((kb, cmd), kb_line)) in keymap.iter().zip(rendered).enumerate() {
+            let spans: Vec<Span<'static>> = kb_line.spans.iter().map(|span| Span::styled(span.content.clone(), self.settings_zebra_style(idx, span.style))).collect();
+            lines.push(Line::from(spans).centered());
+            self.add_settings_selection(lines, SettingsSelectionKind::KeyBinding(KeymapSelection::new(mode, kb.clone(), cmd.clone())));
+        }
     }
 
     fn settings_text_area(&self) -> (u16, u16) {
@@ -287,10 +241,7 @@ impl App {
         } else {
             let recent = self.recent.clone();
             for (idx, path) in recent.iter().enumerate() {
-                let mut style = Style::default().fg(if Some(path) == self.path.as_ref() { self.theme.COLOR_GRASS } else { self.theme.COLOR_TEXT });
-                if idx.is_multiple_of(2) {
-                    style = style.bg(self.theme.background_or_default(self.theme.COLOR_GREY_900));
-                }
+                let style = self.settings_row_style(idx, if Some(path) == self.path.as_ref() { self.theme.COLOR_GRASS } else { self.theme.COLOR_TEXT });
                 lines.push(self.settings_filled_line(format!(" {}", path).as_str(), "", width, style));
                 self.add_settings_selection(lines, SettingsSelectionKind::RecentRepository(idx));
             }
@@ -304,9 +255,9 @@ impl App {
         lines.push(self.settings_filled_line(settings_text::ACTIONS(), settings_text::REMOTES_ACTIONS_DETAIL(), width, Style::default().fg(self.theme.COLOR_TEXT)));
         lines.push(Line::default());
 
-        let repo_path = repo.workdir().unwrap_or(repo.path());
-        match list_remotes(repo_path) {
-            Ok(remotes) if remotes.is_empty() => {
+        let remotes = self.remotes.clone();
+        match remotes.as_slice() {
+            [] => {
                 lines.push(self.settings_filled_line(settings_text::DEFAULT_REMOTE(), format!(" {} ", common::NONE()).as_str(), width, Style::default().fg(self.theme.COLOR_TEXT)));
                 lines.push(Line::default());
                 lines.push(self.settings_filled_line(
@@ -318,8 +269,8 @@ impl App {
                 self.add_settings_selection(lines, SettingsSelectionKind::RemoteAdd);
                 lines.push(self.settings_filled_line(&format!(" {}", empty::NO_REMOTES()), "", width, Style::default().fg(self.theme.COLOR_TEXT)));
             },
-            Ok(remotes) => {
-                let default_remote = effective_default_remote(repo_path);
+            remotes => {
+                let default_remote = effective_default_remote_from_remotes(repo.workdir().unwrap_or(repo.path()), remotes);
                 let default_label = default_remote.as_deref().unwrap_or(common::NONE());
                 lines.push(self.settings_filled_line(settings_text::DEFAULT_REMOTE(), format!(" {default_label} ").as_str(), width, Style::default().fg(self.theme.COLOR_GRASS)));
                 lines.push(Line::default());
@@ -336,10 +287,7 @@ impl App {
                     let is_default = default_remote.as_deref() == Some(remote.name.as_str());
                     let marker = if is_default { format!(" {}", common::DEFAULT_REMOTE()) } else { String::new() };
 
-                    let mut style = Style::default().fg(if is_default { self.theme.COLOR_GRASS } else { self.theme.COLOR_TEXT });
-                    if (idx + 1).is_multiple_of(2) {
-                        style = style.bg(self.theme.background_or_default(self.theme.COLOR_GREY_900));
-                    }
+                    let style = self.settings_row_style(idx + 1, if is_default { self.theme.COLOR_GRASS } else { self.theme.COLOR_TEXT });
 
                     lines.push(self.settings_filled_line(format!(" {} {}", remote.name, settings_text::FETCH_SUFFIX()).as_str(), format!(" {}{marker} ", remote.url).as_str(), width, style));
                     self.add_settings_selection(lines, SettingsSelectionKind::Remote(remote.name.clone()));
@@ -349,9 +297,6 @@ impl App {
                         self.add_settings_selection(lines, SettingsSelectionKind::Remote(remote.name.clone()));
                     }
                 }
-            },
-            Err(error) => {
-                lines.push(self.settings_filled_line(settings_text::REMOTE_ERROR(), format!(" {error} ").as_str(), width, Style::default().fg(self.theme.COLOR_ORANGE)));
             },
         }
     }
@@ -397,11 +342,8 @@ impl App {
 
         for (idx, preset) in Theme::presets().iter().enumerate() {
             let label = format!(" {}", preset.label);
-            let marker = format!("{} ", if self.theme.name == preset.theme.name { &self.symbols.form.radio_on } else { &self.symbols.form.radio_off });
-            let mut style = Style::default().fg(self.theme.COLOR_TEXT);
-            if idx.is_multiple_of(2) {
-                style = style.bg(self.theme.background_or_default(self.theme.COLOR_GREY_900));
-            }
+            let marker = format!("{} ", self.settings_radio_marker(self.theme.name == preset.theme.name));
+            let style = self.settings_row_style(idx, self.theme.COLOR_TEXT);
             lines.push(self.settings_filled_line(&label, &marker, width, style));
             self.add_settings_selection(lines, SettingsSelectionKind::Theme(idx));
         }
@@ -414,11 +356,8 @@ impl App {
 
         for (idx, language) in Language::ALL.iter().enumerate() {
             let label = format!(" {}", language.native_label());
-            let marker = format!("{} ", if self.language == *language { &self.symbols.form.radio_on } else { &self.symbols.form.radio_off });
-            let mut style = Style::default().fg(self.theme.COLOR_TEXT);
-            if idx.is_multiple_of(2) {
-                style = style.bg(self.theme.background_or_default(self.theme.COLOR_GREY_900));
-            }
+            let marker = format!("{} ", self.settings_radio_marker(self.language == *language));
+            let style = self.settings_row_style(idx, self.theme.COLOR_TEXT);
             lines.push(self.settings_filled_line(&label, &marker, width, style));
             self.add_settings_selection(lines, SettingsSelectionKind::Language(idx));
         }
@@ -442,13 +381,21 @@ impl App {
         for (idx, preset) in SymbolTheme::presets().iter().enumerate() {
             let preset_theme = preset.theme();
             let label = format!(" {}", preset.label);
-            let marker = format!("{} ", if self.symbols.name == preset_theme.name { &self.symbols.form.radio_on } else { &self.symbols.form.radio_off });
-            let mut style = Style::default().fg(self.theme.COLOR_TEXT);
-            if idx.is_multiple_of(2) {
-                style = style.bg(self.theme.background_or_default(self.theme.COLOR_GREY_900));
-            }
+            let marker = format!("{} ", self.settings_radio_marker(self.symbols.name == preset_theme.name));
+            let style = self.settings_row_style(idx, self.theme.COLOR_TEXT);
             lines.push(self.settings_filled_line(&label, &marker, width, style));
             self.add_settings_selection(lines, SettingsSelectionKind::SymbolTheme(idx));
+        }
+    }
+
+    fn append_settings_layout_command_rows(&mut self, lines: &mut Vec<Line<'static>>, width: usize, commands: &[SettingsCommandRow]) {
+        for (idx, (fallback, command, label)) in commands.iter().enumerate() {
+            let key = self.settings_layout_command_key(command, fallback);
+            let label = format!(" {} {}:", key, label());
+            let state = format!(" {} ", self.settings_layout_command_marker(command));
+            let style = self.settings_row_style(idx, self.theme.COLOR_TEXT);
+            lines.push(self.settings_filled_line(&label, &state, width, style));
+            self.add_settings_selection(lines, SettingsSelectionKind::LayoutCommand(command.clone()));
         }
     }
 
@@ -456,32 +403,12 @@ impl App {
         lines.push(Line::default());
         lines.push(self.settings_section_line(settings_text::PANE_VISIBILITY(), width));
         lines.push(Line::default());
-        for (idx, (fallback, command, label)) in SETTINGS_PANE_COMMANDS.iter().enumerate() {
-            let key = self.settings_layout_command_key(command, fallback);
-            let label = format!(" {} {}:", key, label());
-            let state = format!(" {} ", self.settings_layout_command_state(command));
-            let mut style = Style::default().fg(self.theme.COLOR_TEXT);
-            if idx.is_multiple_of(2) {
-                style = style.bg(self.theme.background_or_default(self.theme.COLOR_GREY_900));
-            }
-            lines.push(self.settings_filled_line(&label, &state, width, style));
-            self.add_settings_selection(lines, SettingsSelectionKind::LayoutCommand(command.clone()));
-        }
+        self.append_settings_layout_command_rows(lines, width, SETTINGS_PANE_COMMANDS);
 
         lines.push(Line::default());
         lines.push(self.settings_section_line(settings_text::GRAPH_METADATA(), width));
         lines.push(Line::default());
-        for (idx, (fallback, command, label)) in SETTINGS_GRAPH_COMMANDS.iter().enumerate() {
-            let key = self.settings_layout_command_key(command, fallback);
-            let label = format!(" {} {}:", key, label());
-            let state = format!(" {} ", self.settings_layout_command_state(command));
-            let mut style = Style::default().fg(self.theme.COLOR_TEXT);
-            if idx.is_multiple_of(2) {
-                style = style.bg(self.theme.background_or_default(self.theme.COLOR_GREY_900));
-            }
-            lines.push(self.settings_filled_line(&label, &state, width, style));
-            self.add_settings_selection(lines, SettingsSelectionKind::LayoutCommand(command.clone()));
-        }
+        self.append_settings_layout_command_rows(lines, width, SETTINGS_GRAPH_COMMANDS);
     }
 
     fn append_settings_shortcuts(&mut self, lines: &mut Vec<Line<'static>>, width: usize) {
@@ -490,22 +417,7 @@ impl App {
         lines.push(self.settings_section_line(settings_text::SHORTCUTS_NORMAL_MODE(), width));
         lines.push(Line::default());
         if let Some(mode_keymap) = self.keymaps.get(&InputMode::Normal).cloned() {
-            let rendered = render_keybindings(&self.theme, &mode_keymap, width);
-            for (idx, ((kb, cmd), kb_line)) in mode_keymap.iter().zip(rendered).enumerate() {
-                let spans: Vec<Span> = kb_line
-                    .spans
-                    .iter()
-                    .map(|span| {
-                        let mut style = span.style;
-                        if idx % 2 == 0 {
-                            style = style.bg(self.theme.background_or_default(self.theme.COLOR_GREY_900));
-                        }
-                        Span::styled(span.content.clone(), style)
-                    })
-                    .collect();
-                lines.push(Line::from(spans).centered());
-                self.add_settings_selection(lines, SettingsSelectionKind::KeyBinding(KeymapSelection::new(InputMode::Normal, kb.clone(), cmd.clone())));
-            }
+            self.append_settings_keybinding_rows(lines, InputMode::Normal, &mode_keymap, width);
         }
 
         lines.push(Line::default());
@@ -514,23 +426,7 @@ impl App {
         if let Some(action_keymap) = self.keymaps.get(&InputMode::Action).cloned() {
             let normal_keymap = self.keymaps.get(&InputMode::Normal).cloned();
             let unique_action = action_keymap_visible_entries(normal_keymap.as_ref(), &action_keymap);
-            let rendered = render_keybindings(&self.theme, &unique_action, width);
-            for (idx, ((kb, cmd), kb_line)) in unique_action.iter().zip(rendered).enumerate() {
-                let spans: Vec<Span> = kb_line
-                    .spans
-                    .iter()
-                    .map(|span| {
-                        let mut style = span.style;
-                        if idx % 2 == 0 {
-                            style = style.bg(self.theme.background_or_default(self.theme.COLOR_GREY_900));
-                        }
-                        Span::styled(span.content.clone(), style)
-                    })
-                    .collect();
-
-                lines.push(Line::from(spans).centered());
-                self.add_settings_selection(lines, SettingsSelectionKind::KeyBinding(KeymapSelection::new(InputMode::Action, kb.clone(), cmd.clone())));
-            }
+            self.append_settings_keybinding_rows(lines, InputMode::Action, &unique_action, width);
         }
     }
 

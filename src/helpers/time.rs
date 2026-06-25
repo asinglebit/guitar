@@ -1,26 +1,18 @@
 use chrono::{DateTime, FixedOffset, TimeZone, Utc};
 
 pub fn git2_timestamp_to_utc(time: git2::Time) -> String {
-    format_timestamp_to_utc(time.seconds(), time.offset_minutes() * 60)
+    timestamp_to_utc(time.seconds(), time.offset_minutes() * 60)
 }
 
 pub fn gix_timestamp_to_utc(time: gix::date::Time) -> String {
-    format_timestamp_to_utc(time.seconds, time.offset)
+    timestamp_to_utc(time.seconds, time.offset)
 }
 
 pub fn gix_timestamp_to_utc_date_time(time: gix::date::Time) -> String {
-    format_timestamp_to_utc_date_time(time.seconds, time.offset)
+    timestamp_to_utc_date_time(time.seconds, time.offset)
 }
 
-pub fn timestamp_to_utc(time: git2::Time) -> String {
-    git2_timestamp_to_utc(time)
-}
-
-pub fn timestamp_to_utc_date_time(time: git2::Time) -> String {
-    format_timestamp_to_utc_date_time(time.seconds(), time.offset_minutes() * 60)
-}
-
-fn format_timestamp_to_utc(seconds: i64, offset_seconds: i32) -> String {
+fn timestamp_to_utc(seconds: i64, offset_seconds: i32) -> String {
     // Git stores the author's offset separately from epoch seconds.
     let offset = FixedOffset::east_opt(offset_seconds).unwrap();
 
@@ -34,7 +26,7 @@ fn format_timestamp_to_utc(seconds: i64, offset_seconds: i32) -> String {
     final_utc.to_rfc2822()
 }
 
-fn format_timestamp_to_utc_date_time(seconds: i64, offset_seconds: i32) -> String {
+fn timestamp_to_utc_date_time(seconds: i64, offset_seconds: i32) -> String {
     let offset = FixedOffset::east_opt(offset_seconds).unwrap();
     let utc_datetime = DateTime::from_timestamp(seconds, 0).expect("Invalid timestamp");
     let local_datetime = offset.from_utc_datetime(&utc_datetime.naive_utc());

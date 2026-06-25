@@ -63,7 +63,7 @@ pub fn wrap_chars(content: String, max_width: usize) -> Vec<String> {
 // Wrap by words while preserving whitespace and indentation.
 pub fn wrap_words(content: String, max_width: usize) -> Vec<String> {
     if max_width == 0 {
-        return vec![content.to_string()];
+        return vec![content];
     }
 
     let mut wrapped_lines = Vec::new();

@@ -820,12 +820,17 @@ fn rewrite_untouched_ctrl_graph_metadata_defaults(map: &mut ModeKeymap) -> bool 
 }
 
 fn insert_default_binding_if_available(map: &mut ModeKeymap, key: KeyBinding, command: Command) -> bool {
-    if map.values().any(|existing| existing == &command) || map.contains_key(&key) {
-        false
-    } else {
-        map.insert(key, command);
-        true
+    let occupied = map.values().any(|existing| existing == &command) || map.contains_key(&key);
+    if occupied {
+        return false;
     }
+
+    map.insert(key, command);
+    true
+}
+
+fn insert_default_binding_and_mark_changed(map: &mut ModeKeymap, key: KeyBinding, command: Command, changed: &mut bool) {
+    *changed |= insert_default_binding_if_available(map, key, command);
 }
 
 fn ensure_default_keymap_bindings(maps: &mut Keymaps) -> bool {
@@ -867,38 +872,16 @@ fn ensure_default_keymap_bindings(maps: &mut Keymaps) -> bool {
         }
     }
     let normal_map = maps.entry(InputMode::Normal).or_default();
-    let reload_all_key = KeyBinding::new(Char('R'), KeyModifiers::SHIFT);
-    if !normal_map.values().any(|existing| existing == &Command::ReloadAllBranches) && !normal_map.contains_key(&reload_all_key) {
-        normal_map.insert(reload_all_key, Command::ReloadAllBranches);
-        changed = true;
-    }
-    let return_parent_key = KeyBinding::new(Backspace, KeyModifiers::NONE);
-    if !normal_map.values().any(|existing| existing == &Command::ReturnToParentRepository) && !normal_map.contains_key(&return_parent_key) {
-        normal_map.insert(return_parent_key, Command::ReturnToParentRepository);
-        changed = true;
-    }
+    insert_default_binding_and_mark_changed(normal_map, KeyBinding::new(Char('R'), KeyModifiers::SHIFT), Command::ReloadAllBranches, &mut changed);
+    insert_default_binding_and_mark_changed(normal_map, KeyBinding::new(Backspace, KeyModifiers::NONE), Command::ReturnToParentRepository, &mut changed);
     let normal_only_defaults = [(KeyBinding::new(Char('-'), KeyModifiers::NONE), Command::ShrinkGraphLaneLimit), (KeyBinding::new(Char('+'), KeyModifiers::NONE), Command::GrowGraphLaneLimit)];
     for (key, command) in normal_only_defaults {
-        if insert_default_binding_if_available(normal_map, key, command) {
-            changed = true;
-        }
+        insert_default_binding_and_mark_changed(normal_map, key, command, &mut changed);
     }
     let action_map = maps.entry(InputMode::Action).or_default();
-    let rename_branch_key = KeyBinding::new(Char('B'), KeyModifiers::SHIFT);
-    if !action_map.values().any(|existing| existing == &Command::RenameBranch) && !action_map.contains_key(&rename_branch_key) {
-        action_map.insert(rename_branch_key, Command::RenameBranch);
-        changed = true;
-    }
-    let update_submodule_key = KeyBinding::new(Char('i'), KeyModifiers::NONE);
-    if !action_map.values().any(|existing| existing == &Command::UpdateSubmodule) && !action_map.contains_key(&update_submodule_key) {
-        action_map.insert(update_submodule_key, Command::UpdateSubmodule);
-        changed = true;
-    }
-    let sync_submodule_key = KeyBinding::new(Char('I'), KeyModifiers::SHIFT);
-    if !action_map.values().any(|existing| existing == &Command::SyncSubmodule) && !action_map.contains_key(&sync_submodule_key) {
-        action_map.insert(sync_submodule_key, Command::SyncSubmodule);
-        changed = true;
-    }
+    insert_default_binding_and_mark_changed(action_map, KeyBinding::new(Char('B'), KeyModifiers::SHIFT), Command::RenameBranch, &mut changed);
+    insert_default_binding_and_mark_changed(action_map, KeyBinding::new(Char('i'), KeyModifiers::NONE), Command::UpdateSubmodule, &mut changed);
+    insert_default_binding_and_mark_changed(action_map, KeyBinding::new(Char('I'), KeyModifiers::SHIFT), Command::SyncSubmodule, &mut changed);
     changed
 }
 

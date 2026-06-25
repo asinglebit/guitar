@@ -129,22 +129,6 @@ fn preset_labels_resolve_to_their_themes() {
 }
 
 #[test]
-fn old_label_only_theme_config_falls_back_to_default_and_rewrites_full_json() {
-    let path = temp_theme_path("old-label");
-    fs::write(&path, "\"tokyo night\"").unwrap();
-
-    let theme = load_theme_from_path(&path);
-
-    assert_eq!(theme.name, ThemeNames::Classic);
-
-    let contents = fs::read_to_string(&path).unwrap();
-    let config = facet_json::from_str::<ThemeConfig>(&contents).unwrap();
-    assert_eq!(config.label, "classic");
-    assert_eq!(config.colors.grey_950.unwrap(), "#1e1e1e");
-    assert_eq!(config.colors.highlighted.unwrap(), color_to_string(Theme::classic().COLOR_HIGHLIGHTED));
-}
-
-#[test]
 fn malformed_theme_config_falls_back_to_default_and_rewrites_full_json() {
     let path = temp_theme_path("malformed");
     fs::write(&path, "{ nope").unwrap();

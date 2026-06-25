@@ -1,7 +1,6 @@
 use crate::{
     app::app::{App, Focus, Viewport},
-    git::queries::commits::get_current_branch,
-    helpers::{branch_visibility::current_branch_names, keymap::InputMode, localisation::status as status_text},
+    helpers::{keymap::InputMode, localisation::status as status_text},
 };
 use ratatui::Frame;
 use ratatui::{
@@ -19,7 +18,24 @@ impl App {
         Some(format!("{} {} ", self.symbols.submodule.default, parts.join(&self.symbols.submodule.stack_separator)))
     }
 
-    pub fn draw_statusbar(&mut self, frame: &mut Frame, repo: &git2::Repository) {
+    fn head_status_label(&self) -> Span<'static> {
+        let Some(current) = self.worktrees.entries.iter().find(|entry| entry.is_current) else {
+            return Span::styled(status_text::NO_HEAD_NO_COMMITS(), Style::default().fg(self.theme.COLOR_TEXT));
+        };
+        if let Some(branch) = current.branch.as_deref() {
+            return Span::styled(format!("{} {}", self.symbols.branch.local_visible, branch), Style::default().fg(self.theme.COLOR_GRASS));
+        }
+        if let Some(oid) = current.head {
+            return Span::styled(format!("{} #{:.6}", status_text::DETACHED_HEAD(), oid), Style::default().fg(self.theme.COLOR_TEXT));
+        }
+        Span::styled(status_text::NO_HEAD_NO_COMMITS(), Style::default().fg(self.theme.COLOR_TEXT))
+    }
+
+    fn statusbar_branch_total(&self) -> usize {
+        self.graph.branches_window.as_ref().map_or_else(|| self.branches.sorted.iter().filter(|(_, branch)| !self.branches.hidden_branch_names.contains(branch)).count(), |window| window.total)
+    }
+
+    pub fn draw_statusbar(&mut self, frame: &mut Frame) {
         let mut left_spans: Vec<Span> = match self.worktrees.current_name() {
             Some(name) => vec![Span::styled(format!("  {} {name} ", self.symbols.worktree.current), Style::default().fg(self.theme.COLOR_GRASS))],
             None => vec![Span::raw("  ")],
@@ -27,13 +43,7 @@ impl App {
         if let Some(label) = self.submodule_stack_status_label() {
             left_spans.push(Span::styled(label, Style::default().fg(self.theme.COLOR_TEAL)));
         }
-        match get_current_branch(repo) {
-            Some(branch) => left_spans.push(Span::styled(format!("{} {}", self.symbols.branch.local_visible, branch), Style::default().fg(self.theme.COLOR_GRASS))),
-            None => match repo.head().ok().and_then(|h| h.target()) {
-                Some(oid) => left_spans.push(Span::styled(format!("{} #{:.6}", status_text::DETACHED_HEAD(), oid), Style::default().fg(self.theme.COLOR_TEXT))),
-                None => left_spans.push(Span::styled(status_text::NO_HEAD_NO_COMMITS(), Style::default().fg(self.theme.COLOR_TEXT))),
-            },
-        }
+        left_spans.push(self.head_status_label());
         let lines = Line::from(left_spans);
 
         let status_paragraph = ratatui::widgets::Paragraph::new(Text::from(lines)).left_aligned().block(Block::default());
@@ -54,7 +64,7 @@ impl App {
                 }
             },
             Focus::StatusBottom => self.uncommitted.conflicts.len() + self.uncommitted.unstaged.modified.len() + self.uncommitted.unstaged.added.len() + self.uncommitted.unstaged.deleted.len(),
-            Focus::Branches => self.graph.branches_window.as_ref().map(|window| window.total).unwrap_or_else(|| current_branch_names(repo).len()),
+            Focus::Branches => self.statusbar_branch_total(),
             Focus::Tags => self.graph.tags_window.as_ref().map(|window| window.total).unwrap_or(self.tags.sorted.len()),
             Focus::Stashes => self.graph.stashes_window.as_ref().map(|window| window.total).unwrap_or(self.oids.stashes.len()),
             Focus::Reflogs => self.graph.reflogs_window.as_ref().map(|window| window.total).unwrap_or(self.reflogs.entries.len()),
@@ -75,11 +85,7 @@ impl App {
                 },
                 Focus::StatusTop => self.status_top_selected + 1,
                 Focus::StatusBottom => self.status_bottom_selected + 1,
-                Focus::Branches => {
-                    let branch_names = current_branch_names(repo);
-                    let hidden = branch_names.iter().filter(|branch| self.branches.hidden_branch_names.contains(*branch)).count();
-                    branch_names.len().saturating_sub(hidden)
-                },
+                Focus::Branches => (self.branches_selected + 1).min(total),
                 Focus::Tags => self.tags_selected + 1,
                 Focus::Stashes => self.stashes_selected + 1,
                 Focus::Reflogs => self.reflogs_selected + 1,
@@ -92,18 +98,15 @@ impl App {
 
         let icon_spinner = if self.spinner.is_running() { format!("{} ", self.spinner.get_char()) } else { "".to_string() };
 
-        // Action mode indicator (moved here)
-        let mut action_hint =
-            if self.mode == InputMode::Action { vec![Span::styled(format!("{} ", self.symbols.graph.commit_branch), Style::default().fg(self.theme.COLOR_GRAPEFRUIT))] } else { Vec::new() };
-
-        // Zen mode indicator
-        if self.layout_config.is_zen {
-            action_hint.push(Span::styled(format!("{} ", self.symbols.graph.commit_branch), Style::default().fg(self.theme.COLOR_GRASS)));
-        }
-
         let mut right_spans = vec![Span::styled(if total == 0 { "".to_string() } else { format!("{}/{}{} ", cursor, total, icon_spinner) }, Style::default().fg(self.theme.COLOR_TEXT))];
 
-        right_spans.extend(action_hint);
+        // Action and zen mode indicators.
+        if self.mode == InputMode::Action {
+            right_spans.push(Span::styled(format!("{} ", self.symbols.graph.commit_branch), Style::default().fg(self.theme.COLOR_GRAPEFRUIT)));
+        }
+        if self.layout_config.is_zen {
+            right_spans.push(Span::styled(format!("{} ", self.symbols.graph.commit_branch), Style::default().fg(self.theme.COLOR_GRASS)));
+        }
 
         let title_paragraph = ratatui::widgets::Paragraph::new(Text::from(Line::from(right_spans))).right_aligned().block(Block::default());
 

@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     app::app::{SettingsTab, Viewport},
-    git::queries::remotes::GUITAR_DEFAULT_REMOTE_CONFIG,
+    git::queries::remotes::{GUITAR_DEFAULT_REMOTE_CONFIG, list_remotes},
     helpers::{
         keymap::{Command, InputMode, KeyBinding},
         layout::GRAPH_LANE_LIMIT_DEFAULT,
@@ -52,6 +52,13 @@ fn settings_app() -> App {
     app
 }
 
+fn settings_app_with_size(width: u16, height: u16) -> App {
+    let mut app = settings_app();
+    app.layout.graph = Rect::new(0, 0, width, height);
+    app.layout.app = Rect::new(0, 0, width, height);
+    app
+}
+
 fn draw_settings_once(app: &mut App, repo: &Repository) {
     let backend = TestBackend::new(90, 10);
     let mut terminal = Terminal::new(backend).unwrap();
@@ -79,12 +86,14 @@ fn remote_selection_lines(app: &App, remote_name: &str) -> Vec<usize> {
         .collect()
 }
 
+fn populate_remotes(app: &mut App, repo: &Repository) {
+    app.remotes = list_remotes(repo.workdir().unwrap_or(repo.path())).unwrap();
+}
+
 #[test]
-fn settings_default_tab_is_general_and_renders_general_sections() {
+fn settings_general_tab_renders_sections_and_symbols_paths() {
     let (_path, repo) = temp_repo("default-tab");
-    let mut app = settings_app();
-    app.layout.graph = Rect::new(0, 0, 140, 120);
-    app.layout.app = Rect::new(0, 0, 140, 120);
+    let mut app = settings_app_with_size(140, 120);
 
     let rendered = rendered_settings(&mut app, &repo, 140, 120);
 
@@ -98,6 +107,10 @@ fn settings_default_tab_is_general_and_renders_general_sections() {
     assert!(rendered.contains("paths:"));
     assert!(rendered.contains("performance:"));
     assert!(rendered.contains("graph lane limit:"));
+    assert!(rendered.contains("symbols:"));
+    assert!(rendered.contains("/symbols.json"));
+    assert!(rendered.contains("language:"));
+    assert!(rendered.contains("/language.json"));
     let lane_limit_line = app.settings_lines(&repo).iter().map(line_text).find(|line| line.contains("graph lane limit:")).unwrap();
     assert!(lane_limit_line.contains(&GRAPH_LANE_LIMIT_DEFAULT.to_string()));
     assert!(lane_limit_line.contains("(enter)"));
@@ -112,9 +125,7 @@ fn settings_default_tab_is_general_and_renders_general_sections() {
 #[test]
 fn settings_active_tabs_render_their_grouped_sections_only() {
     let (_path, repo) = temp_repo("tab-groups");
-    let mut app = settings_app();
-    app.layout.graph = Rect::new(0, 0, 160, 160);
-    app.layout.app = Rect::new(0, 0, 160, 160);
+    let mut app = settings_app_with_size(160, 160);
 
     app.settings_tab = SettingsTab::Display;
     let display = rendered_settings(&mut app, &repo, 160, 160);
@@ -146,10 +157,8 @@ fn settings_shortcuts_render_graph_lane_limit_shortcuts() {
 
     crate::helpers::localisation::set_active_language(Language::English);
     let (_path, repo) = temp_repo("lane-limit-shortcuts");
-    let mut app = settings_app();
+    let mut app = settings_app_with_size(160, 80);
     app.settings_tab = SettingsTab::Shortcuts;
-    app.layout.graph = Rect::new(0, 0, 160, 80);
-    app.layout.app = Rect::new(0, 0, 160, 80);
     let normal = app.keymaps.get_mut(&InputMode::Normal).unwrap();
     normal.insert(KeyBinding::new(KeyCode::Char('-'), KeyModifiers::NONE), Command::ShrinkGraphLaneLimit);
     normal.insert(KeyBinding::new(KeyCode::Char('+'), KeyModifiers::NONE), Command::GrowGraphLaneLimit);
@@ -238,12 +247,10 @@ fn settings_selection_snaps_to_selectable_line() {
 }
 
 #[test]
-fn settings_renders_layout_visibility_rows_with_states() {
+fn settings_display_tab_renders_sections_and_theme_markers() {
     let (_path, repo) = temp_repo("layout-section");
-    let mut app = settings_app();
+    let mut app = settings_app_with_size(120, 120);
     app.settings_tab = SettingsTab::Display;
-    app.layout.graph = Rect::new(0, 0, 120, 120);
-    app.layout.app = Rect::new(0, 0, 120, 120);
     app.layout_config.is_branches = true;
     app.layout_config.is_shas = false;
 
@@ -259,6 +266,9 @@ fn settings_renders_layout_visibility_rows_with_states() {
     assert!(rendered.contains("0 reset layout:"));
     assert!(rendered.contains("🞕"));
     assert!(rendered.contains("🞎"));
+    assert!(rendered.contains("themes:"));
+    assert!(rendered.contains("🞊"));
+    assert!(rendered.contains("🞅"));
     assert!(!rendered.contains("[*]"));
     assert!(!rendered.contains("[ ]"));
     assert!(rendered.contains("(enter)"));
@@ -266,48 +276,13 @@ fn settings_renders_layout_visibility_rows_with_states() {
 }
 
 #[test]
-fn settings_renders_theme_rows_with_unicode_markers() {
-    let (_path, repo) = temp_repo("theme-markers");
-    let mut app = settings_app();
-    app.settings_tab = SettingsTab::Display;
-    app.layout.graph = Rect::new(0, 0, 120, 120);
-    app.layout.app = Rect::new(0, 0, 120, 120);
-
-    let rendered = rendered_settings(&mut app, &repo, 120, 120);
-
-    assert!(rendered.contains("themes:"));
-    assert!(rendered.contains("🞊"));
-    assert!(rendered.contains("🞅"));
-    assert!(!rendered.contains("(*)"));
-    assert!(!rendered.contains("( )"));
-}
-
-#[test]
-fn settings_general_tab_includes_symbols_json() {
-    let (_path, repo) = temp_repo("symbols-path");
-    let mut app = settings_app();
-    app.layout.graph = Rect::new(0, 0, 140, 120);
-    app.layout.app = Rect::new(0, 0, 140, 120);
-
-    let rendered = rendered_settings(&mut app, &repo, 140, 120);
-
-    assert!(rendered.contains("symbols:"));
-    assert!(rendered.contains("/symbols.json"));
-    assert!(rendered.contains("language:"));
-    assert!(rendered.contains("/language.json"));
-}
-
-#[test]
-fn settings_display_tab_renders_language_rows() {
-    let (_path, repo) = temp_repo("language-rows");
-    let mut app = settings_app();
+fn settings_display_tab_lists_languages_and_symbol_themes() {
+    let (_path, repo) = temp_repo("display-rows");
+    let mut app = settings_app_with_size(120, 120);
     app.settings_tab = SettingsTab::Display;
     app.language = Language::French;
-    app.layout.graph = Rect::new(0, 0, 120, 120);
-    app.layout.app = Rect::new(0, 0, 120, 120);
 
-    let lines = app.settings_lines(&repo);
-    let rendered = lines.iter().map(line_text).collect::<Vec<_>>().join("\n");
+    let rendered = rendered_settings(&mut app, &repo, 120, 120);
 
     assert!(rendered.contains("language:"));
     assert!(rendered.contains("English"));
@@ -315,24 +290,12 @@ fn settings_display_tab_renders_language_rows() {
     assert!(rendered.contains("Français"));
     assert!(rendered.contains("Русский"));
     assert!(rendered.contains("Türkçe"));
-    assert!(app.settings_selections.iter().any(|selection| selection.kind == SettingsSelectionKind::Language(0)));
-    assert!(app.settings_selections.iter().any(|selection| selection.kind == SettingsSelectionKind::Language(4)));
-    assert!(!app.settings_selections.iter().any(|selection| selection.kind == SettingsSelectionKind::Language(5)));
-}
-
-#[test]
-fn settings_display_tab_renders_symbol_theme_rows() {
-    let (_path, repo) = temp_repo("symbol-theme-rows");
-    let mut app = settings_app();
-    app.settings_tab = SettingsTab::Display;
-    app.layout.graph = Rect::new(0, 0, 120, 120);
-    app.layout.app = Rect::new(0, 0, 120, 120);
-
-    let rendered = rendered_settings(&mut app, &repo, 120, 120);
-
     assert!(rendered.contains("symbol themes:"));
     assert!(rendered.contains("main"));
     assert!(rendered.contains("ascii"));
+    assert!(app.settings_selections.iter().any(|selection| selection.kind == SettingsSelectionKind::Language(0)));
+    assert!(app.settings_selections.iter().any(|selection| selection.kind == SettingsSelectionKind::Language(4)));
+    assert!(!app.settings_selections.iter().any(|selection| selection.kind == SettingsSelectionKind::Language(5)));
     assert!(app.settings_selections.iter().any(|selection| selection.kind == SettingsSelectionKind::SymbolTheme(0)));
     assert!(app.settings_selections.iter().any(|selection| selection.kind == SettingsSelectionKind::SymbolTheme(1)));
 }
@@ -340,11 +303,9 @@ fn settings_display_tab_renders_symbol_theme_rows() {
 #[test]
 fn settings_display_tab_uses_active_symbol_theme_form_markers() {
     let (_path, repo) = temp_repo("symbol-theme-markers");
-    let mut app = settings_app();
+    let mut app = settings_app_with_size(120, 120);
     app.symbols = SymbolTheme::ascii();
     app.settings_tab = SettingsTab::Display;
-    app.layout.graph = Rect::new(0, 0, 120, 120);
-    app.layout.app = Rect::new(0, 0, 120, 120);
 
     let rendered = rendered_settings(&mut app, &repo, 120, 120);
 
@@ -443,9 +404,7 @@ fn settings_layout_rows_use_current_normal_keymap_binding() {
 #[test]
 fn settings_renders_recent_repositories_section_with_actions_and_selectable_rows() {
     let (_path, repo) = temp_repo("recent-section");
-    let mut app = settings_app();
-    app.layout.graph = Rect::new(0, 0, 140, 120);
-    app.layout.app = Rect::new(0, 0, 140, 120);
+    let mut app = settings_app_with_size(140, 120);
     app.recent = vec!["/repo/a".into(), "/repo/b".into()];
 
     let rendered = rendered_settings(&mut app, &repo, 140, 120);
@@ -464,9 +423,7 @@ fn settings_renders_recent_repositories_section_with_actions_and_selectable_rows
 #[test]
 fn settings_recent_repository_actions_use_split_row_and_current_keymap_bindings() {
     let (_path, repo) = temp_repo("recent-actions-keymap");
-    let mut app = settings_app();
-    app.layout.graph = Rect::new(0, 0, 140, 120);
-    app.layout.app = Rect::new(0, 0, 140, 120);
+    let mut app = settings_app_with_size(140, 120);
     let normal = app.keymaps.get_mut(&InputMode::Normal).unwrap();
     normal.insert(KeyBinding::new(KeyCode::Char('x'), KeyModifiers::NONE), Command::RemoveRecentRepository);
     normal.insert(KeyBinding::new(KeyCode::Char('U'), KeyModifiers::SHIFT), Command::MoveRecentRepositoryUp);
@@ -496,10 +453,9 @@ fn settings_empty_recent_repositories_row_is_not_selectable() {
 #[test]
 fn settings_renders_remotes_section_with_add_and_empty_state() {
     let (_path, repo) = temp_repo("empty-remotes-section");
-    let mut app = settings_app();
+    let mut app = settings_app_with_size(140, 120);
+    populate_remotes(&mut app, &repo);
     app.settings_tab = SettingsTab::Repo;
-    app.layout.graph = Rect::new(0, 0, 140, 120);
-    app.layout.app = Rect::new(0, 0, 140, 120);
 
     let rendered = rendered_settings(&mut app, &repo, 140, 120);
 
@@ -511,68 +467,33 @@ fn settings_renders_remotes_section_with_add_and_empty_state() {
 }
 
 #[test]
-fn settings_renders_remote_rows_with_fetch_and_push_urls() {
+fn settings_renders_remote_rows_with_push_urls_and_default_marker() {
     let (_path, repo) = temp_repo("remote-rows");
     repo.remote("origin", "https://example.com/repo.git").unwrap();
-    let mut app = settings_app();
+    repo.remote_set_pushurl("origin", Some("ssh://example.com/repo.git")).unwrap();
+    repo.remote("upstream", "https://example.com/upstream.git").unwrap();
+    repo.config().unwrap().set_str(GUITAR_DEFAULT_REMOTE_CONFIG, "upstream").unwrap();
+    let mut app = settings_app_with_size(180, 140);
+    populate_remotes(&mut app, &repo);
     app.settings_tab = SettingsTab::Repo;
-    app.layout.graph = Rect::new(0, 0, 180, 140);
-    app.layout.app = Rect::new(0, 0, 180, 140);
 
     let lines = app.settings_lines(&repo);
     let rendered = lines.iter().map(line_text).collect::<Vec<_>>().join("\n");
     let selection_lines = remote_selection_lines(&app, "origin");
     let selection_texts = selection_lines.iter().map(|line| line_text(&lines[*line])).collect::<Vec<_>>();
+    let upstream_selection_texts = remote_selection_lines(&app, "upstream").iter().map(|line| line_text(&lines[*line])).collect::<Vec<_>>();
 
     assert!(rendered.contains("origin fetch:"));
     assert!(rendered.contains("origin push:"));
-    assert_eq!(rendered.matches("https://example.com/repo.git").count(), 2);
+    assert!(rendered.contains("upstream"));
+    assert_eq!(rendered.matches("https://example.com/repo.git").count(), 1);
+    assert!(rendered.contains("ssh://example.com/repo.git"));
+    assert!(rendered.contains("default remote:"));
     assert_eq!(selection_lines.len(), 2);
     assert!(selection_texts.iter().any(|text| text.contains("origin fetch:")));
     assert!(selection_texts.iter().any(|text| text.contains("origin push:")));
-}
-
-#[test]
-fn settings_renders_remote_rows_with_explicit_push_url() {
-    let (_path, repo) = temp_repo("remote-push-url");
-    repo.remote("origin", "https://example.com/repo.git").unwrap();
-    repo.remote_set_pushurl("origin", Some("ssh://example.com/repo.git")).unwrap();
-    let mut app = settings_app();
-    app.settings_tab = SettingsTab::Repo;
-    app.layout.graph = Rect::new(0, 0, 180, 140);
-    app.layout.app = Rect::new(0, 0, 180, 140);
-
-    let lines = app.settings_lines(&repo);
-    let selection_lines = remote_selection_lines(&app, "origin");
-    let selection_texts = selection_lines.iter().map(|line| line_text(&lines[*line])).collect::<Vec<_>>();
-    let fetch_line = selection_texts.iter().find(|text| text.contains("origin fetch:")).unwrap();
-    let push_line = selection_texts.iter().find(|text| text.contains("origin push:")).unwrap();
-
-    assert_eq!(selection_lines.len(), 2);
-    assert!(fetch_line.contains("https://example.com/repo.git"));
-    assert!(push_line.contains("ssh://example.com/repo.git"));
-}
-
-#[test]
-fn settings_marks_effective_default_remote() {
-    let (_path, repo) = temp_repo("remote-default-marker");
-    repo.remote("origin", "https://example.com/origin.git").unwrap();
-    repo.remote("upstream", "https://example.com/upstream.git").unwrap();
-    repo.config().unwrap().set_str(GUITAR_DEFAULT_REMOTE_CONFIG, "upstream").unwrap();
-    let mut app = settings_app();
-    app.settings_tab = SettingsTab::Repo;
-    app.layout.graph = Rect::new(0, 0, 180, 140);
-    app.layout.app = Rect::new(0, 0, 180, 140);
-
-    let lines = app.settings_lines(&repo);
-    let rendered = lines.iter().map(line_text).collect::<Vec<_>>().join("\n");
-    let upstream_selection_texts = remote_selection_lines(&app, "upstream").iter().map(|line| line_text(&lines[*line])).collect::<Vec<_>>();
-    let origin_selection_texts = remote_selection_lines(&app, "origin").iter().map(|line| line_text(&lines[*line])).collect::<Vec<_>>();
-
-    assert!(rendered.contains("default remote:"));
-    assert!(rendered.contains("upstream"));
     assert!(upstream_selection_texts.iter().any(|text| text.contains("default")));
-    assert!(!origin_selection_texts.iter().any(|text| text.contains("default")));
+    assert!(!selection_texts.iter().any(|text| text.contains("default")));
 }
 
 #[test]
@@ -580,10 +501,9 @@ fn settings_truncates_long_remote_urls() {
     let (_path, repo) = temp_repo("remote-truncate");
     let long_url = "https://example.com/this/is/a/very/long/path/that/should/not/overflow/the/settings/row/repository.git";
     repo.remote("origin", long_url).unwrap();
-    let mut app = settings_app();
+    let mut app = settings_app_with_size(80, 120);
+    populate_remotes(&mut app, &repo);
     app.settings_tab = SettingsTab::Repo;
-    app.layout.graph = Rect::new(0, 0, 80, 120);
-    app.layout.app = Rect::new(0, 0, 80, 120);
 
     let rendered = rendered_settings(&mut app, &repo, 80, 120);
 

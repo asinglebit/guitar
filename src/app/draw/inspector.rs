@@ -5,7 +5,7 @@ use crate::{
         layout::scrollbar_content_length,
         localisation::{common, empty, inspector},
         text::{center_line, empty_state_top_padding, sanitize, truncate_with_ellipsis, wrap_words},
-        time::{gix_timestamp_to_utc, timestamp_to_utc},
+        time::{git2_timestamp_to_utc, gix_timestamp_to_utc},
     },
 };
 use ratatui::Frame;
@@ -45,7 +45,9 @@ impl App {
             // Commit metadata is read lazily for the selected graph row.
             if let Some(identity) = self.graph_identity_at(self.graph_selected) {
                 let alias = identity.alias;
-                let oid = identity.oid;
+                let Some(oid) = self.graph_oid_for_identity(identity) else {
+                    return;
+                };
                 let commit = repo.find_commit(oid).unwrap();
                 let author = commit.author();
                 let committer = commit.committer();
@@ -108,11 +110,11 @@ impl App {
                 lines.extend(vec![
                     Line::from(Span::styled(format!("{} {}", inspector::AUTHORED_BY(), author.name().unwrap_or(common::UNKNOWN())), Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
                     Line::from(Span::styled(author.email().unwrap_or("").to_string(), Style::default().fg(self.theme.COLOR_TEXT))),
-                    Line::from(Span::styled(timestamp_to_utc(author.when()), Style::default().fg(self.theme.COLOR_TEXT))),
+                    Line::from(Span::styled(git2_timestamp_to_utc(author.when()), Style::default().fg(self.theme.COLOR_TEXT))),
                     Line::default(),
                     Line::from(Span::styled(format!("{} {}", inspector::COMMITTED_BY(), committer.name().unwrap_or(common::UNKNOWN())), Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
                     Line::from(Span::styled(committer.email().unwrap_or("").to_string(), Style::default().fg(self.theme.COLOR_TEXT))),
-                    Line::from(Span::styled(timestamp_to_utc(committer.when()).to_string(), Style::default().fg(self.theme.COLOR_TEXT))),
+                    Line::from(Span::styled(git2_timestamp_to_utc(committer.when()), Style::default().fg(self.theme.COLOR_TEXT))),
                     Line::default(),
                     Line::from(Span::styled(inspector::MESSAGE_SUMMARY(), Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
                 ]);

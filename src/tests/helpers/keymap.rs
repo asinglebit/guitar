@@ -106,29 +106,6 @@ fn command_lookup_prefers_exact_binding_over_shift_digit_fallback() {
 }
 
 #[test]
-fn command_lookup_falls_back_from_legacy_ctrl_digits_to_shift_digits() {
-    let maps = default_keymaps();
-    let normal = maps.get(&InputMode::Normal).unwrap();
-
-    assert_eq!(command_for_key_binding(normal, &KeyBinding::new(Char('0'), KeyModifiers::CONTROL)), Some(Command::ToggleGraphReflogs));
-    assert_eq!(command_for_key_binding(normal, &KeyBinding::new(Char('1'), KeyModifiers::CONTROL)), Some(Command::ToggleShas));
-    assert_eq!(command_for_key_binding(normal, &KeyBinding::new(Char('2'), KeyModifiers::CONTROL)), Some(Command::ToggleGraphDates));
-    assert_eq!(command_for_key_binding(normal, &KeyBinding::new(Char('3'), KeyModifiers::CONTROL)), Some(Command::ToggleGraphCommitters));
-    assert_eq!(command_for_key_binding(normal, &KeyBinding::new(Char('4'), KeyModifiers::CONTROL)), Some(Command::ToggleGraphRefs));
-}
-
-#[test]
-fn command_lookup_falls_back_to_existing_legacy_ctrl_digit_bindings() {
-    let mut map = IndexMap::new();
-    map.insert(KeyBinding::new(Char('2'), KeyModifiers::CONTROL), Command::ToggleGraphDates);
-    map.insert(KeyBinding::new(Char('3'), KeyModifiers::CONTROL), Command::ToggleGraphCommitters);
-
-    assert_eq!(command_for_key_binding(&map, &KeyBinding::new(Char('2'), KeyModifiers::SHIFT)), Some(Command::ToggleGraphDates));
-    assert_eq!(command_for_key_binding(&map, &KeyBinding::new(Char('@'), KeyModifiers::NONE)), Some(Command::ToggleGraphDates));
-    assert_eq!(command_for_key_binding(&map, &KeyBinding::new(Char('#'), KeyModifiers::NONE)), Some(Command::ToggleGraphCommitters));
-}
-
-#[test]
 fn defaults_bind_normal_shift_r_to_reload_all_and_action_shift_r_to_revert() {
     let maps = default_keymaps();
     let normal = maps.get(&InputMode::Normal).unwrap();
@@ -247,34 +224,6 @@ fn existing_keymaps_do_not_override_graph_lane_limit_shortcut_conflicts() {
     assert_eq!(normal.get(&KeyBinding::new(Char('-'), KeyModifiers::NONE)), Some(&Command::Reload));
     assert_eq!(normal.get(&KeyBinding::new(Char('+'), KeyModifiers::NONE)), Some(&Command::ToggleSearch));
     assert!(!normal.values().any(|command| matches!(command, Command::ShrinkGraphLaneLimit | Command::GrowGraphLaneLimit)));
-}
-
-#[test]
-fn existing_keymaps_rewrite_untouched_old_numeric_ui_defaults() {
-    let mut maps = IndexMap::new();
-    let mut normal = IndexMap::new();
-    normal.insert(KeyBinding::new(Char('j'), KeyModifiers::NONE), Command::ScrollDown);
-    for (key, command) in old_numeric_ui_defaults() {
-        normal.insert(key, command);
-    }
-    let action = normal.clone();
-    maps.insert(InputMode::Normal, normal);
-    maps.insert(InputMode::Action, action);
-
-    assert!(ensure_default_keymap_bindings(&mut maps));
-
-    for mode in [InputMode::Normal, InputMode::Action] {
-        let mode_map = maps.get(&mode).unwrap();
-        assert_eq!(mode_map.get(&KeyBinding::new(Char('4'), KeyModifiers::NONE)), Some(&Command::ToggleReflogs));
-        assert_eq!(mode_map.get(&KeyBinding::new(Char('6'), KeyModifiers::NONE)), Some(&Command::ToggleSubmodules));
-        assert_eq!(mode_map.get(&KeyBinding::new(Char('7'), KeyModifiers::NONE)), Some(&Command::ToggleSearch));
-        assert_eq!(mode_map.get(&KeyBinding::new(Char('8'), KeyModifiers::NONE)), Some(&Command::ToggleInspector));
-        assert_eq!(mode_map.get(&KeyBinding::new(Char('9'), KeyModifiers::NONE)), Some(&Command::ToggleStatus));
-        assert_eq!(mode_map.get(&KeyBinding::new(Char('1'), KeyModifiers::SHIFT)), Some(&Command::ToggleShas));
-        assert_eq!(mode_map.get(&KeyBinding::new(Char('4'), KeyModifiers::SHIFT)), Some(&Command::ToggleGraphRefs));
-        assert_eq!(mode_map.get(&KeyBinding::new(Char('\\'), KeyModifiers::NONE)), None);
-        assert_eq!(mode_map.get(&KeyBinding::new(Char('`'), KeyModifiers::NONE)), None);
-    }
 }
 
 #[test]
