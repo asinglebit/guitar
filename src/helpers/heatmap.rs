@@ -25,7 +25,7 @@ impl Default for HeatmapCounts {
 
 impl HeatmapCounts {
     pub fn add_commit_seconds(&mut self, seconds: i64) {
-        if let DateBucket::Count(days_ago) = bucket_seconds(self.today, seconds) {
+        if let Some(days_ago) = commit_days_ago(self.today, seconds) {
             self.counts[days_ago] += 1;
         }
     }
@@ -40,26 +40,15 @@ pub fn commits_per_day(repo: &gix::Repository, oids: impl IntoIterator<Item = gi
 }
 
 fn commits_per_day_for_day(repo: &gix::Repository, oids: impl IntoIterator<Item = gix::ObjectId>, today: NaiveDate) -> [usize; TOTAL_DAYS] {
-    let mut object_buf = Vec::new();
-    counts_from_commit_seconds_for_day(
-        oids.into_iter().filter_map(|oid| {
-            object_buf.clear();
-            commit_seconds(repo, oid, &mut object_buf)
-        }),
-        today,
-    )
-}
-
-fn commit_seconds(repo: &gix::Repository, oid: gix::ObjectId, object_buf: &mut Vec<u8>) -> Option<i64> {
-    Some(repo.objects.find_commit(oid.as_ref(), object_buf).ok()?.time().ok()?.seconds)
-}
-
-fn counts_from_commit_seconds_for_day(seconds: impl IntoIterator<Item = i64>, today: NaiveDate) -> [usize; TOTAL_DAYS] {
     let mut counts = [0usize; TOTAL_DAYS];
+    let mut object_buf = Vec::new();
 
-    seconds
-        .into_iter()
-        .filter_map(|seconds| match bucket_seconds(today, seconds) {
+    oids.into_iter()
+        .filter_map(|oid| {
+            object_buf.clear();
+            commit_date(repo, &oid, &mut object_buf)
+        })
+        .filter_map(|commit_date| match bucket_date(today, commit_date) {
             DateBucket::Count(days_ago) => Some(days_ago),
             DateBucket::Future | DateBucket::BeforeWindow => None,
         })
@@ -86,17 +75,21 @@ fn build_heatmap_from_counts_for_day(counts: [usize; TOTAL_DAYS], today: NaiveDa
     let weekday_today = today.weekday().num_days_from_monday() as usize;
     let mut grid = [[0usize; WEEKS]; DAYS];
 
-    for (cell, count) in heatmap_cells(weekday_today, counts) {
-        grid[cell.day][cell.week] = count;
+    for (days_ago, count) in counts.into_iter().enumerate() {
+        if let Some((day_idx, week_idx)) = heatmap_cell(weekday_today, days_ago) {
+            grid[day_idx][week_idx] = count;
+        }
     }
 
     grid
 }
 
-fn bucket_seconds(today: NaiveDate, seconds: i64) -> DateBucket {
-    let Some(commit_date) = Utc.timestamp_opt(seconds, 0).single().map(|date| date.date_naive()) else {
-        return DateBucket::Future;
-    };
+fn commit_date(repo: &gix::Repository, oid: &gix::ObjectId, object_buf: &mut Vec<u8>) -> Option<NaiveDate> {
+    let commit = repo.objects.find_commit(oid, object_buf).ok()?;
+    Utc.timestamp_opt(commit.time().ok()?.seconds, 0).single().map(|date| date.date_naive())
+}
+
+fn bucket_date(today: NaiveDate, commit_date: NaiveDate) -> DateBucket {
     let days_ago = today.signed_duration_since(commit_date).num_days();
 
     if days_ago < 0 {
@@ -108,25 +101,22 @@ fn bucket_seconds(today: NaiveDate, seconds: i64) -> DateBucket {
     }
 }
 
-fn heatmap_cells(count_weekday: usize, counts: [usize; TOTAL_DAYS]) -> impl Iterator<Item = (HeatmapCell, usize)> {
-    counts.into_iter().enumerate().filter_map(move |(days_ago, count)| heatmap_cell(count_weekday, days_ago).map(|cell| (cell, count)))
+fn commit_days_ago(today: NaiveDate, seconds: i64) -> Option<usize> {
+    let commit_date = Utc.timestamp_opt(seconds, 0).single()?.date_naive();
+    let days_ago = today.signed_duration_since(commit_date).num_days();
+
+    (0..TOTAL_DAYS as i64).contains(&days_ago).then_some(days_ago as usize)
 }
 
-fn heatmap_cell(weekday_today: usize, days_ago: usize) -> Option<HeatmapCell> {
+fn heatmap_cell(weekday_today: usize, days_ago: usize) -> Option<(usize, usize)> {
     let offset = 6 - weekday_today;
     let logical = days_ago + offset;
     let week = logical / 7;
-    (week < WEEKS).then(|| HeatmapCell { day: weekday_for_age(weekday_today, days_ago), week: WEEKS - 1 - week })
-}
-
-fn weekday_for_age(weekday_today: usize, days_ago: usize) -> usize {
-    (weekday_today + DAYS - (days_ago % DAYS)) % DAYS
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-struct HeatmapCell {
-    day: usize,
-    week: usize,
+    (week < WEEKS).then(|| {
+        let week_idx = WEEKS - 1 - week;
+        let day_idx = (weekday_today + 7 - (days_ago % 7)) % 7;
+        (day_idx, week_idx)
+    })
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]

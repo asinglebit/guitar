@@ -133,7 +133,7 @@ fn walker_expires_new_right_merge_lane_before_next_rendered_row() {
 
     let merge_alias = walker.oids.get_existing_alias(merge).unwrap();
     let head_alias = walker.oids.get_existing_alias(left_tip).unwrap();
-    let aliases = walker.oids.get_sorted_aliases();
+    let aliases = walker.oids.get_sorted_aliases().to_vec();
     let merge_idx = aliases.iter().position(|alias| *alias == merge_alias).unwrap();
     assert!(merge_idx + 1 < aliases.len());
 

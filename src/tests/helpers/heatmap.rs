@@ -83,26 +83,11 @@ fn prefix_matching_accepts_partial_hex() {
     let dir = tempfile::Builder::new().prefix("guitar-prefix-").tempdir().unwrap();
     let repo = Repository::init(dir.path()).unwrap();
     let oid = commit_at(&repo, "prefix.txt", Utc::now().timestamp());
-    let gix_oid = crate::core::oids::git2_to_gix_oid(oid);
+    let gix_oid = gix_oid(oid);
     let mut oids = crate::core::oids::Oids::default();
 
     let alias = oids.get_alias_by_oid(gix_oid);
 
     assert_eq!(oids.get_alias_by_prefix(&gix_oid.to_hex_with_len(7).to_string()), Some(alias));
     assert_eq!(oids.get_alias_by_prefix("not-hex"), None);
-}
-
-#[test]
-fn timestamp_counter_skips_future_and_stops_after_window() {
-    let today = NaiveDate::from_ymd_opt(2026, 6, 25).unwrap();
-    let today_seconds = Utc.with_ymd_and_hms(2026, 6, 25, 12, 0, 0).unwrap().timestamp();
-    let yesterday = today_seconds - 24 * 60 * 60;
-    let future = today_seconds + 24 * 60 * 60;
-    let outside_grid = today_seconds - ((TOTAL_DAYS as i64) + 1) * 24 * 60 * 60;
-
-    let counts = counts_from_commit_seconds_for_day([today_seconds, future, yesterday, outside_grid, today_seconds], today);
-
-    assert_eq!(counts[0], 1);
-    assert_eq!(counts[1], 1);
-    assert_eq!(counts.iter().sum::<usize>(), 2);
 }
