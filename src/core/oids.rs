@@ -151,6 +151,10 @@ fn matches_ascii_hex_prefix(oid: &ObjectId, prefix: &str) -> bool {
     prefix.bytes().enumerate().all(|(idx, byte)| ascii_hex_nibble(byte).zip(oid_hex_nibble(oid, idx)).is_some_and(|(prefix, oid)| prefix == oid))
 }
 
+fn is_git_hex_prefix(prefix: &str) -> bool {
+    !prefix.is_empty() && prefix.as_bytes().iter().all(u8::is_ascii_hexdigit)
+}
+
 fn oid_hex_nibble(oid: &ObjectId, idx: usize) -> Option<u8> {
     oid.as_bytes().get(idx / 2).map(|byte| if idx % 2 == 0 { byte >> 4 } else { byte & 0x0f })
 }
