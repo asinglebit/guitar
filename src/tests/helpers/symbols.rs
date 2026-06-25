@@ -1,9 +1,6 @@
 use super::*;
+use crate::git::test_support::{read_to_string, temp_json_path};
 use std::path::PathBuf;
-
-#[path = "test_support.rs"]
-mod test_support;
-use test_support::{read_to_string, temp_json_path};
 
 fn temp_symbols_path(name: &str) -> PathBuf {
     temp_json_path("guitar-symbols", name)

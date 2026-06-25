@@ -1,9 +1,9 @@
 use super::*;
-use crate::git::test_support::language_test_guard;
+use crate::git::test_support::{language_test_guard, temp_json_path};
 use std::fs;
 
 fn temp_language_path(name: &str) -> std::path::PathBuf {
-    tempfile::Builder::new().prefix(&format!("guitar-language-{name}-")).suffix(".json").tempfile().unwrap().into_temp_path().keep().unwrap()
+    temp_json_path("guitar-language", name)
 }
 
 #[test]

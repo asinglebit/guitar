@@ -1,9 +1,6 @@
 use super::*;
-use std::{
-    fs,
-    path::PathBuf,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use crate::git::test_support::temp_named_dir;
+use std::{fs, path::PathBuf};
 
 #[test]
 fn background_or_default_preserves_real_colors() {
@@ -234,8 +231,5 @@ fn rgb_brightness(color: Color) -> u16 {
 }
 
 fn temp_theme_path(name: &str) -> PathBuf {
-    let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-    let dir = std::env::temp_dir().join(format!("guitar-palette-{name}-{id}"));
-    fs::create_dir_all(&dir).unwrap();
-    dir.join("theme.json")
+    temp_named_dir("guitar-palette", name).join("theme.json")
 }

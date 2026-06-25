@@ -7,37 +7,12 @@ use crate::{
         submodules::SubmoduleStackEntry,
         worktrees::{WorktreeEntry, WorktreeKind},
     },
+    git::test_support::{commit_file, temp_repo},
     helpers::symbols::submodule::DEFAULT as SYM_SUBMODULE,
 };
-use git2::{Oid, Repository, Signature};
+use git2::Oid;
 use ratatui::{Terminal, backend::TestBackend, layout::Rect};
-use std::{
-    fs,
-    path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
-};
-
-fn temp_repo(name: &str) -> (PathBuf, Repository) {
-    let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-    let path = std::env::temp_dir().join(format!("guitar-statusbar-{name}-{id}"));
-    fs::create_dir_all(&path).unwrap();
-    let repo = Repository::init(&path).unwrap();
-    {
-        let mut config = repo.config().unwrap();
-        config.set_str("user.name", "Test User").unwrap();
-        config.set_str("user.email", "test@example.com").unwrap();
-    }
-    fs::write(path.join("file.txt"), "hello\n").unwrap();
-    let mut index = repo.index().unwrap();
-    index.add_path(Path::new("file.txt")).unwrap();
-    index.write().unwrap();
-    let tree_oid = index.write_tree().unwrap();
-    let tree = repo.find_tree(tree_oid).unwrap();
-    let sig = Signature::now("Test User", "test@example.com").unwrap();
-    repo.commit(Some("HEAD"), &sig, &sig, "initial", &tree, &[]).unwrap();
-    drop(tree);
-    (path, repo)
-}
+use std::path::PathBuf;
 
 fn rendered_symbols(terminal: &Terminal<TestBackend>) -> String {
     terminal.backend().buffer().content().iter().map(|cell| cell.symbol()).collect::<String>()
@@ -61,7 +36,9 @@ fn current_worktree(path: PathBuf, branch: Option<&str>, head: Oid) -> WorktreeE
 
 #[test]
 fn statusbar_renders_submodule_stack_before_branch() {
-    let (path, repo) = temp_repo("submodule-stack");
+    let (dir, repo) = temp_repo("submodule-stack");
+    let path = dir.join("repo");
+    commit_file(&repo, "file.txt", "hello\n", "initial");
     let head = repo.head().unwrap().target().unwrap();
     let mut app = App {
         layout: Layout { statusbar_left: Rect::new(0, 0, 180, 1), statusbar_right: Rect::new(180, 0, 20, 1), ..Default::default() },
@@ -87,7 +64,9 @@ fn statusbar_renders_submodule_stack_before_branch() {
 
 #[test]
 fn statusbar_branch_count_uses_cached_branch_rows_without_scanning_refs() {
-    let (path, repo) = temp_repo("cached-branches");
+    let (dir, repo) = temp_repo("cached-branches");
+    let path = dir.join("repo");
+    commit_file(&repo, "file.txt", "hello\n", "initial");
     let head = repo.head().unwrap().peel_to_commit().unwrap();
     repo.branch("repo-only-a", &head, false).unwrap();
     repo.branch("repo-only-b", &head, false).unwrap();

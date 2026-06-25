@@ -1,4 +1,5 @@
 use super::*;
+use crate::git::test_support::temp_named_dir;
 
 #[test]
 fn defaults_include_recent_repository_bindings() {
@@ -482,8 +483,7 @@ fn rebind_keymap_selection_rolls_back_when_action_sync_conflicts() {
 
 #[test]
 fn keymaps_round_trip_through_disk() {
-    let id = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
-    let path = std::env::temp_dir().join(format!("guitar-keymap-round-trip-{id}")).join("keymap.json");
+    let path = temp_named_dir("guitar-keymap-round-trip", "keymap").join("keymap.json");
     let mut maps = default_keymaps();
     rebind_keymap_selection(&mut maps, &KeymapSelection::new(InputMode::Normal, KeyBinding::new(Char('j'), KeyModifiers::NONE), Command::ScrollDown), KeyBinding::new(Char('n'), KeyModifiers::ALT))
         .unwrap();
@@ -506,8 +506,7 @@ fn keymap_config_serialization_stays_english_while_visual_labels_localise() {
     crate::helpers::localisation::set_active_language(crate::helpers::localisation::Language::Spanish);
     assert_eq!(command_to_visual_string(&Command::ScrollDown), "Desplazar abajo");
 
-    let id = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
-    let path = std::env::temp_dir().join(format!("guitar-keymap-localised-{id}")).join("keymap.json");
+    let path = temp_named_dir("guitar-keymap-localised", "keymap").join("keymap.json");
     let mut maps = Keymaps::new();
     let mut normal = ModeKeymap::new();
     normal.insert(KeyBinding::new(Char('j'), KeyModifiers::NONE), Command::ScrollDown);

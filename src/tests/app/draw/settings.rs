@@ -2,6 +2,7 @@ use super::*;
 use crate::{
     app::app::{SettingsTab, Viewport},
     git::queries::remotes::{GUITAR_DEFAULT_REMOTE_CONFIG, list_remotes},
+    git::test_support::temp_repo,
     helpers::{
         keymap::{Command, InputMode, KeyBinding},
         layout::GRAPH_LANE_LIMIT_DEFAULT,
@@ -17,24 +18,6 @@ use ratatui::{
     crossterm::event::{KeyCode, KeyModifiers},
     layout::Rect,
 };
-use std::{
-    fs,
-    time::{SystemTime, UNIX_EPOCH},
-};
-
-fn temp_repo(name: &str) -> (std::path::PathBuf, Repository) {
-    let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-    let path = std::env::temp_dir().join(format!("guitar-settings-draw-{name}-{id}"));
-    fs::create_dir_all(&path).unwrap();
-    let repo = Repository::init(&path).unwrap();
-    {
-        let mut config = repo.config().unwrap();
-        config.set_str("user.name", "Test User").unwrap();
-        config.set_str("user.email", "test@example.com").unwrap();
-    }
-    (path, repo)
-}
-
 fn settings_app() -> App {
     let mut app = App { viewport: Viewport::Settings, focus: Focus::Viewport, ..Default::default() };
     let mut keymaps = IndexMap::new();
@@ -92,7 +75,7 @@ fn populate_remotes(app: &mut App, repo: &Repository) {
 
 #[test]
 fn settings_general_tab_renders_sections_and_symbols_paths() {
-    let (_path, repo) = temp_repo("default-tab");
+    let (_dir, repo) = temp_repo("default-tab");
     let mut app = settings_app_with_size(140, 120);
 
     let rendered = rendered_settings(&mut app, &repo, 140, 120);
@@ -124,7 +107,7 @@ fn settings_general_tab_renders_sections_and_symbols_paths() {
 
 #[test]
 fn settings_active_tabs_render_their_grouped_sections_only() {
-    let (_path, repo) = temp_repo("tab-groups");
+    let (_dir, repo) = temp_repo("tab-groups");
     let mut app = settings_app_with_size(160, 160);
 
     app.settings_tab = SettingsTab::Display;
@@ -156,7 +139,7 @@ fn settings_shortcuts_render_graph_lane_limit_shortcuts() {
     let _guard = crate::git::test_support::language_test_guard();
 
     crate::helpers::localisation::set_active_language(Language::English);
-    let (_path, repo) = temp_repo("lane-limit-shortcuts");
+    let (_dir, repo) = temp_repo("lane-limit-shortcuts");
     let mut app = settings_app_with_size(160, 80);
     app.settings_tab = SettingsTab::Shortcuts;
     let normal = app.keymaps.get_mut(&InputMode::Normal).unwrap();
@@ -173,7 +156,7 @@ fn settings_shortcuts_render_graph_lane_limit_shortcuts() {
 
 #[test]
 fn settings_scroll_keeps_visible_selection_without_recentering() {
-    let (_path, repo) = temp_repo("visible");
+    let (_dir, repo) = temp_repo("visible");
     let mut app = settings_app();
     app.settings_tab = SettingsTab::Display;
     draw_settings_once(&mut app, &repo);
@@ -192,7 +175,7 @@ fn settings_scroll_keeps_visible_selection_without_recentering() {
 
 #[test]
 fn settings_scroll_moves_only_when_selection_leaves_view() {
-    let (_path, repo) = temp_repo("bounded");
+    let (_dir, repo) = temp_repo("bounded");
     let mut app = settings_app();
     app.settings_tab = SettingsTab::Display;
     draw_settings_once(&mut app, &repo);
@@ -216,7 +199,7 @@ fn settings_scroll_moves_only_when_selection_leaves_view() {
 
 #[test]
 fn settings_scroll_clamps_at_top_and_bottom() {
-    let (_path, repo) = temp_repo("clamp");
+    let (_dir, repo) = temp_repo("clamp");
     let mut app = settings_app();
     app.settings_tab = SettingsTab::Display;
     draw_settings_once(&mut app, &repo);
@@ -237,7 +220,7 @@ fn settings_scroll_clamps_at_top_and_bottom() {
 
 #[test]
 fn settings_selection_snaps_to_selectable_line() {
-    let (_path, repo) = temp_repo("snap");
+    let (_dir, repo) = temp_repo("snap");
     let mut app = settings_app();
     app.settings_selected = 0;
 
@@ -248,7 +231,7 @@ fn settings_selection_snaps_to_selectable_line() {
 
 #[test]
 fn settings_display_tab_renders_sections_and_theme_markers() {
-    let (_path, repo) = temp_repo("layout-section");
+    let (_dir, repo) = temp_repo("layout-section");
     let mut app = settings_app_with_size(120, 120);
     app.settings_tab = SettingsTab::Display;
     app.layout_config.is_branches = true;
@@ -277,7 +260,7 @@ fn settings_display_tab_renders_sections_and_theme_markers() {
 
 #[test]
 fn settings_display_tab_lists_languages_and_symbol_themes() {
-    let (_path, repo) = temp_repo("display-rows");
+    let (_dir, repo) = temp_repo("display-rows");
     let mut app = settings_app_with_size(120, 120);
     app.settings_tab = SettingsTab::Display;
     app.language = Language::French;
@@ -302,7 +285,7 @@ fn settings_display_tab_lists_languages_and_symbol_themes() {
 
 #[test]
 fn settings_display_tab_uses_active_symbol_theme_form_markers() {
-    let (_path, repo) = temp_repo("symbol-theme-markers");
+    let (_dir, repo) = temp_repo("symbol-theme-markers");
     let mut app = settings_app_with_size(120, 120);
     app.symbols = SymbolTheme::ascii();
     app.settings_tab = SettingsTab::Display;
@@ -321,7 +304,7 @@ fn settings_display_tab_uses_active_symbol_theme_form_markers() {
 
 #[test]
 fn settings_narrow_tab_bar_uses_compact_bullets() {
-    let (_path, repo) = temp_repo("compact-tabs");
+    let (_dir, repo) = temp_repo("compact-tabs");
     let mut app = settings_app();
     app.layout.graph = Rect::new(0, 0, 30, 80);
     app.layout.app = Rect::new(0, 0, 30, 80);
@@ -354,7 +337,7 @@ fn settings_narrow_tab_bar_uses_compact_bullets() {
 
 #[test]
 fn settings_section_names_use_highlight_color() {
-    let (_path, repo) = temp_repo("section-highlight");
+    let (_dir, repo) = temp_repo("section-highlight");
     let mut app = settings_app();
     app.layout.graph = Rect::new(0, 0, 120, 160);
     app.layout.app = Rect::new(0, 0, 120, 160);
@@ -389,7 +372,7 @@ fn settings_section_names_use_highlight_color() {
 
 #[test]
 fn settings_layout_rows_use_current_normal_keymap_binding() {
-    let (_path, repo) = temp_repo("layout-key");
+    let (_dir, repo) = temp_repo("layout-key");
     let mut app = settings_app();
     app.settings_tab = SettingsTab::Display;
     app.layout.graph = Rect::new(0, 0, 120, 120);
@@ -403,7 +386,7 @@ fn settings_layout_rows_use_current_normal_keymap_binding() {
 
 #[test]
 fn settings_renders_recent_repositories_section_with_actions_and_selectable_rows() {
-    let (_path, repo) = temp_repo("recent-section");
+    let (_dir, repo) = temp_repo("recent-section");
     let mut app = settings_app_with_size(140, 120);
     app.recent = vec!["/repo/a".into(), "/repo/b".into()];
 
@@ -422,7 +405,7 @@ fn settings_renders_recent_repositories_section_with_actions_and_selectable_rows
 
 #[test]
 fn settings_recent_repository_actions_use_split_row_and_current_keymap_bindings() {
-    let (_path, repo) = temp_repo("recent-actions-keymap");
+    let (_dir, repo) = temp_repo("recent-actions-keymap");
     let mut app = settings_app_with_size(140, 120);
     let normal = app.keymaps.get_mut(&InputMode::Normal).unwrap();
     normal.insert(KeyBinding::new(KeyCode::Char('x'), KeyModifiers::NONE), Command::RemoveRecentRepository);
@@ -439,7 +422,7 @@ fn settings_recent_repository_actions_use_split_row_and_current_keymap_bindings(
 
 #[test]
 fn settings_empty_recent_repositories_row_is_not_selectable() {
-    let (_path, repo) = temp_repo("empty-recent-section");
+    let (_dir, repo) = temp_repo("empty-recent-section");
     let mut app = settings_app();
     app.layout.graph = Rect::new(0, 0, 140, 120);
     app.layout.app = Rect::new(0, 0, 140, 120);
@@ -452,7 +435,7 @@ fn settings_empty_recent_repositories_row_is_not_selectable() {
 
 #[test]
 fn settings_renders_remotes_section_with_add_and_empty_state() {
-    let (_path, repo) = temp_repo("empty-remotes-section");
+    let (_dir, repo) = temp_repo("empty-remotes-section");
     let mut app = settings_app_with_size(140, 120);
     populate_remotes(&mut app, &repo);
     app.settings_tab = SettingsTab::Repo;
@@ -468,7 +451,7 @@ fn settings_renders_remotes_section_with_add_and_empty_state() {
 
 #[test]
 fn settings_renders_remote_rows_with_push_urls_and_default_marker() {
-    let (_path, repo) = temp_repo("remote-rows");
+    let (_dir, repo) = temp_repo("remote-rows");
     repo.remote("origin", "https://example.com/repo.git").unwrap();
     repo.remote_set_pushurl("origin", Some("ssh://example.com/repo.git")).unwrap();
     repo.remote("upstream", "https://example.com/upstream.git").unwrap();
@@ -498,7 +481,7 @@ fn settings_renders_remote_rows_with_push_urls_and_default_marker() {
 
 #[test]
 fn settings_truncates_long_remote_urls() {
-    let (_path, repo) = temp_repo("remote-truncate");
+    let (_dir, repo) = temp_repo("remote-truncate");
     let long_url = "https://example.com/this/is/a/very/long/path/that/should/not/overflow/the/settings/row/repository.git";
     repo.remote("origin", long_url).unwrap();
     let mut app = settings_app_with_size(80, 120);

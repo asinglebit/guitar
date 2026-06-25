@@ -1,13 +1,9 @@
 use super::*;
-use std::{
-    fs,
-    path::PathBuf,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use crate::git::test_support::temp_json_path;
+use std::{fs, path::PathBuf};
 
 fn temp_recent_path(name: &str) -> PathBuf {
-    let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-    std::env::temp_dir().join(format!("guitar-recent-{name}-{id}.json"))
+    temp_json_path("guitar-recent", name)
 }
 
 #[test]
