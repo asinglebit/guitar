@@ -1,4 +1,5 @@
 use super::*;
+use std::{fs, path::PathBuf};
 
 #[test]
 fn classifies_common_remote_url_shapes() {
@@ -35,6 +36,49 @@ fn session_stores_and_evicts_https_secret() {
 
     session.evict(&[key]);
     assert!(session.https_secret(&challenge.url, None, AuthProtocol::Https).is_none());
+}
+
+#[test]
+fn session_stores_and_evicts_ssh_passphrase() {
+    let challenge = AuthChallenge {
+        url: "ssh://git@github.com/asinglebit/guitar.git".to_string(),
+        username: Some("git".to_string()),
+        protocol: AuthProtocol::Ssh,
+        operation: "Fetch".to_string(),
+        key_path: Some(PathBuf::from("/tmp/id_ed25519")),
+    };
+    let mut session = AuthSession::default();
+    session.store(&challenge, AuthSecret::SshKeyPassphrase { passphrase: "secret".to_string() });
+
+    let (key, passphrase) = session.ssh_secret(&challenge.url, "git", challenge.key_path.as_deref().unwrap()).unwrap();
+    assert_eq!(passphrase, "secret");
+
+    session.evict(&[key]);
+    assert!(session.ssh_secret(&challenge.url, "git", challenge.key_path.as_deref().unwrap()).is_none());
+}
+
+#[test]
+fn default_ssh_private_key_prefers_ed25519_then_ecdsa_then_rsa() {
+    let home = tempfile::Builder::new().prefix("guitar-auth-ssh-key-order-").tempdir().unwrap();
+    let home = home.path();
+    let ssh = home.join(".ssh");
+    fs::create_dir_all(&ssh).unwrap();
+
+    let rsa = ssh.join("id_rsa");
+    let ecdsa = ssh.join("id_ecdsa");
+    let ed25519 = ssh.join("id_ed25519");
+
+    fs::write(&rsa, "rsa").unwrap();
+    fs::write(&ecdsa, "ecdsa").unwrap();
+    fs::write(&ed25519, "ed25519").unwrap();
+
+    assert_eq!(default_ssh_private_key_in(&home).as_deref(), Some(ed25519.as_path()));
+
+    fs::remove_file(&ed25519).unwrap();
+    assert_eq!(default_ssh_private_key_in(&home).as_deref(), Some(ecdsa.as_path()));
+
+    fs::remove_file(&ecdsa).unwrap();
+    assert_eq!(default_ssh_private_key_in(&home).as_deref(), Some(rsa.as_path()));
 }
 
 #[test]
