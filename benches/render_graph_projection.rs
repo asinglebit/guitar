@@ -61,15 +61,18 @@ fn render_graph_projection_uncommitted_row(bencher: Bencher) {
         index: 0,
         alias: NONE,
         oid: Oid::zero(),
+        short_oid: String::new(),
         summary: "uncommitted".to_string(),
         committer_date: String::new(),
         committer_name: String::new(),
+        is_merge: false,
         has_any_branch: false,
         branches: Vec::new(),
         tags: Vec::new(),
         is_stash: false,
         stash_lane: None,
         worktrees: Vec::new(),
+        has_current_worktree: false,
         reflog: None,
     }];
     bench_render(bencher, &fixture.theme, &fixture.symbols, &rows, &fixture.history, fixture.head_alias, 0, rows.len(), true);

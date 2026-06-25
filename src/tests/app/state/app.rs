@@ -95,6 +95,7 @@ fn graph_row(index: usize, alias: u32, oid: git2::Oid) -> GraphRow {
         index,
         alias,
         oid,
+        short_oid: oid.to_string()[..8].to_string(),
         summary: "commit".to_string(),
         committer_date: String::new(),
         committer_name: String::new(),
@@ -105,6 +106,7 @@ fn graph_row(index: usize, alias: u32, oid: git2::Oid) -> GraphRow {
         is_stash: false,
         stash_lane: None,
         worktrees: Vec::new(),
+        has_current_worktree: false,
         reflog: None,
     }
 }

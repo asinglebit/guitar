@@ -1213,6 +1213,12 @@ impl App {
                     self.heatmap = heatmap;
                 }
             },
+            GraphEvent::Worktrees { generation, version, worktrees } => {
+                if generation == self.graph.generation {
+                    self.graph.version = self.graph.version.max(version);
+                    self.worktrees.entries = worktrees;
+                }
+            },
             GraphEvent::Error { generation, message } => {
                 if generation == self.graph.generation {
                     self.show_error(message);

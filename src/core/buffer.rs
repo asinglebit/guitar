@@ -1,19 +1,180 @@
 use crate::core::chunk::{Chunk, LaneRef, NONE};
-use im::{OrdMap, Vector};
-use std::ops::Deref;
+use crate::core::graph_service::{GraphHistory, LaneSnapshot};
+use smallvec::SmallVec;
+
+const DELTA_OP_CHUNK_SIZE: usize = 131_072;
+const CHECKPOINT_INTERVAL: usize = 16_384;
 
 #[derive(Default, Clone)]
 pub struct Delta {
-    pub ops: Vec<DeltaOp>,
+    pub ops: DeltaOps,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DeltaOp {
-    Insert { index: usize, item: Chunk },
-    Remove { index: usize },
-    Replace { index: usize, new: Chunk },
-    CompressedParentInsert { parent: u32 },
-    CompressedParentRemove { parent: u32 },
+    Insert { index: u32, item: Chunk },
+    Remove { index: u32 },
+    Replace { index: u32, new: Chunk },
+    Truncate { len: u32 },
+    ReplaceAndTruncate { index: u32, new: Chunk, len: u32 },
+}
+
+impl DeltaOp {
+    fn apply(self, curr: &mut LaneSnapshot) {
+        match self {
+            DeltaOp::Insert { index, item } => {
+                curr.insert(index as usize, item);
+            },
+            DeltaOp::Remove { index } => {
+                curr.remove(index as usize);
+            },
+            DeltaOp::Replace { index, new } => {
+                curr[index as usize] = new;
+            },
+            DeltaOp::Truncate { len } => {
+                curr.truncate(len as usize);
+            },
+            DeltaOp::ReplaceAndTruncate { index, new, len } => {
+                curr[index as usize] = new;
+                curr.truncate(len as usize);
+            },
+        }
+    }
+}
+
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
+pub struct DeltaOps(SmallVec<[DeltaOp; 8]>);
+
+impl DeltaOps {
+    fn push(&mut self, op: DeltaOp) {
+        self.0.push(op);
+    }
+
+    pub fn iter(&self) -> std::slice::Iter<'_, DeltaOp> {
+        self.0.iter()
+    }
+
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    fn shrink_to_fit(&mut self) {
+        self.0.shrink_to_fit();
+    }
+
+    #[cfg(test)]
+    fn spilled(&self) -> bool {
+        self.0.spilled()
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct DeltaLog {
+    spans: Vec<DeltaSpan>,
+    op_chunks: Vec<Vec<DeltaOp>>,
+}
+
+#[derive(Clone, Copy, Default)]
+struct DeltaSpan {
+    chunk: u16,
+    start: u32,
+    len: u16,
+}
+
+impl DeltaLog {
+    pub fn len(&self) -> usize {
+        self.spans.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.spans.is_empty()
+    }
+
+    #[cfg(test)]
+    pub fn capacity(&self) -> usize {
+        self.spans.capacity()
+    }
+
+    #[cfg(test)]
+    pub fn op_chunk_capacities(&self) -> Vec<usize> {
+        self.op_chunks.iter().map(Vec::capacity).collect()
+    }
+
+    fn push(&mut self, delta: Delta) {
+        let span = self.store_ops(&delta.ops);
+        self.spans.push(span);
+    }
+
+    fn store_ops(&mut self, ops: &DeltaOps) -> DeltaSpan {
+        let len = ops.len();
+        if len == 0 {
+            return DeltaSpan::default();
+        }
+
+        if self.op_chunks.last().is_none_or(|chunk| chunk.len() + len > DELTA_OP_CHUNK_SIZE) {
+            self.op_chunks.push(Vec::with_capacity(DELTA_OP_CHUNK_SIZE.max(len)));
+        }
+
+        let chunk_idx = self.op_chunks.len() - 1;
+        let chunk = &mut self.op_chunks[chunk_idx];
+        let start = chunk.len();
+        chunk.extend(ops.iter().copied());
+
+        DeltaSpan {
+            chunk: u16::try_from(chunk_idx).expect("delta op chunk index exceeded u16::MAX"),
+            start: u32::try_from(start).expect("delta op arena chunk exceeded u32::MAX entries"),
+            len: u16::try_from(len).expect("delta entry exceeded u16::MAX ops"),
+        }
+    }
+
+    fn iter_range(&self, start: usize, end: usize) -> DeltaLogRangeIter<'_> {
+        DeltaLogRangeIter { log: self, next: start.min(self.len()), end: end.min(self.len()) }
+    }
+
+    fn shrink_to_fit(&mut self) {
+        self.spans.shrink_to_fit();
+        for chunk in &mut self.op_chunks {
+            chunk.shrink_to_fit();
+        }
+        self.op_chunks.shrink_to_fit();
+    }
+
+    fn reserve_entries(&mut self, entries: usize) {
+        self.spans.reserve(entries.saturating_sub(self.spans.len()));
+    }
+}
+
+struct DeltaView<'a> {
+    ops: &'a [DeltaOp],
+}
+
+struct DeltaLogRangeIter<'a> {
+    log: &'a DeltaLog,
+    next: usize,
+    end: usize,
+}
+
+impl<'a> Iterator for DeltaLogRangeIter<'a> {
+    type Item = (usize, DeltaView<'a>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.next >= self.end {
+            return None;
+        }
+
+        let idx = self.next;
+        self.next += 1;
+
+        let span = self.log.spans.get(idx)?;
+        if span.len == 0 {
+            return Some((idx, DeltaView { ops: &[] }));
+        }
+
+        let ops = self.log.op_chunks.get(span.chunk as usize)?;
+        let start = span.start as usize;
+        let end = start + span.len as usize;
+        Some((idx, DeltaView { ops: &ops[start..end] }))
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -22,49 +183,22 @@ pub struct UpdateOutcome {
     pub started_lane: bool,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct GraphSnapshot {
-    pub lanes: Vector<Chunk>,
-    pub compressed_parents: Vector<u32>,
-}
-
-impl GraphSnapshot {
-    pub fn new(lanes: Vector<Chunk>, compressed_parents: Vector<u32>) -> Self {
-        Self { lanes, compressed_parents }
-    }
-
-    pub fn from_lanes(lanes: Vector<Chunk>) -> Self {
-        Self { lanes, compressed_parents: Vector::new() }
-    }
-}
-
-impl From<Vector<Chunk>> for GraphSnapshot {
-    fn from(lanes: Vector<Chunk>) -> Self {
-        Self::from_lanes(lanes)
-    }
-}
-
-impl Deref for GraphSnapshot {
-    type Target = Vector<Chunk>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.lanes
-    }
-}
-
-pub type GraphHistory = Vector<GraphSnapshot>;
-
 #[derive(Default, Clone)]
 pub struct Buffer {
-    pub curr: Vector<Chunk>,
-    pub compressed_parents: Vector<u32>,
-    // Deltas keep memory bounded while still allowing visible ranges to be reconstructed.
-    pub deltas: Vector<Delta>,
-    pub checkpoints: OrdMap<usize, GraphSnapshot>,
+    pub curr: LaneSnapshot,
+    // Deltas are append-only; chunking avoids giant realloc/copy spikes while loading huge repos.
+    pub deltas: DeltaLog,
+    pub checkpoints: Vec<Checkpoint>,
     pub delta: Delta,
     mergers: Vec<u32>,
     transient_lanes: Vec<usize>,
     lane_limit: Option<usize>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Checkpoint {
+    pub idx: usize,
+    pub curr: LaneSnapshot,
 }
 
 impl Buffer {
@@ -86,94 +220,88 @@ impl Buffer {
             }
         }
 
-        if !self.transient_lanes.iter().any(|idx| *idx == lane_idx) {
+        if !self.transient_lanes.contains(&lane_idx) {
             self.transient_lanes.push(lane_idx);
         }
     }
 
     pub fn update(&mut self, chunk: Chunk) -> UpdateOutcome {
         self.backup();
+        self.expire_transient_lanes();
+        self.trim_trailing_dummies();
+        self.split_planned_merger();
 
-        let transient_lanes = std::mem::take(&mut self.transient_lanes);
-        for lane_idx in transient_lanes {
-            if lane_idx < self.curr.len() && !self.curr[lane_idx].is_dummy() {
-                self.curr[lane_idx] = Chunk::dummy();
-                self.delta.ops.push(DeltaOp::Replace { index: lane_idx, new: self.curr[lane_idx].clone() });
-            }
-        }
-
-        // Trailing dummy lanes carry no future topology and can be removed immediately.
-        while let Some(last_idx) = self.curr.len().checked_sub(1) {
-            if !self.curr[last_idx].is_dummy() {
-                break;
-            }
-            self.curr.pop_back();
-            self.delta.ops.push(DeltaOp::Remove { index: last_idx });
-        }
-
-        // Planned mergers split a lane so the second parent can draw toward its target later.
-        if let Some(merger_idx) = self.curr.iter().position(|inner| self.mergers.iter().any(|alias| *alias == inner.alias)) {
-            if let Some(merger_pos) = self.mergers.iter().position(|alias| *alias == self.curr[merger_idx].alias) {
-                self.mergers.remove(merger_pos);
-            }
-
-            let mut clone = self.curr[merger_idx].clone();
-            clone.parent_a = clone.parent_b;
-            clone.parent_b = NONE;
-            self.curr[merger_idx].parent_b = NONE;
-            self.curr.push_back(clone.clone());
-
-            self.delta.ops.push(DeltaOp::Replace { index: merger_idx, new: self.curr[merger_idx].clone() });
-
-            self.delta.ops.push(DeltaOp::Insert { index: self.curr.len() - 1, item: clone });
-        }
-
-        // Prefer replacing the parent lane; append only when the commit starts a new lane.
-        if let Some(first_idx) = self.lane_for_parent(chunk.alias) {
-            let old_alias = chunk.alias;
-            let replacement = self.replacement_chunk_for_lane(first_idx, chunk);
-
-            self.curr[first_idx] = replacement.clone();
-            self.delta.ops.push(DeltaOp::Replace { index: first_idx, new: replacement });
-            let compressed_parent_consumed = self.remove_compressed_parent(old_alias);
-
-            // Clear consumed parent pointers so inactive branch lanes collapse into dummies.
-            let mut changed_lanes = Vec::new();
-            for (i, inner) in self.curr.iter_mut().enumerate() {
-                if inner.alias == old_alias {
-                    continue;
-                }
-
-                let parents_changed = inner.remove_parent(old_alias);
-
-                if parents_changed {
-                    if !inner.has_any_parent() && !(inner.is_flattened && !self.compressed_parents.is_empty()) {
-                        *inner = Chunk::dummy();
-                    }
-
-                    changed_lanes.push(i);
-                }
-            }
-            self.refresh_flattened_end_marker(compressed_parent_consumed, &mut changed_lanes);
-            changed_lanes.sort_unstable();
-            changed_lanes.dedup();
-            for i in changed_lanes {
-                self.delta.ops.push(DeltaOp::Replace { index: i, new: self.curr[i].clone() });
-            }
-
+        if let Some(first_idx) = self.curr.iter().position(|inner| inner.parent_a == chunk.alias) {
+            self.replace_parent_lane(first_idx, chunk);
             self.enforce_lane_limit(Some(first_idx));
             UpdateOutcome { lane: self.lane_ref_for_original_index(first_idx), started_lane: false }
         } else {
-            self.curr.push_back(chunk.clone());
-            self.delta.ops.push(DeltaOp::Insert { index: self.curr.len() - 1, item: chunk });
+            self.curr.push(chunk);
+            self.delta.ops.push(DeltaOp::Insert { index: delta_index(self.curr.len() - 1), item: chunk });
             let lane_idx = self.curr.len() - 1;
             self.enforce_lane_limit(Some(lane_idx));
             UpdateOutcome { lane: self.lane_ref_for_original_index(lane_idx), started_lane: true }
         }
     }
 
-    fn lane_for_parent(&self, alias: u32) -> Option<usize> {
-        self.curr.iter().position(|inner| inner.has_parent(alias)).or_else(|| self.has_compressed_parent(alias).then(|| self.flattened_lane_idx()).flatten())
+    fn expire_transient_lanes(&mut self) {
+        let mut lanes = std::mem::take(&mut self.transient_lanes);
+        for lane_idx in lanes.drain(..) {
+            if self.curr.get(lane_idx).is_some_and(|chunk| !chunk.is_dummy()) {
+                self.curr[lane_idx] = Chunk::dummy();
+                self.delta.ops.push(DeltaOp::Replace { index: delta_index(lane_idx), new: self.curr[lane_idx] });
+            }
+        }
+        self.transient_lanes = lanes;
+    }
+
+    fn trim_trailing_dummies(&mut self) {
+        let old_len = self.curr.len();
+        let new_len = self.curr.iter().rposition(|chunk| !chunk.is_dummy()).map_or(0, |idx| idx + 1);
+
+        self.curr.truncate(new_len);
+        (new_len..old_len).rev().for_each(|idx| self.delta.ops.push(DeltaOp::Remove { index: delta_index(idx) }));
+    }
+
+    fn split_planned_merger(&mut self) {
+        let Some(merger_idx) = self.curr.iter().position(|inner| self.mergers.contains(&inner.alias)) else {
+            return;
+        };
+
+        let merger_alias = self.curr[merger_idx].alias;
+        self.mergers.retain(|alias| *alias != merger_alias);
+
+        let mut split = self.curr[merger_idx];
+        split.parent_a = split.parent_b;
+        split.parent_b = NONE;
+        self.curr[merger_idx].parent_b = NONE;
+        self.curr.push(split);
+
+        self.delta.ops.push(DeltaOp::Replace { index: delta_index(merger_idx), new: self.curr[merger_idx] });
+        self.delta.ops.push(DeltaOp::Insert { index: delta_index(self.curr.len() - 1), item: split });
+    }
+
+    fn replace_parent_lane(&mut self, lane_idx: usize, chunk: Chunk) {
+        let old_alias = chunk.alias;
+
+        self.curr[lane_idx] = chunk;
+        self.delta.ops.push(DeltaOp::Replace { index: delta_index(lane_idx), new: chunk });
+        self.clear_consumed_parent_lanes(old_alias);
+    }
+
+    fn clear_consumed_parent_lanes(&mut self, old_alias: u32) {
+        self.curr.iter_mut().enumerate().filter(|(_, inner)| inner.alias != old_alias && (inner.parent_a == old_alias || inner.parent_b == old_alias)).for_each(|(idx, inner)| {
+            if inner.parent_a == old_alias {
+                inner.parent_a = NONE;
+            }
+            if inner.parent_b == old_alias {
+                inner.parent_b = NONE;
+            }
+            if inner.parent_a == NONE && inner.parent_b == NONE {
+                *inner = Chunk::dummy();
+            }
+            self.delta.ops.push(DeltaOp::Replace { index: delta_index(idx), new: *inner });
+        });
     }
 
     fn enforce_lane_limit(&mut self, preferred_idx: Option<usize>) {
@@ -190,133 +318,23 @@ impl Buffer {
         let cap_idx = limit - 1;
         let replacement = self.flattened_representative(cap_idx, preferred_idx);
         if self.curr[cap_idx] != replacement {
-            self.curr[cap_idx] = replacement.clone();
-            self.delta.ops.push(DeltaOp::Replace { index: cap_idx, new: replacement });
+            self.curr[cap_idx] = replacement;
+            self.delta.ops.push(DeltaOp::ReplaceAndTruncate { index: delta_index(cap_idx), new: replacement, len: delta_index(limit) });
+        } else {
+            self.delta.ops.push(DeltaOp::Truncate { len: delta_index(limit) });
         }
 
-        while self.curr.len() > limit {
-            let idx = self.curr.len() - 1;
-            self.curr.pop_back();
-            self.delta.ops.push(DeltaOp::Remove { index: idx });
-        }
+        self.curr.truncate(limit);
 
         self.purge_unstored_mergers();
         self.transient_lanes.retain(|lane_idx| *lane_idx < limit && (*lane_idx + 1 != limit || !self.curr.get(*lane_idx).is_some_and(|chunk| chunk.is_flattened)));
     }
 
-    fn flattened_representative(&mut self, cap_idx: usize, preferred_idx: Option<usize>) -> Chunk {
-        let preferred = preferred_idx
-            .and_then(|idx| (idx >= cap_idx).then(|| self.curr.get(idx).map(|chunk| (idx, chunk))).flatten())
-            .filter(|(_, chunk)| !chunk.is_dummy())
-            .map(|(idx, chunk)| (idx, chunk.clone()));
+    fn flattened_representative(&self, cap_idx: usize, preferred_idx: Option<usize>) -> Chunk {
+        let preferred = preferred_idx.and_then(|idx| (idx >= cap_idx).then(|| self.curr.get(idx)).flatten()).copied().filter(|chunk| !chunk.is_dummy());
 
-        let fallback = self.curr.iter().enumerate().skip(cap_idx).find(|(_, chunk)| !chunk.is_dummy()).map(|(idx, chunk)| (idx, chunk.clone())).unwrap_or_else(|| (cap_idx, Chunk::dummy()));
-        let (representative_idx, source) = preferred.unwrap_or(fallback);
-        let mut representative = source.clone().with_flattened(true);
-        let new_parents = self.compressed_parent_candidates(cap_idx, representative_idx);
-        let start_marker = source.parent_a;
-        let mut end_marker = NONE;
-        for parent in new_parents {
-            if self.add_compressed_parent(parent) {
-                end_marker = parent;
-            }
-        }
-
-        if start_marker != NONE {
-            self.add_compressed_parent(start_marker);
-            representative.parent_a = start_marker;
-        }
-
-        if end_marker == NONE {
-            end_marker = self.compressed_parents.back().copied().unwrap_or(NONE);
-        }
-        representative.parent_b = end_marker;
-        representative
-    }
-
-    fn compressed_parent_candidates(&self, cap_idx: usize, representative_idx: usize) -> Vec<u32> {
-        let mut parents = Vec::new();
-        if let Some(representative) = self.curr.get(representative_idx)
-            && !representative.is_dummy()
-            && !representative.is_flattened
-        {
-            append_unique_parents(&mut parents, representative);
-        }
-
-        for (idx, chunk) in self.curr.iter().enumerate().skip(cap_idx) {
-            if idx == representative_idx || chunk.is_dummy() || chunk.is_flattened {
-                continue;
-            }
-            append_unique_parents(&mut parents, chunk);
-        }
-        parents
-    }
-
-    fn replacement_chunk_for_lane(&mut self, lane_idx: usize, mut replacement: Chunk) -> Chunk {
-        let old = &self.curr[lane_idx];
-        if !old.is_flattened {
-            return replacement;
-        }
-
-        if replacement.parent_b != NONE {
-            self.add_compressed_parent(replacement.parent_b);
-        }
-
-        replacement = replacement.with_flattened(true);
-        let end_marker = self.compressed_parents.back().copied().unwrap_or(NONE);
-        replacement.parent_b = end_marker;
-        replacement
-    }
-
-    fn add_compressed_parent(&mut self, parent: u32) -> bool {
-        if parent == NONE || self.has_compressed_parent(parent) {
-            return false;
-        }
-
-        self.compressed_parents.push_back(parent);
-        self.delta.ops.push(DeltaOp::CompressedParentInsert { parent });
-        true
-    }
-
-    fn remove_compressed_parent(&mut self, parent: u32) -> bool {
-        let Some(index) = self.compressed_parents.iter().position(|candidate| *candidate == parent) else {
-            return false;
-        };
-
-        self.compressed_parents.remove(index);
-        self.delta.ops.push(DeltaOp::CompressedParentRemove { parent });
-        true
-    }
-
-    fn has_compressed_parent(&self, parent: u32) -> bool {
-        parent != NONE && self.compressed_parents.iter().any(|candidate| *candidate == parent)
-    }
-
-    fn flattened_lane_idx(&self) -> Option<usize> {
-        self.curr.iter().position(|chunk| chunk.is_flattened)
-    }
-
-    fn refresh_flattened_end_marker(&mut self, compressed_parent_consumed: bool, changed_lanes: &mut Vec<usize>) {
-        if !compressed_parent_consumed {
-            return;
-        }
-
-        let Some(lane_idx) = self.flattened_lane_idx() else {
-            return;
-        };
-        if !self.curr[lane_idx].is_flattened {
-            return;
-        }
-
-        let end_marker = self.compressed_parents.back().copied().unwrap_or(NONE);
-        if self.curr[lane_idx].parent_b != end_marker {
-            self.curr[lane_idx].parent_b = end_marker;
-            changed_lanes.push(lane_idx);
-        }
-        if !self.curr[lane_idx].has_any_parent() && self.compressed_parents.is_empty() {
-            self.curr[lane_idx] = Chunk::dummy();
-            changed_lanes.push(lane_idx);
-        }
+        let fallback = self.curr.iter().skip(cap_idx).find(|chunk| !chunk.is_dummy()).copied().unwrap_or_else(Chunk::dummy);
+        preferred.unwrap_or(fallback).with_flattened(true)
     }
 
     fn lane_ref_for_original_index(&self, lane_idx: usize) -> LaneRef {
@@ -335,65 +353,57 @@ impl Buffer {
 
     pub fn backup(&mut self) {
         let old = std::mem::take(&mut self.delta);
-        self.deltas.push_back(old);
+        self.deltas.push(old);
         let idx = self.deltas.len().saturating_sub(1);
-        if idx.is_multiple_of(100) {
-            self.checkpoints.insert(idx, self.snapshot());
+        if idx.is_multiple_of(CHECKPOINT_INTERVAL) {
+            self.checkpoints.push(Checkpoint { idx, curr: self.curr.clone() });
         }
     }
 
-    fn snapshot(&self) -> GraphSnapshot {
-        GraphSnapshot::new(self.curr.clone(), self.compressed_parents.clone())
+    pub fn reserve_history(&mut self, commits: usize) {
+        self.deltas.reserve_entries(commits);
+        let checkpoint_count = commits.div_ceil(CHECKPOINT_INTERVAL);
+        if checkpoint_count > self.checkpoints.capacity() {
+            self.checkpoints.reserve(checkpoint_count - self.checkpoints.capacity());
+        }
+    }
+
+    pub fn shrink_to_fit(&mut self) {
+        self.deltas.shrink_to_fit();
+        self.delta.ops.shrink_to_fit();
+        self.mergers.shrink_to_fit();
+        self.transient_lanes.shrink_to_fit();
     }
 
     pub fn window(&self, start: usize, end: usize) -> GraphHistory {
-        let mut history = Vector::new();
+        let checkpoint = self.checkpoint_before_or_at(start);
+        let mut curr = checkpoint.map(|checkpoint| checkpoint.curr.clone()).unwrap_or_default();
+        GraphHistory::from_rows(self.replay_window_rows(start, end, checkpoint, &mut curr))
+    }
 
-        // Start from the nearest checkpoint before the requested range.
-        let checkpoint_idx = self.checkpoints.keys().rev().find(|&&idx| idx <= start).copied();
+    fn checkpoint_before_or_at(&self, index: usize) -> Option<&Checkpoint> {
+        self.checkpoints.get(self.checkpoints.partition_point(|checkpoint| checkpoint.idx <= index).saturating_sub(1))
+    }
 
-        let mut snapshot = checkpoint_idx.and_then(|idx| self.checkpoints.get(&idx)).cloned().unwrap_or_default();
+    fn replay_window_rows<'a>(&'a self, start: usize, end: usize, checkpoint: Option<&Checkpoint>, curr: &'a mut LaneSnapshot) -> impl Iterator<Item = LaneSnapshot> + 'a {
+        let replay_start = checkpoint.map_or(0, |checkpoint| checkpoint.idx + 1);
+        let replay_end = end.min(self.deltas.len());
 
-        // Replay only the deltas needed to produce the requested visible range.
-        let begin = checkpoint_idx.map_or(0, |idx| idx + 1);
-        let end = end.min(self.deltas.len());
-
-        for delta in self.deltas.iter().skip(begin).take(end - begin) {
-            for op in delta.ops.iter() {
-                match op {
-                    DeltaOp::Insert { index, item } => {
-                        snapshot.lanes.insert(*index, item.clone());
-                    },
-                    DeltaOp::Remove { index } => {
-                        snapshot.lanes.remove(*index);
-                    },
-                    DeltaOp::Replace { index, new } => {
-                        snapshot.lanes[*index] = new.clone();
-                    },
-                    DeltaOp::CompressedParentInsert { parent } => {
-                        if *parent != NONE && !snapshot.compressed_parents.iter().any(|candidate| candidate == parent) {
-                            snapshot.compressed_parents.push_back(*parent);
-                        }
-                    },
-                    DeltaOp::CompressedParentRemove { parent } => {
-                        if let Some(index) = snapshot.compressed_parents.iter().position(|candidate| candidate == parent) {
-                            snapshot.compressed_parents.remove(index);
-                        }
-                    },
-                }
-            }
-            history.push_back(snapshot.clone());
-        }
-
-        history
+        self.deltas.iter_range(replay_start, replay_end).filter_map(move |(idx, delta)| {
+            apply_delta(curr, &delta);
+            (idx >= start).then(|| curr.clone())
+        })
     }
 }
 
-fn append_unique_parents(parents: &mut Vec<u32>, chunk: &Chunk) {
-    for parent in chunk.parent_aliases() {
-        if parent != NONE && !parents.contains(&parent) {
-            parents.push(parent);
-        }
+fn delta_index(index: usize) -> u32 {
+    debug_assert!(index <= u32::MAX as usize);
+    index as u32
+}
+
+fn apply_delta(curr: &mut LaneSnapshot, delta: &DeltaView<'_>) {
+    for op in delta.ops.iter().copied() {
+        op.apply(curr);
     }
 }
 

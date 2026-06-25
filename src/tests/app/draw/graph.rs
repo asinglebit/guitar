@@ -12,7 +12,6 @@ use crate::{
     helpers::symbols::SymbolTheme,
 };
 use git2::{Oid, Repository, Signature};
-use im::Vector;
 use ratatui::{Terminal, backend::TestBackend, layout::Rect};
 use std::{
     fs,
@@ -51,6 +50,7 @@ fn graph_row(index: usize, alias: u32, oid: Oid, summary: &str) -> GraphRow {
         index,
         alias,
         oid,
+        short_oid: oid.to_string()[..8].to_string(),
         summary: summary.to_string(),
         committer_date: String::new(),
         committer_name: String::new(),
@@ -61,6 +61,7 @@ fn graph_row(index: usize, alias: u32, oid: Oid, summary: &str) -> GraphRow {
         is_stash: false,
         stash_lane: None,
         worktrees: Vec::new(),
+        has_current_worktree: false,
         reflog: None,
     }
 }
@@ -91,9 +92,9 @@ fn app_with_cached_window(start: usize, summaries: &[&str], oid: Oid) -> App {
 }
 
 fn graph_history(len: usize) -> GraphHistory {
-    let mut history = Vector::new();
+    let mut history = GraphHistory::new();
     for _ in 0..len {
-        history.push_back(GraphSnapshot::default());
+        history.push(GraphSnapshot::default());
     }
     history
 }

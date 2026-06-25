@@ -460,6 +460,7 @@ fn push_commit(buffer: &mut Buffer, rows: &mut Vec<GraphRow>, index: usize, alia
         index,
         alias,
         oid: Oid::zero(),
+        short_oid: String::new(),
         summary,
         committer_date: "2026-06-20 12:34".to_string(),
         committer_name: "Benchmark Runner".to_string(),
@@ -469,6 +470,7 @@ fn push_commit(buffer: &mut Buffer, rows: &mut Vec<GraphRow>, index: usize, alia
         is_stash: false,
         stash_lane: None,
         worktrees: Vec::new(),
+        has_current_worktree: false,
         reflog: None,
     };
 

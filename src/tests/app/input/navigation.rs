@@ -361,10 +361,10 @@ fn graph_toggle_multiple_branch_commit_opens_toggle_modal() {
 fn branch_toggle_uses_git_branch_universe_when_pane_window_is_partial() {
     let (path, repo) = temp_repo("branch-window-toggle");
     let oid = commit_file(&repo, "main.txt", "main");
+    let current_branch = repo.head().unwrap().shorthand().unwrap().to_string();
     {
         let commit = repo.find_commit(oid).unwrap();
         repo.branch("feature", &commit, false).unwrap();
-        repo.branch("main", &commit, false).unwrap();
     }
 
     let mut app = App {
@@ -377,11 +377,11 @@ fn branch_toggle_uses_git_branch_universe_when_pane_window_is_partial() {
         ..Default::default()
     };
     app.graph.branches_window =
-        Some(PaneWindowCache { version: 1, start: 1, end: 2, total: 3, rows: vec![GraphPaneRow::Branch { alias: 1, name: "main".to_string(), is_local: true, lane: None, graph_index: Some(1) }] });
+        Some(PaneWindowCache { version: 1, start: 1, end: 2, total: 3, rows: vec![GraphPaneRow::Branch { alias: 1, name: current_branch.clone(), is_local: true, lane: None, graph_index: Some(1) }] });
 
     app.on_toggle_branch();
 
-    assert_eq!(hidden_branches(&app), vec!["main"]);
+    assert_eq!(hidden_branches(&app), vec![current_branch]);
 }
 
 #[test]
@@ -813,6 +813,7 @@ fn zen_graph_narrow_promotes_cached_window_row_before_opening_inspector() {
             index: 42,
             alias: 99,
             oid,
+            short_oid: oid.to_string()[..8].to_string(),
             summary: "cached".to_string(),
             committer_date: String::new(),
             committer_name: String::new(),
@@ -823,6 +824,7 @@ fn zen_graph_narrow_promotes_cached_window_row_before_opening_inspector() {
             is_stash: false,
             stash_lane: None,
             worktrees: Vec::new(),
+            has_current_worktree: false,
             reflog: None,
         }],
         history: Default::default(),
@@ -859,6 +861,7 @@ fn graph_row_lookup_result_opens_inspector_with_reflog() {
                 index: 42,
                 alias: 99,
                 oid,
+                short_oid: oid.to_string()[..8].to_string(),
                 summary: "commit".to_string(),
                 committer_date: String::new(),
                 committer_name: String::new(),
@@ -869,6 +872,7 @@ fn graph_row_lookup_result_opens_inspector_with_reflog() {
                 is_stash: false,
                 stash_lane: None,
                 worktrees: Vec::new(),
+                has_current_worktree: false,
                 reflog: Some(GraphReflogLabel { selector: "HEAD@{0}".to_string(), message: "commit: commit".to_string(), lane: Some(LaneRef::new(2, false)) }),
             })),
         })

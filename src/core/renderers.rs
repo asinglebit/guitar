@@ -1,5 +1,5 @@
 use crate::core::{
-    graph_service::{GraphHistory, GraphRow, GraphSnapshot},
+    graph_service::{GraphHistory, GraphRow},
     layers::LayersContext,
 };
 use crate::helpers::text::truncate_with_ellipsis;
@@ -17,7 +17,6 @@ use crate::{
         text::{modifiers_to_string, pascal_to_spaced},
     },
 };
-use im::Vector;
 use indexmap::IndexMap;
 use ratatui::{
     style::Style,
@@ -28,19 +27,21 @@ pub const GRAPH_COMMITTER_WIDTH: usize = 18;
 
 // Render graph symbols from worker-projected rows. The lane history is still
 // precomputed by Buffer, but only for the requested visible range.
-pub fn render_graph_projection(
-    theme: &Theme, symbols: &SymbolTheme, rows: &[GraphRow], history: &GraphHistory, head_alias: u32, start: usize, end: usize, render_uncommitted_row: bool,
-) -> Vec<Line<'static>> {
+#[allow(clippy::too_many_arguments)]
+pub fn render_graph_projection<'symbols>(
+    theme: &Theme, symbols: &'symbols SymbolTheme, rows: &[GraphRow], history: &GraphHistory, head_alias: u32, start: usize, end: usize, render_uncommitted_row: bool,
+) -> Vec<Line<'symbols>> {
     let graph = &symbols.graph;
     let worktree = &symbols.worktree;
     let mut layers = LayersContext::new(ColorPicker::from_theme(theme));
-    let mut lines: Vec<Line> = Vec::new();
+    let mut lines: Vec<Line<'symbols>> = Vec::with_capacity(rows.len());
+    let mut flattened_lanes = Vec::with_capacity(history.last().map_or(0, |snapshot| snapshot.len()));
+    let mut closeout_flattened_lanes = Vec::with_capacity(history.last().map_or(0, |snapshot| snapshot.len()));
 
     for row in rows {
         let global_idx = row.index;
 
         layers.clear();
-        let mut spans = vec![Span::raw(" ")];
 
         let mut is_commit_found = false;
         let mut is_merged_before = false;
@@ -54,22 +55,21 @@ pub fn render_graph_projection(
             return vec![Line::default()];
         }
         let delta = (history.len() + global_idx).saturating_sub(end);
-        let prev_snapshot = if delta == 0 { None } else { history.get(delta - 1) };
-        let snapshot = match history.get(delta) {
+        let prev = if delta == 0 { None } else { history.get(delta - 1) };
+        let last = match history.get(delta) {
             Some(snapshot) => snapshot,
             None => {
                 lines.push(Line::default());
                 continue;
             },
         };
-        let next_snapshot = history.get(delta + 1);
-        let prev = prev_snapshot.map(|snapshot| &snapshot.lanes);
-        let last = &snapshot.lanes;
-        let next = next_snapshot.map(|snapshot| &snapshot.lanes);
+        let next = history.get(delta + 1);
         layers.reserve(last.len().saturating_mul(2));
-        let flattened_lanes = flattened_lanes(last, prev);
-        let closeout_flattened_lanes = flattened_lanes_around_closeout(last, prev, next);
-        layers.set_flattened_lanes(flattened_lanes.clone());
+        let mut spans = Vec::with_capacity(last.len().saturating_mul(2).saturating_add(1));
+        spans.push(Span::raw(" "));
+        fill_flattened_lanes(&mut flattened_lanes, last, prev);
+        fill_flattened_lanes_around_closeout(&mut closeout_flattened_lanes, last, prev, next);
+        layers.set_flattened_lanes(&flattened_lanes);
 
         if row.alias == NONE {
             lines.push(Line::from(Span::styled(format!(" {}", graph.uncommitted), Style::default().fg(theme.COLOR_GREY_400))));
@@ -77,15 +77,13 @@ pub fn render_graph_projection(
         }
 
         let current_row_lane_idx = last.iter().position(|chunk| !chunk.is_dummy() && chunk.alias == row.alias);
-        let mut branch_up_bridges: Vec<(usize, usize)> = Vec::new();
-        let compressed_parent_bridges =
-            current_row_lane_idx.map(|row_lane_idx| compressed_parent_bridges_to_active_lanes(prev_snapshot, snapshot, &flattened_lanes, row.alias, row_lane_idx)).unwrap_or_default();
-        let mut branching_lanes: Vec<usize> = Vec::new();
+        let mut branch_up_bridges: Vec<(usize, usize)> = Vec::with_capacity(last.len());
+        let mut branching_lanes: Vec<usize> = Vec::with_capacity(last.len());
         for (lane_idx, chunk) in last.iter().enumerate() {
             if chunk.is_dummy()
-                && let Some(previous) = prev
-                && previous.get(lane_idx).is_some()
-                && dummy_lane_closes_to_row(prev_snapshot, lane_idx, row.alias)
+                && let Some(prev_snapshot) = prev
+                && let Some(prev) = prev_snapshot.get(lane_idx)
+                && dummy_lane_closes_to_row(prev, row.alias)
             {
                 branching_lanes.push(lane_idx);
                 continue;
@@ -120,10 +118,10 @@ pub fn render_graph_projection(
             }
 
             if chunk.is_dummy() {
-                if let Some(previous) = prev {
-                    match previous.get(lane_idx) {
-                        Some(_) => {
-                            if dummy_lane_closes_to_row(prev_snapshot, lane_idx, row.alias) {
+                if let Some(prev_snapshot) = prev {
+                    match prev_snapshot.get(lane_idx) {
+                        Some(prev) => {
+                            if dummy_lane_closes_to_row(prev, row.alias) {
                                 layers.commit(&graph.empty, lane_idx);
                                 layers.commit(&graph.empty, lane_idx);
                                 layers.pipe(branch_up_symbol(graph, lane_idx, current_row_lane_idx), lane_idx);
@@ -155,12 +153,12 @@ pub fn render_graph_projection(
                 }
             } else if row.alias == chunk.alias {
                 is_commit_found = true;
-                let is_two_parents = !chunk.is_flattened && chunk.parent_a != NONE && chunk.parent_b != NONE;
-                if row.is_merge && !row.has_any_branch {
+                let is_two_parents = chunk.parent_a != NONE && chunk.parent_b != NONE;
+                if is_two_parents && !row.has_any_branch {
                     layers.commit(&graph.merge, lane_idx);
                 } else if row.has_any_branch {
                     layers.commit(&graph.commit_branch, lane_idx);
-                } else if row.worktrees.iter().any(|entry| entry.branch.is_none() || !row.has_any_branch) {
+                } else if row.has_current_worktree {
                     layers.commit(&worktree.current, lane_idx);
                 } else if row.is_stash {
                     layers.commit(&graph.commit_stash, lane_idx);
@@ -176,8 +174,8 @@ pub fn render_graph_projection(
                 if is_two_parents {
                     let mut is_merger_found = false;
                     let mut merger_idx: usize = 0;
-                    for (chunk_nested_idx, _chunk_nested) in last.iter().enumerate() {
-                        if chunk_nested_idx != lane_idx && lane_carries_parent(snapshot, chunk_nested_idx, chunk.parent_b) {
+                    for chunk_nested in last {
+                        if single_active_parent(chunk_nested).is_some_and(|parent| chunk.parent_b == parent) {
                             is_merger_found = true;
                             break;
                         }
@@ -208,8 +206,8 @@ pub fn render_graph_projection(
                             } else if !is_merger_found {
                                 layers.merge(&graph.empty, merger_idx);
                                 layers.merge(&graph.empty, merger_idx);
-                            } else if let Some(parent) = carried_merge_parent(snapshot, chunk, chunk_nested_idx) {
-                                let is_merge_start = chunk_nested_idx == merger_idx || previous_scanline_carries_parent(prev_snapshot, chunk_nested_idx, parent);
+                            } else if single_active_parent(chunk_nested).is_some_and(|parent| chunk.parent_a == parent || chunk.parent_b == parent) {
+                                let is_merge_start = chunk_nested_idx == merger_idx || previous_scanline_carries_parent(prev, chunk_nested_idx, chunk_nested);
                                 let symbol = if is_merge_start && !is_merge_right_from_drawn {
                                     is_merge_right_from_drawn = true;
                                     &graph.merge_right_from
@@ -237,7 +235,7 @@ pub fn render_graph_projection(
                                 layers.merge(&graph.empty, merger_idx);
                             }
                         } else if is_merger_found && !is_merged_before {
-                            if carried_merge_parent(snapshot, chunk, chunk_nested_idx).is_some() {
+                            if single_active_parent(chunk_nested).is_some_and(|parent| chunk.parent_a == parent || chunk.parent_b == parent) {
                                 layers.merge(&graph.merge_left_from, merger_idx);
                                 layers.merge(&graph.empty, merger_idx);
                                 is_merged_before = true;
@@ -294,9 +292,9 @@ pub fn render_graph_projection(
             } else {
                 layers.commit(&graph.empty, lane_idx);
                 layers.commit(&graph.empty, lane_idx);
-                if chunk.has_parent(head_alias) && lane_idx == 0 {
+                if (chunk.parent_a == head_alias || chunk.parent_b == head_alias) && lane_idx == 0 {
                     layers.pipe_custom(&graph.vertical_dotted, lane_idx, theme.COLOR_GREY_500);
-                } else if !lane_has_any_parent(snapshot, lane_idx) {
+                } else if chunk.parent_a == NONE && chunk.parent_b == NONE {
                     layers.pipe(" ", lane_idx);
                 } else {
                     layers.pipe(pipe_symbol(graph, &flattened_lanes, lane_idx, &graph.vertical), lane_idx);
@@ -310,7 +308,7 @@ pub fn render_graph_projection(
         if !is_commit_found {
             let symbol = if row.has_any_branch {
                 &graph.commit_branch
-            } else if row.worktrees.iter().any(|entry| entry.branch.is_none() || !row.has_any_branch) {
+            } else if row.has_current_worktree {
                 &worktree.current
             } else {
                 &graph.commit
@@ -330,10 +328,6 @@ pub fn render_graph_projection(
             draw_branch_up_bridge(&mut layers, graph, &flattened_lanes, from_lane_idx, to_lane_idx);
         }
 
-        for (from_lane_idx, to_lane_idx) in compressed_parent_bridges {
-            draw_compressed_parent_bridge(&mut layers, graph, &flattened_lanes, from_lane_idx, to_lane_idx);
-        }
-
         layers.bake(&mut spans);
         lines.push(Line::from(spans));
     }
@@ -347,28 +341,34 @@ fn branch_up_symbol(graph: &GraphSymbols, lane_idx: usize, current_row_lane_idx:
     if current_row_lane_idx.is_some_and(|row_lane_idx| lane_idx < row_lane_idx) { &graph.branch_up_right } else { &graph.branch_up }
 }
 
-fn flattened_lanes(last: &Vector<Chunk>, prev: Option<&Vector<Chunk>>) -> Vec<bool> {
+fn fill_flattened_lanes(out: &mut Vec<u8>, last: &[Chunk], prev: Option<&[Chunk]>) {
     let len = last.len().max(prev.map_or(0, |snapshot| snapshot.len()));
-    (0..len).map(|lane_idx| last.get(lane_idx).is_some_and(|chunk| chunk.is_flattened) || prev.and_then(|snapshot| snapshot.get(lane_idx)).is_some_and(|chunk| chunk.is_flattened)).collect()
+    out.clear();
+    out.reserve(len);
+    out.extend(
+        (0..len).map(|lane_idx| u8::from(last.get(lane_idx).is_some_and(|chunk| chunk.is_flattened) || prev.and_then(|snapshot| snapshot.get(lane_idx)).is_some_and(|chunk| chunk.is_flattened))),
+    );
 }
 
-fn flattened_lanes_around_closeout(last: &Vector<Chunk>, prev: Option<&Vector<Chunk>>, next: Option<&Vector<Chunk>>) -> Vec<bool> {
+fn fill_flattened_lanes_around_closeout(out: &mut Vec<u8>, last: &[Chunk], prev: Option<&[Chunk]>, next: Option<&[Chunk]>) {
     let len = last.len().max(prev.map_or(0, |snapshot| snapshot.len())).max(next.map_or(0, |snapshot| snapshot.len()));
-    (0..len)
-        .map(|lane_idx| {
+    out.clear();
+    out.reserve(len);
+    out.extend((0..len).map(|lane_idx| {
+        u8::from(
             last.get(lane_idx).is_some_and(|chunk| chunk.is_flattened)
                 || prev.and_then(|snapshot| snapshot.get(lane_idx)).is_some_and(|chunk| chunk.is_flattened)
-                || next.and_then(|snapshot| snapshot.get(lane_idx)).is_some_and(|chunk| chunk.is_flattened)
-        })
-        .collect()
+                || next.and_then(|snapshot| snapshot.get(lane_idx)).is_some_and(|chunk| chunk.is_flattened),
+        )
+    }));
 }
 
-fn flattened_lane_idx(snapshot: &Vector<Chunk>) -> Option<usize> {
+fn flattened_lane_idx(snapshot: &[Chunk]) -> Option<usize> {
     snapshot.iter().position(|chunk| chunk.is_flattened)
 }
 
-fn merge_closeout_lane(snapshot: &Vector<Chunk>, flattened_lanes: &[bool], current_lane_idx: usize, candidate_lane_idx: usize) -> Option<usize> {
-    let lane_idx = if let Some(flattened_idx) = flattened_lanes.iter().position(|is_flattened| *is_flattened).filter(|flattened_idx| candidate_lane_idx >= *flattened_idx) {
+fn merge_closeout_lane(snapshot: &[Chunk], flattened_lanes: &[u8], current_lane_idx: usize, candidate_lane_idx: usize) -> Option<usize> {
+    let lane_idx = if let Some(flattened_idx) = flattened_lanes.iter().position(|is_flattened| *is_flattened != 0).filter(|flattened_idx| candidate_lane_idx >= *flattened_idx) {
         flattened_idx
     } else if draws_past_flattened_cap(snapshot, candidate_lane_idx) {
         flattened_lane_idx(snapshot)?
@@ -379,12 +379,12 @@ fn merge_closeout_lane(snapshot: &Vector<Chunk>, flattened_lanes: &[bool], curre
     (lane_idx > current_lane_idx).then_some(lane_idx)
 }
 
-fn draws_past_flattened_cap(snapshot: &Vector<Chunk>, lane_idx: usize) -> bool {
-    lane_idx >= snapshot.len() && snapshot.back().is_some_and(|chunk| chunk.is_flattened)
+fn draws_past_flattened_cap(snapshot: &[Chunk], lane_idx: usize) -> bool {
+    lane_idx >= snapshot.len() && snapshot.last().is_some_and(|chunk| chunk.is_flattened)
 }
 
-fn pipe_symbol<'a>(graph: &'a GraphSymbols, flattened_lanes: &[bool], lane_idx: usize, symbol: &'a str) -> &'a str {
-    if !flattened_lanes.get(lane_idx).copied().unwrap_or(false) {
+fn pipe_symbol<'a>(graph: &'a GraphSymbols, flattened_lanes: &[u8], lane_idx: usize, symbol: &'a str) -> &'a str {
+    if flattened_lanes.get(lane_idx).copied().unwrap_or(0) == 0 {
         return symbol;
     }
 
@@ -397,7 +397,7 @@ fn pipe_symbol<'a>(graph: &'a GraphSymbols, flattened_lanes: &[bool], lane_idx: 
     }
 }
 
-fn draw_merge_closeout_horizontals(layers: &mut LayersContext, graph: &GraphSymbols, flattened_lanes: &[bool], from_lane_idx: usize, to_lane_idx: usize) {
+fn draw_merge_closeout_horizontals<'a>(layers: &mut LayersContext<'a>, graph: &'a GraphSymbols, flattened_lanes: &[u8], from_lane_idx: usize, to_lane_idx: usize) {
     let symbol = pipe_symbol(graph, flattened_lanes, to_lane_idx, &graph.horizontal);
     let start_token_idx = from_lane_idx.saturating_add(1).saturating_mul(2);
     let end_token_idx = to_lane_idx.saturating_mul(2);
@@ -408,15 +408,15 @@ fn draw_merge_closeout_horizontals(layers: &mut LayersContext, graph: &GraphSymb
     }
 }
 
-fn draw_merge_closeout_symbol(layers: &mut LayersContext, flattened_lanes: &[bool], symbol: &str, lane_idx: usize) {
+fn draw_merge_closeout_symbol<'a>(layers: &mut LayersContext<'a>, flattened_lanes: &[u8], symbol: &'a str, lane_idx: usize) {
     layers.merge_at_ref(lane_idx.saturating_mul(2), symbol, closeout_lane_ref(flattened_lanes, lane_idx));
 }
 
-fn closeout_lane_ref(flattened_lanes: &[bool], lane_idx: usize) -> LaneRef {
-    LaneRef::new(lane_idx, flattened_lanes.get(lane_idx).copied().unwrap_or(false))
+fn closeout_lane_ref(flattened_lanes: &[u8], lane_idx: usize) -> LaneRef {
+    LaneRef::new(lane_idx, flattened_lanes.get(lane_idx).copied().unwrap_or(0) != 0)
 }
 
-fn draw_branch_up_bridge(layers: &mut LayersContext, graph: &GraphSymbols, flattened_lanes: &[bool], from_lane_idx: usize, to_lane_idx: usize) {
+fn draw_branch_up_bridge<'a>(layers: &mut LayersContext<'a>, graph: &'a GraphSymbols, flattened_lanes: &[u8], from_lane_idx: usize, to_lane_idx: usize) {
     if from_lane_idx >= to_lane_idx {
         return;
     }
@@ -428,92 +428,27 @@ fn draw_branch_up_bridge(layers: &mut LayersContext, graph: &GraphSymbols, flatt
     }
 }
 
-fn compressed_parent_bridges_to_active_lanes(prev: Option<&GraphSnapshot>, last: &GraphSnapshot, flattened_lanes: &[bool], row_alias: u32, row_lane_idx: usize) -> Vec<(usize, usize)> {
-    let Some(prev_snapshot) = prev else {
-        return Vec::new();
-    };
-
-    prev_snapshot
-        .lanes
-        .iter()
-        .enumerate()
-        .filter_map(|(lane_idx, _)| {
-            if lane_idx <= row_lane_idx || !flattened_lanes.get(lane_idx).copied().unwrap_or(false) || !snapshot_has_compressed_parent(prev_snapshot, row_alias) {
-                return None;
-            }
-
-            let current = last.lanes.get(lane_idx)?;
-            if current.is_dummy() || current.alias == row_alias || current.has_parent(row_alias) || !lane_has_any_parent(last, lane_idx) {
-                return None;
-            }
-
-            Some((row_lane_idx, lane_idx))
-        })
-        .collect()
+fn dummy_lane_closes_to_row(prev: &Chunk, row_alias: u32) -> bool {
+    single_active_parent(prev).is_some_and(|parent| parent == row_alias) || (prev.parent_a != NONE && prev.parent_b != NONE && prev.parent_a == row_alias)
 }
 
-fn draw_compressed_parent_bridge(layers: &mut LayersContext, graph: &GraphSymbols, flattened_lanes: &[bool], from_lane_idx: usize, to_lane_idx: usize) {
-    if from_lane_idx >= to_lane_idx {
-        return;
-    }
-
-    let symbol = pipe_symbol(graph, flattened_lanes, to_lane_idx, &graph.horizontal);
-    let lane = closeout_lane_ref(flattened_lanes, to_lane_idx);
-    let start_token_idx = from_lane_idx.saturating_mul(2).saturating_add(1);
-    let end_token_idx = to_lane_idx.saturating_mul(2);
-    for token_idx in start_token_idx..end_token_idx {
-        layers.merge_at_ref(token_idx, symbol, lane);
-    }
-}
-
-fn dummy_lane_closes_to_row(prev_snapshot: Option<&GraphSnapshot>, lane_idx: usize, row_alias: u32) -> bool {
-    let Some(prev_snapshot) = prev_snapshot else {
+fn previous_scanline_carries_parent(prev: Option<&[Chunk]>, lane_idx: usize, chunk: &Chunk) -> bool {
+    let Some(parent) = single_active_parent(chunk) else {
         return false;
     };
-    let Some(prev) = prev_snapshot.lanes.get(lane_idx) else {
+    let Some(prev_chunk) = prev.and_then(|snapshot| snapshot.get(lane_idx)) else {
         return false;
     };
 
-    single_active_parent(prev).is_some_and(|parent| parent == row_alias)
-        || (!prev.is_flattened && prev.parent_a != NONE && prev.parent_b != NONE && prev.parent_a == row_alias)
-        || (prev.is_flattened && snapshot_has_compressed_parent(prev_snapshot, row_alias))
-}
-
-fn carried_merge_parent(snapshot: &GraphSnapshot, merge: &Chunk, lane_idx: usize) -> Option<u32> {
-    [merge.parent_b, merge.parent_a].into_iter().find(|parent| lane_carries_parent(snapshot, lane_idx, *parent))
-}
-
-fn previous_scanline_carries_parent(prev: Option<&GraphSnapshot>, lane_idx: usize, parent: u32) -> bool {
-    prev.is_some_and(|snapshot| lane_carries_parent(snapshot, lane_idx, parent))
+    !prev_chunk.is_dummy() && (prev_chunk.parent_a == parent || prev_chunk.parent_b == parent)
 }
 
 fn single_active_parent(chunk: &Chunk) -> Option<u32> {
-    let parents = chunk.parent_aliases();
-    if parents.len() == 1 { Some(parents[0]) } else { None }
-}
-
-fn lane_carries_parent(snapshot: &GraphSnapshot, lane_idx: usize, parent: u32) -> bool {
-    if parent == NONE {
-        return false;
+    match (chunk.parent_a != NONE, chunk.parent_b != NONE) {
+        (true, false) => Some(chunk.parent_a),
+        (false, true) => Some(chunk.parent_b),
+        _ => None,
     }
-
-    let Some(chunk) = snapshot.lanes.get(lane_idx) else {
-        return false;
-    };
-
-    !chunk.is_dummy() && (chunk.has_parent(parent) || (chunk.is_flattened && snapshot_has_compressed_parent(snapshot, parent)))
-}
-
-fn lane_has_any_parent(snapshot: &GraphSnapshot, lane_idx: usize) -> bool {
-    let Some(chunk) = snapshot.lanes.get(lane_idx) else {
-        return false;
-    };
-
-    chunk.has_any_parent() || (chunk.is_flattened && !snapshot.compressed_parents.is_empty())
-}
-
-fn snapshot_has_compressed_parent(snapshot: &GraphSnapshot, parent: u32) -> bool {
-    parent != NONE && snapshot.compressed_parents.iter().any(|candidate| *candidate == parent)
 }
 
 // Remove graph lane pairs that are visually empty across every rendered row.
@@ -536,7 +471,7 @@ pub fn remove_empty_columns(lines: &mut Vec<Line<'_>>, symbols: &SymbolTheme) {
         }
     }
 
-    // Missing entries are not empty; only observed all-empty/horizontal/dotted-horizontal pairs are removed.
+    // Missing entries are not empty; only observed all-empty/horizontal pairs are removed.
     for (idx, keep) in keep_pair.iter_mut().enumerate() {
         *keep = *keep || !seen_pair[idx];
     }
@@ -570,7 +505,7 @@ pub fn remove_empty_columns(lines: &mut Vec<Line<'_>>, symbols: &SymbolTheme) {
 }
 
 fn is_visible_lane_symbol(span: &Span<'_>, symbols: &SymbolTheme) -> bool {
-    span.content.as_ref() != symbols.graph.empty.as_str() && span.content.as_ref() != symbols.graph.horizontal.as_str() && span.content.as_ref() != symbols.graph.horizontal_dotted.as_str()
+    span.content.as_ref() != symbols.graph.empty.as_str() && span.content.as_ref() != symbols.graph.horizontal.as_str()
 }
 
 pub fn render_sha_projection(theme: &Theme, rows: &[GraphRow], selected: usize) -> Vec<Line<'static>> {
@@ -613,6 +548,7 @@ pub fn render_committer_projection(theme: &Theme, rows: &[GraphRow], selected: u
         .collect()
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn render_message_projection(
     theme: &Theme, symbols: &SymbolTheme, rows: &[GraphRow], show_reflog_labels: bool, show_ref_labels: bool, selected: usize, uncommitted: &UncommittedChanges, render_uncommitted_row: bool,
 ) -> Vec<Line<'static>> {
@@ -622,14 +558,20 @@ pub fn render_message_projection(
     let graph = &symbols.graph;
     let status = &symbols.status;
     let worktree_symbols = &symbols.worktree;
-    let mut lines = Vec::new();
+    let mut lines = Vec::with_capacity(rows.len());
 
     for row in rows {
-        let mut spans = Vec::new();
-
         if row.alias == NONE && !render_uncommitted_row {
             lines.push(Line::default());
         } else if row.alias != NONE {
+            let mut span_capacity = 1;
+            if show_ref_labels {
+                span_capacity += row.worktrees.len() + row.branches.len() + row.tags.len() + usize::from(row.is_stash);
+            } else if show_reflog_labels && row.reflog.is_some() {
+                span_capacity += 1;
+            }
+            let mut spans = Vec::with_capacity(span_capacity);
+
             if show_ref_labels {
                 for worktree in &row.worktrees {
                     let color = if !worktree.is_valid || worktree.locked_reason.is_some() {
@@ -683,6 +625,9 @@ pub fn render_message_projection(
             spans.push(Span::styled(row.summary.clone(), Style::default().fg(if row.index == selected { theme.COLOR_HIGHLIGHTED } else { theme.COLOR_TEXT })));
             lines.push(Line::from(spans));
         } else {
+            let status_kinds =
+                usize::from(uncommitted.conflict_count > 0) + usize::from(uncommitted.modified_count > 0) + usize::from(uncommitted.added_count > 0) + usize::from(uncommitted.deleted_count > 0);
+            let mut spans = Vec::with_capacity(status_kinds * 2);
             let color = if row.index == selected { theme.COLOR_HIGHLIGHTED } else { theme.COLOR_TEXT };
             if uncommitted.conflict_count > 0 {
                 spans.push(Span::styled(status.conflict_spaced.clone(), Style::default().fg(theme.COLOR_ORANGE)));
