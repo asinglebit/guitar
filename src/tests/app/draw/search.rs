@@ -26,7 +26,7 @@ fn search_app() -> App {
 }
 
 fn history_row(idx: usize, summary: &str, status: FileStatus) -> GraphFileHistoryRow {
-    GraphFileHistoryRow { graph_index: idx, oid: Oid::from_str("1111111111111111111111111111111111111111").unwrap(), short_oid: format!("1111111{idx}"), summary: summary.to_string(), status }
+    GraphFileHistoryRow { graph_index: idx, oid: Oid::from_str(&format!("11111111{idx:032x}")).unwrap(), summary: summary.to_string(), status }
 }
 
 #[test]

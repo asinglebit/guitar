@@ -8,6 +8,7 @@ use crate::helpers::colors::ColorPicker;
 use crate::helpers::symbols::{SymbolTheme, graph};
 use git2::Oid;
 use ratatui::style::Color;
+use smallvec::smallvec;
 use std::path::PathBuf;
 
 fn graph_row(index: usize, oid: Oid, summary: &str) -> GraphRow {
@@ -15,17 +16,16 @@ fn graph_row(index: usize, oid: Oid, summary: &str) -> GraphRow {
         index,
         alias: index as u32 + 1,
         oid,
-        short_oid: oid.to_string()[..9].to_string(),
         summary: summary.to_string(),
         committer_date: String::new(),
         committer_name: String::new(),
         is_merge: false,
         has_any_branch: false,
-        branches: Vec::new(),
-        tags: Vec::new(),
+        branches: Default::default(),
+        tags: Default::default(),
         is_stash: false,
         stash_lane: None,
-        worktrees: Vec::new(),
+        worktrees: Default::default(),
         has_current_worktree: false,
         reflog: None,
     }
@@ -297,7 +297,7 @@ fn graph_projection_uses_current_worktree_symbol_when_row_has_unbranched_worktre
     let theme = Theme::classic();
     let symbols = SymbolTheme::main();
     let mut row = graph_row_with_alias(0, 1);
-    row.worktrees = vec![worktree_entry(&row, true)];
+    row.worktrees = smallvec![worktree_entry(&row, true)];
     row.has_current_worktree = true;
     let history = GraphHistory::from_rows(vec![vec![Chunk::commit(1, NONE, NONE)]]);
 
@@ -329,10 +329,10 @@ fn message_projection_toggles_refs_without_hiding_reflog_labels() {
     let theme = Theme::classic();
     let symbols = SymbolTheme::main();
     let mut row = graph_row(0, Oid::from_str("1111111111111111111111111111111111111111").unwrap(), "summary");
-    row.branches = vec![GraphBranchLabel { name: "main".to_string(), is_local: true, lane: Some(LaneRef::new(0, false)) }];
-    row.tags = vec![GraphTagLabel { name: "v1".to_string(), lane: Some(LaneRef::new(0, false)) }];
+    row.branches = smallvec![GraphBranchLabel { name: "main".to_string(), is_local: true, lane: Some(LaneRef::new(0, false)) }];
+    row.tags = smallvec![GraphTagLabel { name: "v1".to_string(), lane: Some(LaneRef::new(0, false)) }];
     row.is_stash = true;
-    row.worktrees = vec![worktree_entry(&row, false)];
+    row.worktrees = smallvec![worktree_entry(&row, false)];
     row.reflog = Some(GraphReflogLabel { selector: "HEAD@{0}".to_string(), message: "commit: summary".to_string(), lane: Some(LaneRef::new(0, false)) });
 
     let shown = render_message_projection(&theme, &symbols, &[row.clone()], true, true, 0, &UncommittedChanges::default(), true);
@@ -513,8 +513,8 @@ fn message_projection_uses_flattened_lane_color_for_ref_labels() {
     let symbols = SymbolTheme::main();
     let flattened = LaneRef::new(4, true);
     let mut row = graph_row(0, Oid::from_str("1111111111111111111111111111111111111111").unwrap(), "summary");
-    row.branches = vec![GraphBranchLabel { name: "main".to_string(), is_local: true, lane: Some(flattened) }];
-    row.tags = vec![GraphTagLabel { name: "v1".to_string(), lane: Some(flattened) }];
+    row.branches = smallvec![GraphBranchLabel { name: "main".to_string(), is_local: true, lane: Some(flattened) }];
+    row.tags = smallvec![GraphTagLabel { name: "v1".to_string(), lane: Some(flattened) }];
     row.is_stash = true;
     row.stash_lane = Some(flattened);
 
@@ -536,8 +536,8 @@ fn message_projection_uses_ascii_symbols_when_requested() {
     let theme = Theme::classic();
     let symbols = SymbolTheme::ascii();
     let mut row = graph_row(0, Oid::from_str("1111111111111111111111111111111111111111").unwrap(), "summary");
-    row.branches = vec![GraphBranchLabel { name: "main".to_string(), is_local: true, lane: Some(LaneRef::new(0, false)) }];
-    row.tags = vec![GraphTagLabel { name: "v1".to_string(), lane: Some(LaneRef::new(0, false)) }];
+    row.branches = smallvec![GraphBranchLabel { name: "main".to_string(), is_local: true, lane: Some(LaneRef::new(0, false)) }];
+    row.tags = smallvec![GraphTagLabel { name: "v1".to_string(), lane: Some(LaneRef::new(0, false)) }];
 
     let lines = render_message_projection(&theme, &symbols, &[row], true, true, 0, &UncommittedChanges::default(), true);
     let rendered = line_text(&lines[0]);

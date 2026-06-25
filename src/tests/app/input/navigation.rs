@@ -117,7 +117,7 @@ fn stop_graph_service(app: &mut App) {
 }
 
 fn search_history_row(graph_index: usize, oid: git2::Oid) -> GraphFileHistoryRow {
-    GraphFileHistoryRow { graph_index, oid, short_oid: oid.to_string()[..8].to_string(), summary: "history".to_string(), status: FileStatus::Modified }
+    GraphFileHistoryRow { graph_index, oid, summary: "history".to_string(), status: FileStatus::Modified }
 }
 
 fn branch_app() -> App {
@@ -813,17 +813,16 @@ fn zen_graph_narrow_promotes_cached_window_row_before_opening_inspector() {
             index: 42,
             alias: 99,
             oid,
-            short_oid: oid.to_string()[..8].to_string(),
             summary: "cached".to_string(),
             committer_date: String::new(),
             committer_name: String::new(),
             is_merge: false,
             has_any_branch: false,
-            branches: Vec::new(),
-            tags: Vec::new(),
+            branches: Default::default(),
+            tags: Default::default(),
             is_stash: false,
             stash_lane: None,
-            worktrees: Vec::new(),
+            worktrees: Default::default(),
             has_current_worktree: false,
             reflog: None,
         }],
@@ -861,17 +860,16 @@ fn graph_row_lookup_result_opens_inspector_with_reflog() {
                 index: 42,
                 alias: 99,
                 oid,
-                short_oid: oid.to_string()[..8].to_string(),
                 summary: "commit".to_string(),
                 committer_date: String::new(),
                 committer_name: String::new(),
                 is_merge: false,
                 has_any_branch: false,
-                branches: Vec::new(),
-                tags: Vec::new(),
+                branches: Default::default(),
+                tags: Default::default(),
                 is_stash: false,
                 stash_lane: None,
-                worktrees: Vec::new(),
+                worktrees: Default::default(),
                 has_current_worktree: false,
                 reflog: Some(GraphReflogLabel { selector: "HEAD@{0}".to_string(), message: "commit: commit".to_string(), lane: Some(LaneRef::new(2, false)) }),
             })),
