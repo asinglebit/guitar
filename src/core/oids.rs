@@ -65,28 +65,13 @@ impl Default for Oids {
 
 impl Oids {
     pub fn reserve_total_aliases(&mut self, total: usize) {
-        let sorted_target = total.saturating_add(1);
-        let sorted_spare = self.sorted_aliases.capacity().saturating_sub(self.sorted_aliases.len());
-        if sorted_target > self.sorted_aliases.len() + sorted_spare {
-            self.sorted_aliases.reserve(sorted_target - self.sorted_aliases.len() - sorted_spare);
-        }
-
-        let alias_spare = self.alias_oids.capacity().saturating_sub(self.alias_oids.len());
-        if total > self.alias_oids.len() + alias_spare {
-            self.alias_oids.reserve(total - self.alias_oids.len() - alias_spare);
-        }
+        reserve_vec(&mut self.sorted_aliases, total.saturating_add(1));
+        reserve_vec(&mut self.alias_oids, total);
     }
 
     pub fn reserve_aliases(&mut self, additional: usize) {
-        let sorted_spare = self.sorted_aliases.capacity().saturating_sub(self.sorted_aliases.len());
-        if additional > sorted_spare {
-            self.sorted_aliases.reserve(additional - sorted_spare);
-        }
-
-        let alias_spare = self.alias_oids.capacity().saturating_sub(self.alias_oids.len());
-        if additional > alias_spare {
-            self.alias_oids.reserve(additional - alias_spare);
-        }
+        self.sorted_aliases.reserve(additional);
+        self.alias_oids.reserve(additional);
     }
 
     pub fn shrink_to_fit(&mut self) {
@@ -125,7 +110,7 @@ impl Oids {
         gix_to_git2_oid(*self.get_oid_by_alias(alias))
     }
 
-    pub fn get_sorted_aliases(&self) -> &Vec<u32> {
+    pub fn get_sorted_aliases(&self) -> &[u32] {
         &self.sorted_aliases
     }
 
@@ -146,7 +131,7 @@ impl Oids {
     }
 
     pub fn get_alias_by_prefix(&self, prefix: &str) -> Option<u32> {
-        self.alias_oids.iter().position(|oid| oid_starts_with_hex_prefix(oid, prefix)).and_then(|alias| u32::try_from(alias).ok())
+        (!prefix.is_empty()).then(|| self.alias_oids.iter().position(|oid| matches_ascii_hex_prefix(oid, prefix))).flatten().and_then(|alias| u32::try_from(alias).ok())
     }
 
     pub fn is_zero(&self, oid: &ObjectId) -> bool {
@@ -154,9 +139,13 @@ impl Oids {
     }
 }
 
-fn oid_starts_with_hex_prefix(oid: &ObjectId, prefix: &str) -> bool {
+fn reserve_vec<T>(vec: &mut Vec<T>, target_len: usize) {
+    vec.reserve(target_len.saturating_sub(vec.len()));
+}
+
+fn matches_ascii_hex_prefix(oid: &ObjectId, prefix: &str) -> bool {
     prefix.bytes().enumerate().all(|(idx, byte)| {
-        let Some(nibble) = hex_nibble(byte) else {
+        let Some(nibble) = ascii_hex_nibble(byte) else {
             return false;
         };
         let oid_byte = oid.as_bytes()[idx / 2];
@@ -165,7 +154,7 @@ fn oid_starts_with_hex_prefix(oid: &ObjectId, prefix: &str) -> bool {
     })
 }
 
-fn hex_nibble(byte: u8) -> Option<u8> {
+fn ascii_hex_nibble(byte: u8) -> Option<u8> {
     match byte {
         b'0'..=b'9' => Some(byte - b'0'),
         b'a'..=b'f' => Some(byte - b'a' + 10),

@@ -37,22 +37,57 @@ fn heatmap_counts_repo_and_streamed_commits() {
     let stopped = commits_per_day(&gix_repo, [first_today, old, second_today].map(gix_oid));
     let grid = build_heatmap(&gix_repo, [gix_oid(first_today)]);
 
+    let scanned = build_heatmap(&gix_repo, [first_today, yesterday_oid].map(gix_oid));
+
     assert_eq!(counts[0], 2);
     assert_eq!(counts.iter().sum::<usize>(), 2);
     assert_eq!(stopped[0], 2);
     assert_eq!(stopped.iter().sum::<usize>(), 2);
     assert_eq!(grid[weekday_today][WEEKS - 1], 1);
+    assert_eq!(scanned[weekday_today][WEEKS - 1], 1);
+}
 
+#[test]
+fn heatmap_counts_match_streamed_helper() {
+    let dir = tempfile::Builder::new().prefix("guitar-heatmap-stream-").tempdir().unwrap();
+    let repo = Repository::init(dir.path()).unwrap();
+    let today = Utc::now().timestamp();
+    let yesterday = today - 24 * 60 * 60;
+    let first_today = commit_at(&repo, "first-today.txt", today);
+    let yesterday_oid = commit_at(&repo, "yesterday.txt", yesterday);
+
+    let gix_repo = gix::open(dir.path()).unwrap();
     let scanned = build_heatmap(&gix_repo, [first_today, yesterday_oid].map(gix_oid));
     let mut streamed = HeatmapCounts::default();
     streamed.add_commit_seconds(today);
     streamed.add_commit_seconds(yesterday);
 
-    let mut filtered = HeatmapCounts::default();
-    filtered.add_commit_seconds(today);
-    filtered.add_commit_seconds(outside_grid);
-    filtered.add_commit_seconds(today + 24 * 60 * 60);
-
     assert_eq!(streamed.build(), scanned);
-    assert_eq!(filtered.build().iter().flatten().sum::<usize>(), 1);
+}
+
+#[test]
+fn heatmap_counts_ignore_out_of_range_commits() {
+    let mut counts = HeatmapCounts::default();
+    let today = Utc::now().timestamp();
+    let outside_grid = today - ((TOTAL_DAYS as i64) + 10) * 24 * 60 * 60;
+
+    counts.add_commit_seconds(today);
+    counts.add_commit_seconds(outside_grid);
+    counts.add_commit_seconds(today + 24 * 60 * 60);
+
+    assert_eq!(counts.build().iter().flatten().sum::<usize>(), 1);
+}
+
+#[test]
+fn prefix_matching_accepts_partial_hex() {
+    let dir = tempfile::Builder::new().prefix("guitar-prefix-").tempdir().unwrap();
+    let repo = Repository::init(dir.path()).unwrap();
+    let oid = commit_at(&repo, "prefix.txt", Utc::now().timestamp());
+    let gix_oid = gix_oid(oid);
+    let mut oids = crate::core::oids::Oids::default();
+
+    let alias = oids.get_alias_by_oid(gix_oid);
+
+    assert_eq!(oids.get_alias_by_prefix(&gix_oid.to_hex_with_len(7).to_string()), Some(alias));
+    assert_eq!(oids.get_alias_by_prefix("not-hex"), None);
 }

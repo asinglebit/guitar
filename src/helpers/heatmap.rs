@@ -25,16 +25,9 @@ impl Default for HeatmapCounts {
 
 impl HeatmapCounts {
     pub fn add_commit_seconds(&mut self, seconds: i64) {
-        let Some(commit_date) = Utc.timestamp_opt(seconds, 0).single().map(|date| date.date_naive()) else {
-            return;
-        };
-
-        let days_ago = self.today.signed_duration_since(commit_date).num_days();
-        if !(0..TOTAL_DAYS as i64).contains(&days_ago) {
-            return;
+        if let Some(days_ago) = commit_days_ago(self.today, seconds) {
+            self.counts[days_ago] += 1;
         }
-
-        self.counts[days_ago as usize] += 1;
     }
 
     pub fn build(&self) -> [[usize; WEEKS]; DAYS] {
@@ -54,27 +47,15 @@ fn commits_per_day_for_day(repo: &gix::Repository, oids: impl IntoIterator<Item 
 
     for oid in oids {
         object_buf.clear();
-        let commit = match repo.objects.find_commit(oid.as_ref(), &mut object_buf) {
-            Ok(c) => c,
-            Err(_) => continue,
-        };
-
-        // Git commit times are stored as epoch seconds.
-        let Some(commit_date) = commit.time().ok().and_then(|time| Utc.timestamp_opt(time.seconds, 0).single()).map(|date| date.date_naive()) else {
+        let Some(commit_date) = commit_date(repo, &oid, &mut object_buf) else {
             continue;
         };
 
-        let days_ago = today.signed_duration_since(commit_date).num_days();
-
-        if days_ago < 0 {
-            continue;
+        match bucket_date(today, commit_date) {
+            DateBucket::Count(days_ago) => counts[days_ago] += 1,
+            DateBucket::Future => continue,
+            DateBucket::BeforeWindow => continue,
         }
-
-        if days_ago >= TOTAL_DAYS as i64 {
-            continue;
-        }
-
-        counts[days_ago as usize] += 1;
     }
 
     counts
@@ -95,35 +76,58 @@ pub fn build_heatmap_from_sorted_aliases(repo: &gix::Repository, oids: &Oids) ->
 }
 
 fn build_heatmap_from_counts_for_day(counts: [usize; TOTAL_DAYS], today: NaiveDate) -> [[usize; WEEKS]; DAYS] {
-    // Rows are weekdays starting Monday, columns run oldest to newest.
+    let weekday_today = today.weekday().num_days_from_monday() as usize;
     let mut grid = [[0usize; WEEKS]; DAYS];
 
-    // Chrono uses 0 for Monday and 6 for Sunday.
-    let weekday_today = today.weekday().num_days_from_monday() as usize;
-
-    // Align the newest column so today lands on its weekday row.
-    let offset = 6 - weekday_today;
-
-    for (days_ago, count) in counts.iter().enumerate() {
-        // Shift relative age into the displayed grid coordinate system.
-        let logical = days_ago + offset;
-
-        let week = logical / 7;
-
-        if week >= WEEKS {
-            continue;
+    for (days_ago, count) in counts.into_iter().enumerate() {
+        if let Some((day_idx, week_idx)) = heatmap_cell(weekday_today, days_ago) {
+            grid[day_idx][week_idx] = count;
         }
-
-        // Reverse week order because the screen reads oldest to newest.
-        let week_idx = WEEKS - 1 - week;
-
-        // Convert age back into a Monday-based weekday row.
-        let day_idx = (weekday_today + 7 - (days_ago % 7)) % 7;
-
-        grid[day_idx][week_idx] = *count;
     }
 
     grid
+}
+
+fn commit_date(repo: &gix::Repository, oid: &gix::ObjectId, object_buf: &mut Vec<u8>) -> Option<NaiveDate> {
+    let commit = repo.objects.find_commit(oid, object_buf).ok()?;
+    Utc.timestamp_opt(commit.time().ok()?.seconds, 0).single().map(|date| date.date_naive())
+}
+
+fn bucket_date(today: NaiveDate, commit_date: NaiveDate) -> DateBucket {
+    let days_ago = today.signed_duration_since(commit_date).num_days();
+
+    if days_ago < 0 {
+        DateBucket::Future
+    } else if days_ago >= TOTAL_DAYS as i64 {
+        DateBucket::BeforeWindow
+    } else {
+        DateBucket::Count(days_ago as usize)
+    }
+}
+
+fn commit_days_ago(today: NaiveDate, seconds: i64) -> Option<usize> {
+    let commit_date = Utc.timestamp_opt(seconds, 0).single()?.date_naive();
+    let days_ago = today.signed_duration_since(commit_date).num_days();
+
+    (0..TOTAL_DAYS as i64).contains(&days_ago).then_some(days_ago as usize)
+}
+
+fn heatmap_cell(weekday_today: usize, days_ago: usize) -> Option<(usize, usize)> {
+    let offset = 6 - weekday_today;
+    let logical = days_ago + offset;
+    let week = logical / 7;
+    (week < WEEKS).then(|| {
+        let week_idx = WEEKS - 1 - week;
+        let day_idx = (weekday_today + 7 - (days_ago % 7)) % 7;
+        (day_idx, week_idx)
+    })
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum DateBucket {
+    Count(usize),
+    Future,
+    BeforeWindow,
 }
 
 pub fn heat_cell(count: usize, theme: &Theme, symbols: &SymbolTheme) -> Span<'static> {
