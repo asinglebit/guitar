@@ -1,43 +1,128 @@
 use crate::core::chunk::NONE;
 use git2::Oid;
-use std::collections::HashMap;
+use gix::ObjectId;
+use iddqd::{IdHashItem, IdHashMap, id_upcast};
+
+pub trait IntoGixOid {
+    fn into_gix_oid(self) -> ObjectId;
+}
+
+impl IntoGixOid for ObjectId {
+    fn into_gix_oid(self) -> ObjectId {
+        self
+    }
+}
+
+impl IntoGixOid for Oid {
+    fn into_gix_oid(self) -> ObjectId {
+        git2_to_gix_oid(self)
+    }
+}
+
+pub fn git2_to_gix_oid(oid: Oid) -> gix::ObjectId {
+    gix::ObjectId::from_bytes_or_panic(oid.as_bytes())
+}
+
+#[cfg(test)]
+#[path = "../tests/core/oids.rs"]
+mod tests;
+
+pub fn gix_to_git2_oid(oid: gix::ObjectId) -> Oid {
+    Oid::from_bytes(oid.as_bytes()).unwrap()
+}
 
 // Stores full OIDs once and passes small numeric aliases through UI data structures.
 #[derive(Clone)]
 pub struct Oids {
-    pub zero: Oid,
-    pub oids: Vec<Oid>,
-    pub aliases: HashMap<Oid, u32>,
+    pub zero: ObjectId,
+    records: IdHashMap<OidRecord>,
+    alias_oids: Vec<ObjectId>,
     pub sorted_aliases: Vec<u32>,
     pub stashes: Vec<u32>,
 }
 
+#[derive(Clone, Debug)]
+struct OidRecord {
+    oid: ObjectId,
+    alias: u32,
+}
+
+impl IdHashItem for OidRecord {
+    type Key<'a> = &'a ObjectId;
+
+    fn key(&self) -> Self::Key<'_> {
+        &self.oid
+    }
+
+    id_upcast!();
+}
+
 impl Default for Oids {
     fn default() -> Self {
-        Oids { zero: Oid::zero(), oids: Vec::new(), aliases: HashMap::new(), sorted_aliases: vec![NONE], stashes: vec![] }
+        Oids { zero: ObjectId::null(gix::hash::Kind::Sha1), records: IdHashMap::default(), alias_oids: Vec::new(), sorted_aliases: vec![NONE], stashes: vec![] }
     }
 }
 
 impl Oids {
-    pub fn get_alias_by_oid(&mut self, oid: Oid) -> u32 {
-        // Assign aliases lazily so refs, commits, tags, and stashes share one namespace.
-        *self.aliases.entry(oid).or_insert_with(|| {
-            self.oids.push(oid);
-            self.oids.len() as u32 - 1
-        })
+    pub fn reserve_total_aliases(&mut self, total: usize) {
+        let sorted_target = total.saturating_add(1);
+        let sorted_spare = self.sorted_aliases.capacity().saturating_sub(self.sorted_aliases.len());
+        if sorted_target > self.sorted_aliases.len() + sorted_spare {
+            self.sorted_aliases.reserve(sorted_target - self.sorted_aliases.len() - sorted_spare);
+        }
+
+        let alias_spare = self.alias_oids.capacity().saturating_sub(self.alias_oids.len());
+        if total > self.alias_oids.len() + alias_spare {
+            self.alias_oids.reserve(total - self.alias_oids.len() - alias_spare);
+        }
+    }
+
+    pub fn reserve_aliases(&mut self, additional: usize) {
+        let sorted_spare = self.sorted_aliases.capacity().saturating_sub(self.sorted_aliases.len());
+        if additional > sorted_spare {
+            self.sorted_aliases.reserve(additional - sorted_spare);
+        }
+
+        let alias_spare = self.alias_oids.capacity().saturating_sub(self.alias_oids.len());
+        if additional > alias_spare {
+            self.alias_oids.reserve(additional - alias_spare);
+        }
+    }
+
+    pub fn shrink_to_fit(&mut self) {
+        self.alias_oids.shrink_to_fit();
+        self.sorted_aliases.shrink_to_fit();
+        self.stashes.shrink_to_fit();
+    }
+
+    pub fn get_alias_by_oid(&mut self, oid: impl IntoGixOid) -> u32 {
+        let oid = oid.into_gix_oid();
+        if let Some(record) = self.records.get(&oid) {
+            return record.alias;
+        }
+
+        let alias = u32::try_from(self.alias_oids.len()).expect("OID alias space exhausted");
+        self.alias_oids.push(oid);
+        self.records.insert_unique(OidRecord { oid, alias }).expect("new OID record has unique OID");
+
+        alias
+    }
+
+    pub fn get_existing_alias(&self, oid: impl IntoGixOid) -> Option<u32> {
+        let oid = oid.into_gix_oid();
+        self.records.get(&oid).map(|record| record.alias)
     }
 
     pub fn get_alias_by_idx(&self, idx: usize) -> u32 {
         *self.sorted_aliases.get(idx).unwrap()
     }
 
-    pub fn get_oid_by_alias(&self, alias: u32) -> &Oid {
-        self.oids.get(alias as usize).unwrap_or(&self.zero)
+    pub fn get_oid_by_alias(&self, alias: u32) -> &ObjectId {
+        self.alias_oids.get(alias as usize).unwrap_or(&self.zero)
     }
 
-    pub fn get_oid_by_idx(&self, idx: usize) -> &Oid {
-        let alias = *self.sorted_aliases.get(idx).unwrap_or(&NONE);
-        self.oids.get(alias as usize).unwrap_or(&self.zero)
+    pub fn get_git2_oid_by_alias(&self, alias: u32) -> Oid {
+        gix_to_git2_oid(*self.get_oid_by_alias(alias))
     }
 
     pub fn get_sorted_aliases(&self) -> &Vec<u32> {
@@ -52,7 +137,39 @@ impl Oids {
         self.sorted_aliases.len()
     }
 
-    pub fn is_zero(&self, oid: &Oid) -> bool {
+    pub fn len(&self) -> usize {
+        self.alias_oids.len()
+    }
+
+    pub fn iter_oids(&self) -> impl Iterator<Item = &ObjectId> {
+        self.alias_oids.iter()
+    }
+
+    pub fn get_alias_by_prefix(&self, prefix: &str) -> Option<u32> {
+        self.alias_oids.iter().position(|oid| oid_starts_with_hex_prefix(oid, prefix)).and_then(|alias| u32::try_from(alias).ok())
+    }
+
+    pub fn is_zero(&self, oid: &ObjectId) -> bool {
         self.zero == *oid
+    }
+}
+
+fn oid_starts_with_hex_prefix(oid: &ObjectId, prefix: &str) -> bool {
+    prefix.bytes().enumerate().all(|(idx, byte)| {
+        let Some(nibble) = hex_nibble(byte) else {
+            return false;
+        };
+        let oid_byte = oid.as_bytes()[idx / 2];
+        let oid_nibble = if idx % 2 == 0 { oid_byte >> 4 } else { oid_byte & 0x0f };
+        nibble == oid_nibble
+    })
+}
+
+fn hex_nibble(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
     }
 }
