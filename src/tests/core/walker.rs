@@ -7,69 +7,18 @@ use crate::{
     },
     git::actions::worktrees::create_worktree,
     git::queries::commits::get_tag_oids,
+    git::test_support::{TestDir, commit_file, commit_file_with_parents, stash_tracked_change, temp_repo},
     helpers::{
         palette::Theme,
         symbols::{SymbolTheme, graph},
     },
 };
-use git2::{Oid, Repository, ResetType, Signature, Time};
+use git2::{Oid, Repository, ResetType, Signature};
 use ratatui::text::Line;
 use std::{
     collections::HashSet as StdHashSet,
-    fs,
     path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
 };
-
-fn temp_repo(name: &str) -> (PathBuf, Repository) {
-    let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-    let path = std::env::temp_dir().join(format!("guitar-walker-reflog-{name}-{id}"));
-    fs::create_dir_all(&path).unwrap();
-    let repo = Repository::init(&path).unwrap();
-    {
-        let mut config = repo.config().unwrap();
-        config.set_str("user.name", "Test User").unwrap();
-        config.set_str("user.email", "test@example.com").unwrap();
-    }
-    (path, repo)
-}
-
-fn commit(repo: &Repository, file: &str, message: &str) -> Oid {
-    let workdir = repo.workdir().unwrap().to_path_buf();
-    fs::write(workdir.join(file), message).unwrap();
-
-    let mut index = repo.index().unwrap();
-    index.add_path(Path::new(file)).unwrap();
-    index.write().unwrap();
-    let tree_oid = index.write_tree().unwrap();
-    let tree = repo.find_tree(tree_oid).unwrap();
-    let sig = Signature::now("Test User", "test@example.com").unwrap();
-    let parent = repo.head().ok().and_then(|head| head.peel_to_commit().ok());
-    let parents: Vec<&git2::Commit<'_>> = parent.iter().collect();
-    repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents).unwrap()
-}
-
-fn stash_tracked_change(repo: &mut Repository, file: &str, message: &str) -> Oid {
-    let workdir = repo.workdir().unwrap().to_path_buf();
-    fs::write(workdir.join(file), message).unwrap();
-    let sig = repo.signature().unwrap();
-    repo.stash_save(&sig, message, None).unwrap()
-}
-
-fn commit_with_parents(repo: &Repository, file: &str, message: &str, parents: &[Oid], time: i64) -> Oid {
-    let workdir = repo.workdir().unwrap().to_path_buf();
-    fs::write(workdir.join(file), message).unwrap();
-
-    let mut index = repo.index().unwrap();
-    index.add_path(Path::new(file)).unwrap();
-    index.write().unwrap();
-    let tree_oid = index.write_tree().unwrap();
-    let tree = repo.find_tree(tree_oid).unwrap();
-    let sig = Signature::new("Test User", "test@example.com", &Time::new(time, 0)).unwrap();
-    let parent_commits: Vec<_> = parents.iter().map(|oid| repo.find_commit(*oid).unwrap()).collect();
-    let parent_refs: Vec<&git2::Commit<'_>> = parent_commits.iter().collect();
-    repo.commit(None, &sig, &sig, message, &tree, &parent_refs).unwrap()
-}
 
 fn graph_row(index: usize, alias: u32, oid: Oid) -> GraphRow {
     GraphRow {
@@ -102,18 +51,20 @@ fn walked_walker(path: &Path, buffer_size: usize, include_head_reflog_roots: boo
     walker
 }
 
-fn representative_graph_fixture(name: &str, tail_commits: usize) -> (PathBuf, Repository) {
-    let (path, repo) = temp_repo(name);
-    let root = commit(&repo, "root.txt", "root");
-    let main_1 = commit_with_parents(&repo, "main.txt", "main-1", &[root], 1);
-    let side_1 = commit_with_parents(&repo, "side.txt", "side-1", &[root], 2);
-    let main_2 = commit_with_parents(&repo, "main.txt", "main-2", &[main_1], 3);
-    let side_2 = commit_with_parents(&repo, "side.txt", "side-2", &[side_1], 4);
-    let merge = commit_with_parents(&repo, "merge.txt", "merge", &[main_2, side_2], 5);
+fn representative_graph_fixture(name: &str, tail_commits: usize) -> (TestDir, PathBuf, Repository) {
+    let (dir, repo) = temp_repo(name);
+    let path = dir.join("repo");
+    let root = commit_file(&repo, "root.txt", "root", "root");
+    let main_1 = commit_file_with_parents(&repo, "main.txt", "main-1", "main-1", &[root], Some(1));
+    let side_1 = commit_file_with_parents(&repo, "side.txt", "side-1", "side-1", &[root], Some(2));
+    let main_2 = commit_file_with_parents(&repo, "main.txt", "main-2", "main-2", &[main_1], Some(3));
+    let side_2 = commit_file_with_parents(&repo, "side.txt", "side-2", "side-2", &[side_1], Some(4));
+    let merge = commit_file_with_parents(&repo, "merge.txt", "merge", "merge", &[main_2, side_2], Some(5));
 
-    let mut tip = commit_with_parents(&repo, "tail.txt", "tail-0", &[merge], 6);
+    let mut tip = commit_file_with_parents(&repo, "tail.txt", "tail-0", "tail-0", &[merge], Some(6));
     for idx in 1..tail_commits {
-        tip = commit_with_parents(&repo, "tail.txt", &format!("tail-{idx}"), &[tip], 6 + idx as i64);
+        let value = format!("tail-{idx}");
+        tip = commit_file_with_parents(&repo, "tail.txt", &value, &value, &[tip], Some(6 + idx as i64));
     }
 
     repo.reference("refs/heads/main", tip, true, "test").unwrap();
@@ -121,22 +72,23 @@ fn representative_graph_fixture(name: &str, tail_commits: usize) -> (PathBuf, Re
     repo.reference("refs/tags/v-main", main_1, true, "test").unwrap();
     repo.set_head("refs/heads/main").unwrap();
 
-    (path, repo)
+    (dir, path, repo)
 }
 
-fn linked_worktree_startup_fixture(name: &str) -> (PathBuf, PathBuf, Repository) {
-    let (path, repo) = representative_graph_fixture(name, 32);
+fn linked_worktree_startup_fixture(name: &str) -> (TestDir, PathBuf, PathBuf, Repository) {
+    let (dir, path, repo) = representative_graph_fixture(name, 32);
     let head = repo.head().unwrap().target().unwrap();
     let linked_path = path.parent().unwrap_or_else(|| Path::new(".")).join(format!("{}-linked", path.file_name().and_then(|name| name.to_str()).unwrap_or("repo")));
     create_worktree(&repo, "linked", &linked_path, head).unwrap();
-    (path, linked_path, repo)
+    (dir, path, linked_path, repo)
 }
 
 #[test]
 fn walker_loads_commit_reachable_only_from_head_reflog() {
-    let (path, repo) = temp_repo("lost-root");
-    let base = commit(&repo, "file.txt", "base");
-    let lost = commit(&repo, "file.txt", "lost");
+    let (dir, repo) = temp_repo("lost-root");
+    let path = dir.join("repo");
+    let base = commit_file(&repo, "file.txt", "base", "base");
+    let lost = commit_file(&repo, "file.txt", "lost", "lost");
     let base_commit = repo.find_commit(base).unwrap();
     repo.reset(base_commit.as_object(), ResetType::Hard, None).unwrap();
 
@@ -148,9 +100,10 @@ fn walker_loads_commit_reachable_only_from_head_reflog() {
 
 #[test]
 fn walker_can_hide_commit_reachable_only_from_head_reflog() {
-    let (path, repo) = temp_repo("hidden-lost-root");
-    let base = commit(&repo, "file.txt", "base");
-    let lost = commit(&repo, "file.txt", "lost");
+    let (dir, repo) = temp_repo("hidden-lost-root");
+    let path = dir.join("repo");
+    let base = commit_file(&repo, "file.txt", "base", "base");
+    let lost = commit_file(&repo, "file.txt", "lost", "lost");
     let base_commit = repo.find_commit(base).unwrap();
     repo.reset(base_commit.as_object(), ResetType::Hard, None).unwrap();
 
@@ -163,13 +116,14 @@ fn walker_can_hide_commit_reachable_only_from_head_reflog() {
 
 #[test]
 fn walker_expires_new_right_merge_lane_before_next_rendered_row() {
-    let (path, repo) = temp_repo("transient-merge-lane");
-    let root = commit_with_parents(&repo, "root.txt", "root", &[], 1);
-    let left_parent = commit_with_parents(&repo, "left-parent.txt", "left parent", &[root], 2);
-    let right_parent = commit_with_parents(&repo, "right-parent.txt", "right parent", &[root], 3);
-    let merge = commit_with_parents(&repo, "merge.txt", "merge", &[left_parent, right_parent], 4);
-    let right_tip = commit_with_parents(&repo, "right-tip.txt", "right tip", &[right_parent], 5);
-    let left_tip = commit_with_parents(&repo, "left-tip.txt", "left tip", &[left_parent], 6);
+    let (dir, repo) = temp_repo("transient-merge-lane");
+    let path = dir.join("repo");
+    let root = commit_file_with_parents(&repo, "root.txt", "root", "root", &[], Some(1));
+    let left_parent = commit_file_with_parents(&repo, "left-parent.txt", "left parent", "left parent", &[root], Some(2));
+    let right_parent = commit_file_with_parents(&repo, "right-parent.txt", "right parent", "right parent", &[root], Some(3));
+    let merge = commit_file_with_parents(&repo, "merge.txt", "merge", "merge", &[left_parent, right_parent], Some(4));
+    let right_tip = commit_file_with_parents(&repo, "right-tip.txt", "right tip", "right tip", &[right_parent], Some(5));
+    let left_tip = commit_file_with_parents(&repo, "left-tip.txt", "left tip", "left tip", &[left_parent], Some(6));
 
     repo.reference("refs/heads/main", left_tip, true, "test").unwrap();
     repo.reference("refs/heads/right", right_tip, true, "test").unwrap();
@@ -212,13 +166,14 @@ fn walker_expires_new_right_merge_lane_before_next_rendered_row() {
 
 #[test]
 fn walker_records_ref_stash_and_reflog_lanes_from_update_lane() {
-    let (path, mut repo) = temp_repo("cached-lanes");
-    let base = commit(&repo, "file.txt", "base");
+    let (dir, mut repo) = temp_repo("cached-lanes");
+    let path = dir.join("repo");
+    let base = commit_file(&repo, "file.txt", "base", "base");
     {
         let base_commit = repo.find_commit(base).unwrap();
         repo.tag_lightweight("v-base", base_commit.as_object(), false).unwrap();
     }
-    let stash = stash_tracked_change(&mut repo, "file.txt", "stashed change");
+    let stash = stash_tracked_change(&mut repo, "file.txt", "stashed change", "stashed change");
 
     let walker = walked_walker(&path, 100, true);
 
@@ -233,8 +188,8 @@ fn walker_records_ref_stash_and_reflog_lanes_from_update_lane() {
 
 #[test]
 fn walker_new_collects_startup_metadata_before_walking() {
-    let (path, mut repo) = representative_graph_fixture("startup-metadata", 32);
-    let stash = stash_tracked_change(&mut repo, "tail.txt", "stashed change");
+    let (_dir, path, mut repo) = representative_graph_fixture("startup-metadata", 32);
+    let stash = stash_tracked_change(&mut repo, "tail.txt", "stashed change", "stashed change");
 
     let walker = Walker::new(path.display().to_string(), 100, HashSet::new(), true, 20).unwrap();
 
@@ -249,10 +204,11 @@ fn walker_new_collects_startup_metadata_before_walking() {
 #[test]
 fn walker_matches_rev_list_all_for_lightweight_and_annotated_tags() {
     for annotated in [false, true] {
-        let (path, repo) = temp_repo(if annotated { "annotated-tag-root" } else { "tag-only-root" });
-        let root = commit(&repo, "root.txt", "root");
-        let branch_tip = commit(&repo, "branch.txt", "branch");
-        let tagged = commit_with_parents(&repo, "tagged.txt", "tagged", &[], if annotated { 100 } else { 99 });
+        let (dir, repo) = temp_repo(if annotated { "annotated-tag-root" } else { "tag-only-root" });
+        let path = dir.join("repo");
+        let root = commit_file(&repo, "root.txt", "root", "root");
+        let branch_tip = commit_file(&repo, "branch.txt", "branch", "branch");
+        let tagged = commit_file_with_parents(&repo, "tagged.txt", "tagged", "tagged", &[], Some(if annotated { 100 } else { 99 }));
         let tagged_commit = repo.find_commit(tagged).unwrap();
 
         if annotated {
@@ -275,9 +231,10 @@ fn walker_matches_rev_list_all_for_lightweight_and_annotated_tags() {
 
 #[test]
 fn gix_tag_oids_resolves_tags_without_collecting_other_refs() {
-    let (path, repo) = temp_repo("gix-tag-oids");
-    let base = commit(&repo, "base.txt", "base");
-    let tagged = commit_with_parents(&repo, "tagged.txt", "tagged", &[], 100);
+    let (dir, repo) = temp_repo("gix-tag-oids");
+    let path = dir.join("repo");
+    let base = commit_file(&repo, "base.txt", "base", "base");
+    let tagged = commit_file_with_parents(&repo, "tagged.txt", "tagged", "tagged", &[], Some(100));
     let base_commit = repo.find_commit(base).unwrap();
     let tagged_commit = repo.find_commit(tagged).unwrap();
     let tree = base_commit.tree().unwrap();
@@ -304,7 +261,7 @@ fn gix_tag_oids_resolves_tags_without_collecting_other_refs() {
 
 #[test]
 fn walker_new_handles_linked_worktree_startup_paths() {
-    let (_repo_path, linked_path, repo) = linked_worktree_startup_fixture("startup-linked-worktree");
+    let (_dir, _repo_path, linked_path, repo) = linked_worktree_startup_fixture("startup-linked-worktree");
 
     let walker = Walker::new(linked_path.display().to_string(), 100, HashSet::new(), true, 20).unwrap();
 
@@ -316,9 +273,10 @@ fn walker_new_handles_linked_worktree_startup_paths() {
 
 #[test]
 fn walker_keeps_stash_adjacent_to_its_base_parent() {
-    let (path, mut repo) = temp_repo("stash-order");
-    let base = commit(&repo, "file.txt", "base");
-    let stash = stash_tracked_change(&mut repo, "file.txt", "stashed change");
+    let (dir, mut repo) = temp_repo("stash-order");
+    let path = dir.join("repo");
+    let base = commit_file(&repo, "file.txt", "base", "base");
+    let stash = stash_tracked_change(&mut repo, "file.txt", "stashed change", "stashed change");
 
     let walker = walked_walker(&path, 100, false);
 

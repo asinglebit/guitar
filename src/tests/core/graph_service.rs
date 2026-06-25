@@ -1,40 +1,17 @@
 use super::*;
+use crate::git::test_support::{commit_file, temp_repo};
 use crate::helpers::symbols::SymbolTheme;
-use git2::{Oid, Repository, Signature, build::CheckoutBuilder};
+use git2::build::CheckoutBuilder;
 use im::HashSet;
 use std::{
-    fs,
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{
         Arc,
         atomic::AtomicBool,
         mpsc::{Receiver, Sender, channel},
     },
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
-
-fn temp_repo(name: &str) -> (PathBuf, Repository) {
-    let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-    let path = std::env::temp_dir().join(format!("guitar-graph-service-{name}-{id}"));
-    fs::create_dir_all(&path).unwrap();
-    let repo = crate::git::test_support::init_repo_at(&path);
-    (path, repo)
-}
-
-fn commit(repo: &Repository, file: &str, message: &str) -> Oid {
-    let workdir = repo.workdir().unwrap().to_path_buf();
-    fs::write(workdir.join(file), message).unwrap();
-
-    let mut index = repo.index().unwrap();
-    index.add_path(Path::new(file)).unwrap();
-    index.write().unwrap();
-    let tree_oid = index.write_tree().unwrap();
-    let tree = repo.find_tree(tree_oid).unwrap();
-    let sig = Signature::now("Test User", "test@example.com").unwrap();
-    let parent = repo.head().ok().and_then(|head| head.peel_to_commit().ok());
-    let parents: Vec<&git2::Commit<'_>> = parent.iter().collect();
-    repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents).unwrap()
-}
 
 struct GraphServiceHarness {
     generation: u64,
@@ -144,9 +121,10 @@ impl GraphServiceHarness {
 
 #[test]
 fn graph_service_reports_progress_and_answers_visible_window() {
-    let (path, repo) = temp_repo("window");
-    commit(&repo, "one.txt", "one");
-    let two = commit(&repo, "two.txt", "two");
+    let (dir, repo) = temp_repo("window");
+    let path = dir.join("repo");
+    commit_file(&repo, "one.txt", "one", "one");
+    let two = commit_file(&repo, "two.txt", "two", "two");
     let harness = GraphServiceHarness::spawn(path.clone(), 42, 1, HashSet::new(), false, Vec::new());
 
     assert!(harness.wait_for_progress(false) > 0);
@@ -186,10 +164,11 @@ fn graph_service_reports_progress_and_answers_visible_window() {
 
 #[test]
 fn graph_service_file_history_returns_visible_graph_indices() {
-    let (path, repo) = temp_repo("file-history");
-    let first = commit(&repo, "target.txt", "first");
-    commit(&repo, "other.txt", "other");
-    let latest = commit(&repo, "target.txt", "latest");
+    let (dir, repo) = temp_repo("file-history");
+    let path = dir.join("repo");
+    let first = commit_file(&repo, "target.txt", "first", "first");
+    commit_file(&repo, "other.txt", "other", "other");
+    let latest = commit_file(&repo, "target.txt", "latest", "latest");
     let harness = GraphServiceHarness::spawn(path, 77, 10000, HashSet::new(), false, Vec::new());
 
     assert!(harness.wait_for_progress(true) > 0);
@@ -208,15 +187,16 @@ fn graph_service_file_history_returns_visible_graph_indices() {
 
 #[test]
 fn graph_service_uses_hidden_branch_names_as_deny_list() {
-    let (path, repo) = temp_repo("hidden-branches");
-    let root = commit(&repo, "root.txt", "root");
+    let (dir, repo) = temp_repo("hidden-branches");
+    let path = dir.join("repo");
+    let root = commit_file(&repo, "root.txt", "root", "root");
     let root_commit = repo.find_commit(root).unwrap();
     repo.branch("hidden", &root_commit, false).unwrap();
-    let visible = commit(&repo, "visible.txt", "visible");
+    let visible = commit_file(&repo, "visible.txt", "visible", "visible");
 
     repo.set_head("refs/heads/hidden").unwrap();
     repo.checkout_head(Some(CheckoutBuilder::default().force())).unwrap();
-    let hidden = commit(&repo, "hidden.txt", "hidden");
+    let hidden = commit_file(&repo, "hidden.txt", "hidden", "hidden");
 
     let harness = GraphServiceHarness::spawn(path, 88, 10000, hidden_set(&["hidden"]), false, Vec::new());
 
@@ -236,8 +216,9 @@ fn graph_service_uses_hidden_branch_names_as_deny_list() {
 
 #[test]
 fn graph_service_omits_hidden_labels_on_visible_commits() {
-    let (path, repo) = temp_repo("hidden-labels");
-    let oid = commit(&repo, "one.txt", "one");
+    let (dir, repo) = temp_repo("hidden-labels");
+    let path = dir.join("repo");
+    let oid = commit_file(&repo, "one.txt", "one", "one");
     let current_branch = repo.head().unwrap().shorthand().unwrap().to_string();
     let commit = repo.find_commit(oid).unwrap();
     repo.branch("hidden", &commit, false).unwrap();
