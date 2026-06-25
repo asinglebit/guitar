@@ -4,7 +4,7 @@ use crate::{
 };
 use chrono::{Datelike, NaiveDate};
 use chrono::{TimeZone, Utc};
-use git2::{Oid, Repository};
+use gix::prelude::FindExt;
 use ratatui::{style::Style, text::Span};
 
 pub const WEEKS: usize = 53;
@@ -25,7 +25,7 @@ impl Default for HeatmapCounts {
 
 impl HeatmapCounts {
     pub fn add_commit_seconds(&mut self, seconds: i64) {
-        if let Some(days_ago) = commit_days_ago(self.today, seconds) {
+        if let DateBucket::Count(days_ago) = bucket_seconds(self.today, seconds) {
             self.counts[days_ago] += 1;
         }
     }
@@ -35,26 +35,35 @@ impl HeatmapCounts {
     }
 }
 
-pub fn commits_per_day(repo: &Repository, oids: impl IntoIterator<Item = Oid>) -> [usize; TOTAL_DAYS] {
-    // Use UTC dates so commits near midnight are bucketed consistently.
-    let today: NaiveDate = Utc::now().date_naive();
-    commits_per_day_for_day(repo, oids, today)
+pub fn commits_per_day(repo: &gix::Repository, oids: impl IntoIterator<Item = gix::ObjectId>) -> [usize; TOTAL_DAYS] {
+    commits_per_day_for_day(repo, oids, Utc::now().date_naive())
 }
 
-fn commits_per_day_for_day(repo: &Repository, oids: impl IntoIterator<Item = Oid>, today: NaiveDate) -> [usize; TOTAL_DAYS] {
+fn commits_per_day_for_day(repo: &gix::Repository, oids: impl IntoIterator<Item = gix::ObjectId>, today: NaiveDate) -> [usize; TOTAL_DAYS] {
+    let mut object_buf = Vec::new();
+    counts_from_commit_seconds_for_day(
+        oids.into_iter().filter_map(|oid| {
+            object_buf.clear();
+            commit_seconds(repo, oid, &mut object_buf)
+        }),
+        today,
+    )
+}
+
+fn commit_seconds(repo: &gix::Repository, oid: gix::ObjectId, object_buf: &mut Vec<u8>) -> Option<i64> {
+    Some(repo.objects.find_commit(oid.as_ref(), object_buf).ok()?.time().ok()?.seconds)
+}
+
+fn counts_from_commit_seconds_for_day(seconds: impl IntoIterator<Item = i64>, today: NaiveDate) -> [usize; TOTAL_DAYS] {
     let mut counts = [0usize; TOTAL_DAYS];
 
-    for oid in oids {
-        let Some(commit_date) = commit_date(repo, oid) else {
-            continue;
-        };
-
-        match bucket_date(today, commit_date) {
-            DateBucket::Count(days_ago) => counts[days_ago] += 1,
-            DateBucket::Future => continue,
-            DateBucket::BeforeWindow => continue,
-        }
-    }
+    seconds
+        .into_iter()
+        .filter_map(|seconds| match bucket_seconds(today, seconds) {
+            DateBucket::Count(days_ago) => Some(days_ago),
+            DateBucket::Future | DateBucket::BeforeWindow => None,
+        })
+        .for_each(|days_ago| counts[days_ago] += 1);
 
     counts
 }
@@ -63,14 +72,14 @@ pub fn empty_heatmap() -> [[usize; WEEKS]; DAYS] {
     [[0usize; WEEKS]; DAYS]
 }
 
-pub fn build_heatmap(repo: &Repository, oids: impl IntoIterator<Item = Oid>) -> [[usize; WEEKS]; DAYS] {
+pub fn build_heatmap(repo: &gix::Repository, oids: impl IntoIterator<Item = gix::ObjectId>) -> [[usize; WEEKS]; DAYS] {
     let today = Utc::now().date_naive();
     build_heatmap_from_counts_for_day(commits_per_day_for_day(repo, oids, today), today)
 }
 
-pub fn build_heatmap_from_sorted_aliases(repo: &Repository, oids: &Oids) -> [[usize; WEEKS]; DAYS] {
+pub fn build_heatmap_from_sorted_aliases(repo: &gix::Repository, oids: &Oids) -> [[usize; WEEKS]; DAYS] {
     let today = Utc::now().date_naive();
-    build_heatmap_from_counts_for_day(commits_per_day_for_day(repo, oids.get_sorted_aliases().iter().map(|alias| oids.get_oid_by_alias(*alias)), today), today)
+    build_heatmap_from_counts_for_day(commits_per_day_for_day(repo, oids.get_sorted_aliases().iter().map(|alias| *oids.get_gix_oid_by_alias(*alias)), today), today)
 }
 
 fn build_heatmap_from_counts_for_day(counts: [usize; TOTAL_DAYS], today: NaiveDate) -> [[usize; WEEKS]; DAYS] {
@@ -84,12 +93,10 @@ fn build_heatmap_from_counts_for_day(counts: [usize; TOTAL_DAYS], today: NaiveDa
     grid
 }
 
-fn commit_date(repo: &Repository, oid: Oid) -> Option<NaiveDate> {
-    let commit = repo.find_commit(oid).ok()?;
-    Utc.timestamp_opt(commit.time().seconds(), 0).single().map(|date| date.date_naive())
-}
-
-fn bucket_date(today: NaiveDate, commit_date: NaiveDate) -> DateBucket {
+fn bucket_seconds(today: NaiveDate, seconds: i64) -> DateBucket {
+    let Some(commit_date) = Utc.timestamp_opt(seconds, 0).single().map(|date| date.date_naive()) else {
+        return DateBucket::Future;
+    };
     let days_ago = today.signed_duration_since(commit_date).num_days();
 
     if days_ago < 0 {
@@ -99,13 +106,6 @@ fn bucket_date(today: NaiveDate, commit_date: NaiveDate) -> DateBucket {
     } else {
         DateBucket::Count(days_ago as usize)
     }
-}
-
-fn commit_days_ago(today: NaiveDate, seconds: i64) -> Option<usize> {
-    let commit_date = Utc.timestamp_opt(seconds, 0).single()?.date_naive();
-    let days_ago = today.signed_duration_since(commit_date).num_days();
-
-    (0..TOTAL_DAYS as i64).contains(&days_ago).then_some(days_ago as usize)
 }
 
 fn heatmap_cells(count_weekday: usize, counts: [usize; TOTAL_DAYS]) -> impl Iterator<Item = (HeatmapCell, usize)> {

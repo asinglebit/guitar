@@ -1,4 +1,5 @@
 use super::*;
+use crate::core::oids::git2_to_gix_oid as gix_oid;
 use git2::{IndexAddOption, Oid, Repository, Signature, Time};
 use std::fs;
 
@@ -30,12 +31,13 @@ fn heatmap_counts_repo_and_streamed_commits() {
     let yesterday_oid = commit_at(&repo, "yesterday.txt", yesterday);
     let old = commit_at(&repo, "old.txt", outside_grid);
 
+    let gix_repo = gix::open(dir.path()).unwrap();
     let weekday_today = now.weekday().num_days_from_monday() as usize;
-    let counts = commits_per_day(&repo, [first_today, second_today, old]);
-    let stopped = commits_per_day(&repo, [first_today, old, second_today]);
-    let grid = build_heatmap(&repo, [first_today]);
+    let counts = commits_per_day(&gix_repo, [first_today, second_today, old].map(gix_oid));
+    let stopped = commits_per_day(&gix_repo, [first_today, old, second_today].map(gix_oid));
+    let grid = build_heatmap(&gix_repo, [gix_oid(first_today)]);
 
-    let scanned = build_heatmap(&repo, [first_today, yesterday_oid]);
+    let scanned = build_heatmap(&gix_repo, [first_today, yesterday_oid].map(gix_oid));
 
     assert_eq!(counts[0], 2);
     assert_eq!(counts.iter().sum::<usize>(), 2);
@@ -54,7 +56,8 @@ fn heatmap_counts_match_streamed_helper() {
     let first_today = commit_at(&repo, "first-today.txt", today);
     let yesterday_oid = commit_at(&repo, "yesterday.txt", yesterday);
 
-    let scanned = build_heatmap(&repo, [first_today, yesterday_oid]);
+    let gix_repo = gix::open(dir.path()).unwrap();
+    let scanned = build_heatmap(&gix_repo, [first_today, yesterday_oid].map(gix_oid));
     let mut streamed = HeatmapCounts::default();
     streamed.add_commit_seconds(today);
     streamed.add_commit_seconds(yesterday);
@@ -87,4 +90,19 @@ fn prefix_matching_accepts_partial_hex() {
 
     assert_eq!(oids.get_alias_by_prefix(&gix_oid.to_hex_with_len(7).to_string()), Some(alias));
     assert_eq!(oids.get_alias_by_prefix("not-hex"), None);
+}
+
+#[test]
+fn timestamp_counter_skips_future_and_stops_after_window() {
+    let today = NaiveDate::from_ymd_opt(2026, 6, 25).unwrap();
+    let today_seconds = Utc.with_ymd_and_hms(2026, 6, 25, 12, 0, 0).unwrap().timestamp();
+    let yesterday = today_seconds - 24 * 60 * 60;
+    let future = today_seconds + 24 * 60 * 60;
+    let outside_grid = today_seconds - ((TOTAL_DAYS as i64) + 1) * 24 * 60 * 60;
+
+    let counts = counts_from_commit_seconds_for_day([today_seconds, future, yesterday, outside_grid, today_seconds], today);
+
+    assert_eq!(counts[0], 1);
+    assert_eq!(counts[1], 1);
+    assert_eq!(counts.iter().sum::<usize>(), 2);
 }
