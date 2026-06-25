@@ -34,12 +34,7 @@ fn temp_repo(name: &str) -> (PathBuf, Repository) {
     let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
     let path = std::env::temp_dir().join(format!("guitar-diff-{name}-{id}"));
     fs::create_dir_all(&path).unwrap();
-    let repo = Repository::init(&path).unwrap();
-    {
-        let mut config = repo.config().unwrap();
-        config.set_str("user.name", "Test User").unwrap();
-        config.set_str("user.email", "test@example.com").unwrap();
-    }
+    let repo = crate::git::test_support::init_repo_at(&path);
     (path, repo)
 }
 
@@ -64,7 +59,7 @@ fn commit_index(repo: &Repository, message: &str) -> Oid {
     repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents).unwrap()
 }
 
-fn init_repo_at(path: &Path) -> Repository {
+fn init_seeded_repo_at(path: &Path) -> Repository {
     fs::create_dir_all(path).unwrap();
     let repo = Repository::init(path).unwrap();
     {
@@ -80,9 +75,9 @@ fn init_repo_at(path: &Path) -> Repository {
 fn parent_with_submodule(dir: &TestDir) -> Repository {
     let child_path = dir.path.join("child");
     let parent_path = dir.path.join("parent");
-    let child = init_repo_at(&child_path);
+    let child = init_seeded_repo_at(&child_path);
     drop(child);
-    let parent = init_repo_at(&parent_path);
+    let parent = init_seeded_repo_at(&parent_path);
     let mut submodule = parent.submodule(child_path.to_str().unwrap(), Path::new("deps/child"), true).unwrap();
     submodule.clone(None).unwrap();
     submodule.add_finalize().unwrap();
