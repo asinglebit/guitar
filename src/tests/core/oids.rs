@@ -11,7 +11,7 @@ fn oid_with_prefix(prefix: u64, suffix: u64) -> Oid {
 fn assert_round_trip(oids: &mut Oids, oid: Oid, alias: u32) {
     assert_eq!(oids.get_alias_by_oid(oid), alias);
     assert_eq!(oids.get_existing_alias(oid), Some(alias));
-    assert_eq!(oids.get_git2_oid_by_alias(alias), oid);
+    assert_eq!(oids.get_oid_by_alias(alias), oid);
 }
 
 #[test]

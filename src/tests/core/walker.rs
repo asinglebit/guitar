@@ -153,7 +153,7 @@ fn walker_expires_new_right_merge_lane_before_next_rendered_row() {
         .iter()
         .enumerate()
         .map(|(index, &alias)| {
-            let mut row = graph_row(index, alias, walker.oids.get_git2_oid_by_alias(alias));
+            let mut row = graph_row(index, alias, walker.oids.get_oid_by_alias(alias));
             row.is_merge = alias == merge_alias;
             row
         })

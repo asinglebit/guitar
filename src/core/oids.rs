@@ -102,12 +102,12 @@ impl Oids {
         *self.sorted_aliases.get(idx).unwrap()
     }
 
-    pub fn get_oid_by_alias(&self, alias: u32) -> &ObjectId {
+    pub fn get_gix_oid_by_alias(&self, alias: u32) -> &ObjectId {
         self.alias_oids.get(alias as usize).unwrap_or(&self.zero)
     }
 
-    pub fn get_git2_oid_by_alias(&self, alias: u32) -> Oid {
-        gix_to_git2_oid(*self.get_oid_by_alias(alias))
+    pub fn get_oid_by_alias(&self, alias: u32) -> Oid {
+        gix_to_git2_oid(*self.get_gix_oid_by_alias(alias))
     }
 
     pub fn get_sorted_aliases(&self) -> &[u32] {

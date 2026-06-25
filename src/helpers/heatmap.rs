@@ -72,7 +72,7 @@ pub fn build_heatmap(repo: &gix::Repository, oids: impl IntoIterator<Item = gix:
 
 pub fn build_heatmap_from_sorted_aliases(repo: &gix::Repository, oids: &Oids) -> [[usize; WEEKS]; DAYS] {
     let today = Utc::now().date_naive();
-    build_heatmap_from_counts_for_day(commits_per_day_for_day(repo, oids.get_sorted_aliases().iter().map(|alias| *oids.get_oid_by_alias(*alias)), today), today)
+    build_heatmap_from_counts_for_day(commits_per_day_for_day(repo, oids.get_sorted_aliases().iter().map(|alias| *oids.get_gix_oid_by_alias(*alias)), today), today)
 }
 
 fn build_heatmap_from_counts_for_day(counts: [usize; TOTAL_DAYS], today: NaiveDate) -> [[usize; WEEKS]; DAYS] {

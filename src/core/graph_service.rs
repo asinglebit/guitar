@@ -315,7 +315,7 @@ fn file_history_rows(walk_ctx: &Walker, path: &str, symbols: &SymbolTheme) -> Re
     let mut rows = Vec::new();
 
     for (graph_index, &alias) in walk_ctx.oids.get_sorted_aliases().iter().enumerate() {
-        let oid = walk_ctx.oids.get_git2_oid_by_alias(alias);
+        let oid = walk_ctx.oids.get_oid_by_alias(alias);
         if oid.is_zero() {
             continue;
         }
@@ -343,7 +343,7 @@ fn graph_rows(walk_ctx: &Walker, worktrees: &Worktrees, hidden_branch_names: &Ha
 
     for index in start..end {
         let alias = walk_ctx.oids.get_sorted_aliases().get(index).copied().unwrap_or(NONE);
-        let oid = walk_ctx.oids.get_git2_oid_by_alias(alias);
+        let oid = walk_ctx.oids.get_oid_by_alias(alias);
         let is_uncommitted = alias == NONE || oid.is_zero();
         let (summary, committer_date, committer_name, is_merge_commit) = if is_uncommitted {
             (String::new(), String::new(), String::new(), false)
@@ -418,7 +418,7 @@ fn pane_rows(pane: GraphPane, walk_ctx: &Walker) -> Vec<GraphPaneRow> {
                 .stashes
                 .iter()
                 .map(|&alias| {
-                    let oid = walk_ctx.oids.get_git2_oid_by_alias(alias);
+                    let oid = walk_ctx.oids.get_oid_by_alias(alias);
                     let summary = repo.find_commit(oid).ok().and_then(|commit| commit.summary().map(str::to_string)).unwrap_or_else(|| status_text::STASH().to_string());
                     GraphPaneRow::Stash { alias, summary, lane: walk_ctx.stashes_lanes.get(&alias).copied(), graph_index: index_map.get(&alias).copied() }
                 })
@@ -477,7 +477,7 @@ fn branch_index(walk_ctx: &Walker, hidden_branch_names: &HashSet<String>, from: 
 }
 
 fn parent_index(walk_ctx: &Walker, index: usize) -> Option<usize> {
-    let oid = walk_ctx.oids.get_sorted_aliases().get(index).map(|&alias| walk_ctx.oids.get_git2_oid_by_alias(alias))?;
+    let oid = walk_ctx.oids.get_sorted_aliases().get(index).map(|&alias| walk_ctx.oids.get_oid_by_alias(alias))?;
     if oid.is_zero() {
         return Some(1).filter(|idx| *idx < walk_ctx.oids.get_commit_count());
     }
@@ -490,14 +490,14 @@ fn parent_index(walk_ctx: &Walker, index: usize) -> Option<usize> {
 }
 
 fn child_index(walk_ctx: &Walker, index: usize) -> Option<usize> {
-    let oid = walk_ctx.oids.get_sorted_aliases().get(index).map(|&alias| walk_ctx.oids.get_git2_oid_by_alias(alias))?;
+    let oid = walk_ctx.oids.get_sorted_aliases().get(index).map(|&alias| walk_ctx.oids.get_oid_by_alias(alias))?;
     if oid.is_zero() {
         return None;
     }
 
     let repo = walk_ctx.repo.borrow();
     walk_ctx.oids.get_sorted_aliases().iter().enumerate().take(index).find_map(|(idx, &alias)| {
-        let child_oid = walk_ctx.oids.get_git2_oid_by_alias(alias);
+        let child_oid = walk_ctx.oids.get_oid_by_alias(alias);
         let child = repo.find_commit(child_oid).ok()?;
         child.parent_ids().any(|parent_oid| parent_oid == oid).then_some(idx)
     })
