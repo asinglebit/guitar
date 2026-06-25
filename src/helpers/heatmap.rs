@@ -79,10 +79,8 @@ fn build_heatmap_from_counts_for_day(counts: [usize; TOTAL_DAYS], today: NaiveDa
     let weekday_today = today.weekday().num_days_from_monday() as usize;
     let mut grid = [[0usize; WEEKS]; DAYS];
 
-    for (days_ago, count) in counts.into_iter().enumerate() {
-        if let Some((day_idx, week_idx)) = heatmap_cell(weekday_today, days_ago) {
-            grid[day_idx][week_idx] = count;
-        }
+    for (cell, count) in heatmap_cells(weekday_today, counts) {
+        grid[cell.day][cell.week] = count;
     }
 
     grid
@@ -112,15 +110,25 @@ fn commit_days_ago(today: NaiveDate, seconds: i64) -> Option<usize> {
     (0..TOTAL_DAYS as i64).contains(&days_ago).then_some(days_ago as usize)
 }
 
-fn heatmap_cell(weekday_today: usize, days_ago: usize) -> Option<(usize, usize)> {
+fn heatmap_cells(count_weekday: usize, counts: [usize; TOTAL_DAYS]) -> impl Iterator<Item = (HeatmapCell, usize)> {
+    counts.into_iter().enumerate().filter_map(move |(days_ago, count)| heatmap_cell(count_weekday, days_ago).map(|cell| (cell, count)))
+}
+
+fn heatmap_cell(weekday_today: usize, days_ago: usize) -> Option<HeatmapCell> {
     let offset = 6 - weekday_today;
     let logical = days_ago + offset;
     let week = logical / 7;
-    (week < WEEKS).then(|| {
-        let week_idx = WEEKS - 1 - week;
-        let day_idx = (weekday_today + 7 - (days_ago % 7)) % 7;
-        (day_idx, week_idx)
-    })
+    (week < WEEKS).then(|| HeatmapCell { day: weekday_for_age(weekday_today, days_ago), week: WEEKS - 1 - week })
+}
+
+fn weekday_for_age(weekday_today: usize, days_ago: usize) -> usize {
+    (weekday_today + DAYS - (days_ago % DAYS)) % DAYS
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+struct HeatmapCell {
+    day: usize,
+    week: usize,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
