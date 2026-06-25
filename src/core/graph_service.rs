@@ -7,7 +7,7 @@ use crate::{
     },
     git::queries::{file_history::changed_file_status_at_commit, helpers::FileStatus, reflogs::HeadReflogEntry},
     helpers::{
-        heatmap::{DAYS, WEEKS, build_heatmap_from_sorted_aliases, empty_heatmap},
+        heatmap::{DAYS, WEEKS, build_heatmap_from_sorted_aliases},
         localisation::{common, empty, errors, status as status_text},
         symbols::SymbolTheme,
         time::timestamp_to_utc_date_time,
@@ -162,7 +162,6 @@ pub fn spawn_graph_service(config: GraphServiceConfig, rx: Receiver<GraphCommand
 
 fn run_graph_service(config: GraphServiceConfig, rx: Receiver<GraphCommand>, tx: Sender<GraphEvent>, cancel: Arc<AtomicBool>) {
     let generation = config.generation;
-    let repo_path = config.path.clone();
     let mut walk_ctx = match Walker::new(config.path, config.amount, config.hidden_branch_names.clone(), config.include_head_reflog_roots, config.graph_lane_limit) {
         Ok(walker) => walker,
         Err(error) => {
@@ -218,7 +217,8 @@ fn run_graph_service(config: GraphServiceConfig, rx: Receiver<GraphCommand>, tx:
         is_first = false;
 
         if is_complete {
-            let heatmap = gix::open(&repo_path).map(|repo| build_heatmap_from_sorted_aliases(&repo, &walk_ctx.oids)).unwrap_or_else(|_| empty_heatmap());
+            let repo = walk_ctx.repo.borrow();
+            let heatmap = build_heatmap_from_sorted_aliases(&repo, &walk_ctx.oids);
             let _ = tx.send(GraphEvent::Heatmap { generation, heatmap });
 
             if let Some((request_id, path)) = pending_file_history.take() {

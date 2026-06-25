@@ -1,5 +1,4 @@
 use super::*;
-use crate::core::oids::git2_to_gix_oid as gix_oid;
 use git2::{IndexAddOption, Oid, Repository, Signature, Time};
 use std::fs;
 
@@ -31,13 +30,12 @@ fn heatmap_counts_repo_and_streamed_commits() {
     let yesterday_oid = commit_at(&repo, "yesterday.txt", yesterday);
     let old = commit_at(&repo, "old.txt", outside_grid);
 
-    let gix_repo = gix::open(dir.path()).unwrap();
     let weekday_today = now.weekday().num_days_from_monday() as usize;
-    let counts = commits_per_day(&gix_repo, [first_today, second_today, old].map(gix_oid));
-    let stopped = commits_per_day(&gix_repo, [first_today, old, second_today].map(gix_oid));
-    let grid = build_heatmap(&gix_repo, [gix_oid(first_today)]);
+    let counts = commits_per_day(&repo, [first_today, second_today, old]);
+    let stopped = commits_per_day(&repo, [first_today, old, second_today]);
+    let grid = build_heatmap(&repo, [first_today]);
 
-    let scanned = build_heatmap(&gix_repo, [first_today, yesterday_oid].map(gix_oid));
+    let scanned = build_heatmap(&repo, [first_today, yesterday_oid]);
 
     assert_eq!(counts[0], 2);
     assert_eq!(counts.iter().sum::<usize>(), 2);
@@ -56,8 +54,7 @@ fn heatmap_counts_match_streamed_helper() {
     let first_today = commit_at(&repo, "first-today.txt", today);
     let yesterday_oid = commit_at(&repo, "yesterday.txt", yesterday);
 
-    let gix_repo = gix::open(dir.path()).unwrap();
-    let scanned = build_heatmap(&gix_repo, [first_today, yesterday_oid].map(gix_oid));
+    let scanned = build_heatmap(&repo, [first_today, yesterday_oid]);
     let mut streamed = HeatmapCounts::default();
     streamed.add_commit_seconds(today);
     streamed.add_commit_seconds(yesterday);
@@ -83,7 +80,7 @@ fn prefix_matching_accepts_partial_hex() {
     let dir = tempfile::Builder::new().prefix("guitar-prefix-").tempdir().unwrap();
     let repo = Repository::init(dir.path()).unwrap();
     let oid = commit_at(&repo, "prefix.txt", Utc::now().timestamp());
-    let gix_oid = gix_oid(oid);
+    let gix_oid = crate::core::oids::git2_to_gix_oid(oid);
     let mut oids = crate::core::oids::Oids::default();
 
     let alias = oids.get_alias_by_oid(gix_oid);
