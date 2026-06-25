@@ -4,7 +4,7 @@ use divan::{Bencher, black_box};
 use fixtures::{RepoWalkFixture, graph_service_fixture, repo_walk_hidden_branches_fixture, repo_walk_linear_fixture, repo_walk_many_refs_fixture, repo_walk_merge_fixture};
 use guitar::{
     core::{
-        batcher::{Batcher, WalkCommit},
+        batcher::{Batcher, WalkedCommit},
         oids::Oids,
         walker::Walker,
     },
@@ -21,7 +21,7 @@ struct CommitBatchFixture {
     _fixture: RepoWalkFixture,
     batcher: Batcher,
     _repo: gix::Repository,
-    scratch: Vec<WalkCommit>,
+    scratch: Vec<WalkedCommit>,
     amount: usize,
     expected_commits: usize,
 }

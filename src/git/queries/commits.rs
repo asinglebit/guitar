@@ -1,5 +1,5 @@
 use crate::core::{
-    batcher::{Batcher, WalkCommit},
+    batcher::{Batcher, WalkedCommit},
     oids::Oids,
 };
 use crate::git::gix::for_each_branch_tip;
@@ -65,7 +65,7 @@ pub fn get_tag_oids(repo: &gix::Repository, oids: &mut Oids) -> HashMap<u32, Vec
 }
 
 // Pull the next revwalk page into the global alias order.
-pub fn get_sorted_oids(batcher: &mut Batcher, oids: &mut Oids, sorted: &mut Vec<u32>, amount: usize, scratch: &mut Vec<WalkCommit>) {
+pub fn get_sorted_oids(batcher: &mut Batcher, oids: &mut Oids, sorted: &mut Vec<u32>, amount: usize, scratch: &mut Vec<WalkedCommit>) {
     scratch.clear();
     let fetched = batcher.next_aliased_into(amount, scratch, oids);
     if fetched == 0 {
@@ -73,10 +73,7 @@ pub fn get_sorted_oids(batcher: &mut Batcher, oids: &mut Oids, sorted: &mut Vec<
     }
 
     sorted.reserve(fetched);
-
-    for commit in scratch.iter() {
-        sorted.push(commit.alias);
-    }
+    sorted.extend(scratch.iter().map(|commit| commit.alias));
 }
 
 // Return the current branch name, or None when HEAD is detached.

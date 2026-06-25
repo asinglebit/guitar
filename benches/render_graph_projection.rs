@@ -42,22 +42,8 @@ fn accent_theme(mut theme: Theme) -> Theme {
     theme
 }
 
-#[divan::bench(sample_count = 80, sample_size = 100)]
-fn render_graph_projection_small(bencher: Bencher) {
-    let fixture = graph_fixture(6);
-    bench_render(bencher, &fixture.theme, &fixture.symbols, &fixture.rows, &fixture.history, fixture.head_alias, 0, fixture.rows.len(), false);
-}
-
-#[divan::bench(sample_count = 80, sample_size = 100)]
-fn render_graph_projection_dense(bencher: Bencher) {
-    let fixture = graph_fixture(24);
-    bench_render(bencher, &fixture.theme, &fixture.symbols, &fixture.rows, &fixture.history, fixture.head_alias, 0, fixture.rows.len(), false);
-}
-
-#[divan::bench(sample_count = 80, sample_size = 100)]
-fn render_graph_projection_uncommitted_row(bencher: Bencher) {
-    let fixture = graph_fixture(12);
-    let rows = vec![GraphRow {
+fn uncommitted_row() -> GraphRow {
+    GraphRow {
         index: 0,
         alias: NONE,
         oid: Oid::zero(),
@@ -73,7 +59,25 @@ fn render_graph_projection_uncommitted_row(bencher: Bencher) {
         worktrees: Default::default(),
         has_current_worktree: false,
         reflog: None,
-    }];
+    }
+}
+
+#[divan::bench(sample_count = 80, sample_size = 100)]
+fn render_graph_projection_small(bencher: Bencher) {
+    let fixture = graph_fixture(6);
+    bench_render(bencher, &fixture.theme, &fixture.symbols, &fixture.rows, &fixture.history, fixture.head_alias, 0, fixture.rows.len(), false);
+}
+
+#[divan::bench(sample_count = 80, sample_size = 100)]
+fn render_graph_projection_dense(bencher: Bencher) {
+    let fixture = graph_fixture(24);
+    bench_render(bencher, &fixture.theme, &fixture.symbols, &fixture.rows, &fixture.history, fixture.head_alias, 0, fixture.rows.len(), false);
+}
+
+#[divan::bench(sample_count = 80, sample_size = 100)]
+fn render_graph_projection_uncommitted_row(bencher: Bencher) {
+    let fixture = graph_fixture(12);
+    let rows = vec![uncommitted_row()];
     bench_render(bencher, &fixture.theme, &fixture.symbols, &rows, &fixture.history, fixture.head_alias, 0, rows.len(), true);
 }
 

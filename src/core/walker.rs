@@ -1,6 +1,6 @@
 use crate::{
     core::{
-        batcher::{Batcher, WalkCommit},
+        batcher::{Batcher, WalkedCommit},
         buffer::Buffer,
         chunk::{Chunk, LaneRef, NONE},
         oids::Oids,
@@ -45,7 +45,7 @@ pub struct Walker {
     stash_aliases: StdHashSet<u32>,
     reflog_aliases: StdHashSet<u32>,
     stash_parent_aliases: Vec<(u32, u32)>,
-    oid_batch: Vec<WalkCommit>,
+    oid_batch: Vec<WalkedCommit>,
     sorted_batch: Vec<u32>,
 
     // Number of commits requested per walk iteration.
@@ -75,15 +75,17 @@ impl Walker {
 
         // Stashes are collected up front so they can be inserted near their parents later.
         oids.stashes = get_stashed_commits(&gix_repo, &mut oids);
-        let stash_aliases: StdHashSet<u32> = oids.stashes.iter().copied().collect();
-        let mut stash_parent_aliases = Vec::with_capacity(oids.stashes.len());
-        for stash_alias in oids.stashes.clone() {
+        let stash_aliases = std::mem::take(&mut oids.stashes);
+        let mut stash_parent_aliases = Vec::with_capacity(stash_aliases.len());
+        for stash_alias in stash_aliases.iter().copied() {
             let parent_oid = gix_repo.find_commit(*oids.get_gix_oid_by_alias(stash_alias)).ok().and_then(|commit| commit.parent_ids().next().map(|parent| parent.detach()));
             if let Some(parent_oid) = parent_oid {
                 let parent_alias = oids.get_alias_by_oid(parent_oid);
                 stash_parent_aliases.push((stash_alias, parent_alias));
             }
         }
+        oids.stashes = stash_aliases;
+        let stash_aliases: StdHashSet<u32> = oids.stashes.iter().copied().collect();
 
         let head_reflog_entries = get_head_reflog_entries(&gix_repo).unwrap_or_default();
         if let Some(commit_hint) = history_commit_hint {
