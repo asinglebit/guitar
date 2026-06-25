@@ -1,6 +1,8 @@
 use super::*;
+use crate::git::test_support::{TestDir, commit_file, init_repo_at};
 use std::{
     fs,
+    path::Path,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -63,6 +65,15 @@ fn prune_hidden_branches_removes_names_that_no_longer_exist() {
 }
 
 #[test]
+fn branch_name_from_ref_accepts_only_utf8_branch_refs() {
+    assert_eq!(branch_name_from_ref(b"refs/heads/main"), Some("main"));
+    assert_eq!(branch_name_from_ref(b"refs/remotes/origin/main"), Some("origin/main"));
+    assert_eq!(branch_name_from_ref(b"refs/tags/v1.0.0"), None);
+    assert_eq!(branch_name_from_ref(b"refs/heads/"), None);
+    assert_eq!(branch_name_from_ref(b"refs/heads/\xff"), None);
+}
+
+#[test]
 fn branch_visibility_empty_hidden_set_removes_repository_entry() {
     let path = temp_config_path("empty");
 
@@ -72,4 +83,20 @@ fn branch_visibility_empty_hidden_set_removes_repository_entry() {
     let contents = fs::read_to_string(&path).unwrap();
     let config = facet_json::from_str::<BranchVisibilityConfig>(&contents).unwrap();
     assert!(config.repositories.is_empty());
+}
+
+#[test]
+fn current_branch_names_handles_bare_repo_paths() {
+    let dir = TestDir::new("branch-visibility-bare-source");
+    let source = init_repo_at(&dir.join("source"));
+    let oid = commit_file(&source, "file.txt", "content\n", "commit");
+    let bare_path = dir.join("repo.git");
+    let mut builder = git2::build::RepoBuilder::new();
+    builder.bare(true);
+    let repo = builder.clone(source.workdir().unwrap().to_str().unwrap(), &bare_path).unwrap();
+    repo.reference("refs/remotes/origin/topic", oid, true, "test").unwrap();
+
+    let names = current_branch_names(&repo);
+    assert!(names.contains("master"));
+    assert!(names.contains("origin/topic"));
 }

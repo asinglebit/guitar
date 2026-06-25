@@ -31,29 +31,20 @@ pub fn branch_visibility_config_path() -> PathBuf {
 }
 
 pub fn current_branch_names(repo: &Repository) -> HashSet<String> {
-    let mut names = HashSet::new();
+    let path = repo.workdir().unwrap_or(repo.path());
+    let options = if repo.workdir().is_some() { gix::open::Options::default() } else { gix::open::Options::default().open_path_as_is(true) };
+    let Ok(repo) = gix::open_opts(path, options) else {
+        return HashSet::new();
+    };
+    current_branch_names_from_repo(&repo)
+}
+
+pub fn current_branch_names_from_repo(repo: &gix::Repository) -> HashSet<String> {
     let Ok(references) = repo.references() else {
-        return names;
+        return HashSet::new();
     };
 
-    for reference in references.flatten() {
-        if reference.target().is_none() {
-            continue;
-        }
-
-        let Some(name) = reference.name() else {
-            continue;
-        };
-
-        let branch_name = name.strip_prefix("refs/heads/").or_else(|| name.strip_prefix("refs/remotes/"));
-        if let Some(branch_name) = branch_name
-            && !branch_name.is_empty()
-        {
-            names.insert(branch_name.to_string());
-        }
-    }
-
-    names
+    references.all().into_iter().flatten().flatten().filter_map(|reference| branch_name_from_ref(reference.name().as_bstr()).map(str::to_string)).collect()
 }
 
 pub(crate) fn branch_name_from_ref(name: &[u8]) -> Option<&str> {

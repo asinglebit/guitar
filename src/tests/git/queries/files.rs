@@ -113,6 +113,29 @@ fn untracked_and_deleted_files_are_excluded() {
 }
 
 #[test]
+fn tracked_file_enumeration_includes_staged_files_and_excludes_deleted_files() {
+    let dir = TestDir::new("tracked-enumeration");
+    let repo = init_repo(&dir.path);
+    write_file(&dir.path, "tracked.rs", "tracked\n");
+    write_file(&dir.path, "kept.rs", "kept\n");
+    commit_files(&repo, &["tracked.rs", "kept.rs"], "initial");
+
+    write_file(&dir.path, "staged.rs", "staged\n");
+    let mut index = repo.index().unwrap();
+    index.add_path(Path::new("staged.rs")).unwrap();
+    index.write().unwrap();
+
+    fs::remove_file(dir.path.join("kept.rs")).unwrap();
+    write_file(&dir.path, ".gitignore", "*.log\n");
+    write_file(&dir.path, "ignored.log", "ignored\n");
+
+    let mut paths = result_paths(&search_tracked_files(&repo, ".rs", 10).unwrap());
+    paths.sort();
+
+    assert_eq!(paths, vec!["staged.rs".to_string(), "tracked.rs".to_string()]);
+}
+
+#[test]
 fn empty_query_and_zero_limit_return_empty_results() {
     let paths = vec!["src/app/draw/search.rs".to_string()];
 

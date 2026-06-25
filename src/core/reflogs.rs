@@ -1,4 +1,4 @@
-use git2::{Oid, Time};
+use git2::Oid;
 use ratatui::style::Color;
 use std::collections::HashMap;
 
@@ -9,7 +9,7 @@ pub struct HeadReflogAliasEntry {
     pub new_oid: Oid,
     pub new_alias: u32,
     pub message: String,
-    pub time: Time,
+    pub time: gix::date::Time,
 }
 
 #[derive(Default)]

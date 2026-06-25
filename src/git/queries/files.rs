@@ -1,4 +1,6 @@
+use crate::git::gix::gix_error;
 use git2::Repository;
+use smallvec::SmallVec;
 use std::{collections::HashSet, path::Path};
 
 const SCORE_EXACT_PATH: i64 = 1_000_000;
@@ -29,12 +31,23 @@ pub fn search_tracked_files(repo: &Repository, query: &str, limit: usize) -> Res
         return Ok(Vec::new());
     }
 
-    let index = repo.index()?;
+    let gix_repo = gix::open(workdir).map_err(gix_error)?;
+    let paths = tracked_file_paths_from_repo(&gix_repo)?;
+
+    Ok(rank_file_paths(&paths, query, limit))
+}
+
+fn tracked_file_paths_from_repo(repo: &gix::Repository) -> Result<Vec<String>, git2::Error> {
+    let Some(workdir) = repo.workdir() else {
+        return Ok(Vec::new());
+    };
+
+    let index = repo.index().map_err(gix_error)?;
     let mut seen = HashSet::new();
     let mut paths = Vec::new();
 
-    for entry in index.iter() {
-        let Ok(path) = std::str::from_utf8(&entry.path) else {
+    for entry in index.entries() {
+        let Ok(path) = std::str::from_utf8(entry.path(&index)) else {
             continue;
         };
 
@@ -43,16 +56,12 @@ pub fn search_tracked_files(repo: &Repository, query: &str, limit: usize) -> Res
             continue;
         }
 
-        if repo.status_should_ignore(Path::new(&path)).unwrap_or(false) {
-            continue;
-        }
-
         if workdir.join(Path::new(&path)).is_file() {
             paths.push(path);
         }
     }
 
-    Ok(rank_file_paths(&paths, query, limit))
+    Ok(paths)
 }
 
 pub fn rank_file_paths(paths: &[String], query: &str, limit: usize) -> Vec<FileSearchResult> {
@@ -184,62 +193,53 @@ fn contiguous_match(path: &str, lower_path: &str, term: &str, start_byte: usize,
 }
 
 fn fuzzy_match(lower_path: &str, term: &str, basename_start: usize) -> Option<TermMatch> {
-    let path_chars: Vec<char> = lower_path.chars().collect();
-    let term_chars: Vec<char> = term.chars().collect();
-    if term_chars.is_empty() {
-        return None;
-    }
+    let path_chars: SmallVec<[(usize, char); 96]> = lower_path.char_indices().collect();
+    let term_chars: SmallVec<[char; 16]> = term.chars().collect();
+    let (&first_char, term_tail) = term_chars.split_first()?;
+    let term_len = term_chars.len();
 
-    let char_bytes: Vec<usize> = lower_path.char_indices().map(|(idx, _)| idx).collect();
-    let mut best = None;
+    let (score, matched_indices) = path_chars
+        .iter()
+        .enumerate()
+        .filter_map(|(start, (_, ch))| (*ch == first_char).then_some(start))
+        .filter_map(|start| {
+            let matched = fuzzy_positions(&path_chars, term_tail, term_len, start)?;
+            Some((fuzzy_score(&path_chars, &matched, term_len, basename_start), matched))
+        })
+        .max_by_key(|(score, _)| *score)?;
 
-    for start in path_chars.iter().enumerate().filter_map(|(idx, ch)| (*ch == term_chars[0]).then_some(idx)) {
-        let mut matched = vec![start];
-        let mut search_from = start + 1;
-        let mut found_all = true;
+    Some(TermMatch { score, matched_indices: matched_indices.to_vec() })
+}
 
-        for term_char in term_chars.iter().skip(1) {
-            if let Some(next) = path_chars.iter().enumerate().skip(search_from).find_map(|(idx, ch)| (*ch == *term_char).then_some(idx)) {
-                matched.push(next);
-                search_from = next + 1;
-            } else {
-                found_all = false;
-                break;
-            }
-        }
+fn fuzzy_positions(path_chars: &[(usize, char)], term_tail: &[char], term_len: usize, start: usize) -> Option<SmallVec<[usize; 16]>> {
+    let mut matched = SmallVec::<[usize; 16]>::with_capacity(term_len);
+    matched.push(start);
+    term_tail.iter().try_fold(start + 1, |search_from, term_char| {
+        let next = path_chars.iter().enumerate().skip(search_from).find_map(|(idx, (_, ch))| (*ch == *term_char).then_some(idx))?;
+        matched.push(next);
+        Some(next + 1)
+    })?;
+    Some(matched)
+}
 
-        if !found_all {
-            continue;
-        }
+fn fuzzy_score(path_chars: &[(usize, char)], matched: &[usize], term_len: usize, basename_start: usize) -> i64 {
+    let first = *matched.first().unwrap();
+    let last = *matched.last().unwrap();
+    let (gaps, consecutive) = matched.windows(2).fold((0, 0), |(gaps, consecutive), pair| {
+        let gap = pair[1].saturating_sub(pair[0] + 1);
+        (gaps + gap, consecutive + usize::from(gap == 0))
+    });
+    let start_byte = path_chars[first].0;
+    let span = last.saturating_sub(first) + 1;
 
-        let first = *matched.first().unwrap();
-        let last = *matched.last().unwrap();
-        let gaps: usize = matched.windows(2).map(|pair| pair[1].saturating_sub(pair[0] + 1)).sum();
-        let consecutive = matched.windows(2).filter(|pair| pair[1] == pair[0] + 1).count();
-        let start_byte = char_bytes[first];
-        let path_len = path_chars.len() as i64;
-        let span = last.saturating_sub(first) + 1;
+    let boundary_bonus = match first.checked_sub(1).map(|idx| path_chars[idx].1) {
+        None | Some('/') => 2_000,
+        Some('_' | '-' | '.' | ' ') => 1_000,
+        _ => 0,
+    };
+    let position_bonus = 3_000 * (start_byte == 0) as i64 + 1_500 * (start_byte >= basename_start) as i64 + 1_500 * (start_byte == basename_start) as i64;
 
-        let mut score = SCORE_FUZZY + term_chars.len() as i64 * 120 + consecutive as i64 * 1_000 - gaps as i64 * 80 - span as i64 * 30 - first as i64 * 25 - path_len * 2;
-        if start_byte == 0 {
-            score += 3_000;
-        }
-        if is_segment_start_byte(lower_path, start_byte) {
-            score += 2_000;
-        } else if is_boundary_byte(lower_path, start_byte) {
-            score += 1_000;
-        }
-        if start_byte >= basename_start {
-            score += 1_500;
-        }
-        if start_byte == basename_start {
-            score += 1_500;
-        }
-
-        consider_match(&mut best, TermMatch { score, matched_indices: matched });
-    }
-
-    best
+    SCORE_FUZZY + term_len as i64 * 120 + consecutive as i64 * 1_000 - gaps as i64 * 80 - span as i64 * 30 - first as i64 * 25 - path_chars.len() as i64 * 2 + boundary_bonus + position_bonus
 }
 
 fn basename_start_byte(path: &str) -> usize {
