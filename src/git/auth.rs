@@ -1,5 +1,10 @@
 use crate::helpers::localisation::{errors, modal, network};
 use git2::{Config, Cred, CredentialType, Error, ErrorClass, ErrorCode};
+use gix::credentials::{
+    helper::Action as GixCredentialAction,
+    protocol::{Context as GixCredentialContext, Outcome as GixCredentialOutcome, Result as GixCredentialResult},
+};
+use gix::sec::identity::Account as GixCredentialAccount;
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -186,44 +191,39 @@ impl AuthAttempt {
         }
     }
 
-    pub fn gix_credentials(&self, action: gix::credentials::helper::Action) -> gix::credentials::protocol::Result {
+    pub fn gix_credentials(&self, action: GixCredentialAction) -> GixCredentialResult {
         self.gix_credentials_with(action, gix::credentials::builtin)
     }
 
-    pub fn gix_credentials_with<F>(&self, action: gix::credentials::helper::Action, mut fallback: F) -> gix::credentials::protocol::Result
+    pub fn gix_credentials_with<F>(&self, action: GixCredentialAction, mut fallback: F) -> GixCredentialResult
     where
-        F: FnMut(gix::credentials::helper::Action) -> gix::credentials::protocol::Result,
+        F: FnMut(GixCredentialAction) -> GixCredentialResult,
     {
-        if let Some(result) = self.gix_credentials_from_session(&action) {
-            return result;
-        }
-
-        fallback(action)
+        self.gix_credentials_from_session(&action).map_or_else(|| fallback(action), |result| result)
     }
 
-    fn gix_credentials_from_session(&self, action: &gix::credentials::helper::Action) -> Option<gix::credentials::protocol::Result> {
-        let gix::credentials::helper::Action::Get(ctx) = action else {
-            return None;
-        };
-        let url = ctx.url.clone().or_else(|| ctx.to_url())?;
-        let url = String::from_utf8_lossy(url.as_ref()).into_owned();
+    fn gix_credentials_from_session(&self, action: &GixCredentialAction) -> Option<GixCredentialResult> {
+        action.context().and_then(|ctx| self.gix_credentials_for_context(ctx))
+    }
+
+    fn gix_credentials_for_context(&self, ctx: &GixCredentialContext) -> Option<GixCredentialResult> {
+        let url = gix_context_url(ctx)?;
         let info = classify_remote_url(&url);
         match info.protocol {
-            AuthProtocol::Https | AuthProtocol::Http => {
-                let challenge = AuthChallenge { url, username: ctx.username.clone().or(info.username.clone()), protocol: info.protocol, operation: self.operation.clone(), key_path: None };
-                self.session.https_secret(&challenge.url, challenge.username.as_deref(), challenge.protocol).map(|(_, username, password)| {
-                    Ok(Some(gix::credentials::protocol::Outcome { identity: gix::sec::identity::Account { username, password, oauth_refresh_token: None }, next: ctx.clone().into() }))
-                })
-            },
-            AuthProtocol::Ssh => {
-                let username = ctx.username.clone().or(info.username).unwrap_or_else(|| "git".to_string());
-                let key_path = default_ssh_private_key()?;
-                self.session.ssh_secret(&url, &username, key_path.as_path()).map(|(_, passphrase)| {
-                    Ok(Some(gix::credentials::protocol::Outcome { identity: gix::sec::identity::Account { username, password: passphrase, oauth_refresh_token: None }, next: ctx.clone().into() }))
-                })
-            },
+            AuthProtocol::Https | AuthProtocol::Http => self.gix_http_credentials(ctx, url, info),
+            AuthProtocol::Ssh => self.gix_ssh_credentials(ctx, url, info),
             AuthProtocol::Local | AuthProtocol::Other => None,
         }
+    }
+
+    fn gix_http_credentials(&self, ctx: &GixCredentialContext, url: String, info: RemoteAuthInfo) -> Option<GixCredentialResult> {
+        let username_hint = ctx.username.clone().or(info.username);
+        self.session.https_secret(&url, username_hint.as_deref(), info.protocol).map(|(_, username, password)| gix_credentials_outcome(ctx, username, password))
+    }
+
+    fn gix_ssh_credentials(&self, ctx: &GixCredentialContext, url: String, info: RemoteAuthInfo) -> Option<GixCredentialResult> {
+        let username = ctx.username.clone().or(info.username).unwrap_or_else(|| "git".to_string());
+        default_ssh_private_key().and_then(|key_path| self.session.ssh_secret(&url, &username, key_path.as_path())).map(|(_, passphrase)| gix_credentials_outcome(ctx, username, passphrase))
     }
 
     fn http_credentials(&self, config: &Config, url: &str, username_hint: Option<&str>, protocol: AuthProtocol, allowed: CredentialType) -> Result<Cred, Error> {
@@ -323,6 +323,14 @@ pub fn network_result(label: &str, attempt: &AuthAttempt, result: Result<(), Err
 
 pub fn auth_required_error() -> Error {
     Error::new(ErrorCode::Auth, ErrorClass::Callback, AUTH_REQUIRED_MESSAGE)
+}
+
+fn gix_context_url(ctx: &GixCredentialContext) -> Option<String> {
+    ctx.url.as_ref().cloned().or_else(|| ctx.to_url()).map(|url| String::from_utf8_lossy(url.as_ref()).into_owned())
+}
+
+fn gix_credentials_outcome(ctx: &GixCredentialContext, username: String, password: String) -> GixCredentialResult {
+    Ok(Some(GixCredentialOutcome { identity: GixCredentialAccount { username, password, oauth_refresh_token: None }, next: ctx.clone().into() }))
 }
 
 pub fn classify_remote_url(url: &str) -> RemoteAuthInfo {

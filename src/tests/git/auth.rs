@@ -39,6 +39,34 @@ fn session_stores_and_evicts_https_secret() {
 }
 
 #[test]
+fn gix_credentials_prefers_session_secret_over_fallback() {
+    let challenge = AuthChallenge { url: "https://github.com/asinglebit/guitar.git".to_string(), username: None, protocol: AuthProtocol::Https, operation: "Fetch".to_string(), key_path: None };
+    let mut session = AuthSession::default();
+    session.store(&challenge, AuthSecret::Https { username: "user".to_string(), password: "token".to_string() });
+
+    let attempt = AuthAttempt::new(session, "Fetch");
+    let result = attempt.gix_credentials_with(gix::credentials::helper::Action::get_for_url(challenge.url), |_| panic!("session secret should avoid fallback")).unwrap().unwrap();
+
+    assert_eq!(result.identity.username, "user");
+    assert_eq!(result.identity.password, "token");
+}
+
+#[test]
+fn gix_credentials_uses_fallback_without_session_secret() {
+    let attempt = AuthAttempt::new(AuthSession::default(), "Fetch");
+    let mut fallback_called = false;
+
+    let result = attempt.gix_credentials_with(gix::credentials::helper::Action::get_for_url("https://github.com/asinglebit/guitar.git"), |action| {
+        fallback_called = true;
+        assert!(action.context().is_some());
+        Ok(None)
+    });
+
+    assert!(fallback_called);
+    assert!(result.unwrap().is_none());
+}
+
+#[test]
 fn session_stores_and_evicts_ssh_passphrase() {
     let challenge = AuthChallenge {
         url: "ssh://git@github.com/asinglebit/guitar.git".to_string(),
