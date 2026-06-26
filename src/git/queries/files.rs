@@ -53,27 +53,31 @@ fn tracked_file_paths_from_repo(repo: &gix::Repository) -> Result<Vec<String>, g
 }
 
 pub fn rank_file_paths(paths: &[String], query: &str, limit: usize) -> Vec<FileSearchResult> {
-    let terms = normalize_query(query);
-    if terms.is_empty() || limit == 0 {
-        return Vec::new();
-    }
+    (!query.trim().is_empty() && limit != 0)
+        .then(|| {
+            let terms = normalize_query(query);
+            let mut seen = HashSet::new();
+            let mut results: Vec<FileSearchResult> = paths
+                .iter()
+                .map(|path| normalize_path(path))
+                .filter(|path| !path.is_empty() && !is_git_internal_path(path))
+                .filter(|path| seen.insert(path.clone()))
+                .filter_map(|path| file_search_result(path, &terms))
+                .collect();
 
-    let mut seen = HashSet::new();
-    let mut results: Vec<FileSearchResult> = paths
-        .iter()
-        .filter_map(|path| {
-            let path = normalize_path(path);
-            if path.is_empty() || is_git_internal_path(&path) || !seen.insert(path.clone()) {
-                return None;
-            }
-
-            score_path(&path, &terms).map(|(score, matched_indices)| FileSearchResult { path, score, matched_indices })
+            results.sort_by(compare_file_search_results);
+            results.truncate(limit);
+            results
         })
-        .collect();
+        .unwrap_or_default()
+}
 
-    results.sort_by(|a, b| b.score.cmp(&a.score).then_with(|| a.path.chars().count().cmp(&b.path.chars().count())).then_with(|| a.path.cmp(&b.path)));
-    results.truncate(limit);
-    results
+fn file_search_result(path: String, terms: &[String]) -> Option<FileSearchResult> {
+    score_path(&path, terms).map(|(score, matched_indices)| FileSearchResult { path, score, matched_indices })
+}
+
+fn compare_file_search_results(a: &FileSearchResult, b: &FileSearchResult) -> std::cmp::Ordering {
+    b.score.cmp(&a.score).then_with(|| a.path.chars().count().cmp(&b.path.chars().count())).then_with(|| a.path.cmp(&b.path))
 }
 
 fn normalize_query(query: &str) -> Vec<String> {

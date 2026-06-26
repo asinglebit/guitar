@@ -799,16 +799,16 @@ impl App {
     }
 
     fn default_remote_for_network(&mut self, operation: &str) -> Option<String> {
-        let remote_name = self.repo.as_ref().and_then(|_| {
-            let repo_path = self.path.as_deref().unwrap_or(".");
-            effective_default_remote_from_remotes(repo_path, &self.remotes).or_else(|| effective_default_remote(repo_path))
-        });
-
-        remote_name.or_else(|| {
-            self.repo.as_ref()?;
-            self.show_error(errors::no_remotes_configured(operation));
-            None
-        })
+        match self.repo.as_ref() {
+            None => None,
+            Some(_) => {
+                let repo_path = self.path.as_deref().unwrap_or(".");
+                effective_default_remote_from_remotes(repo_path, &self.remotes).or_else(|| effective_default_remote(repo_path)).or_else(|| {
+                    self.show_error(errors::no_remotes_configured(operation));
+                    None
+                })
+            },
+        }
     }
 
     pub fn on_create_branch(&mut self) {

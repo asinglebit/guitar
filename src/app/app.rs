@@ -4,7 +4,7 @@ use crate::{
     core::stashes::Stashes,
     core::{
         submodules::{SubmoduleStackEntry, Submodules},
-        worktrees::Worktrees,
+        worktrees::{WorktreeEntry, Worktrees},
     },
     git::{
         auth::{AuthChallenge, AuthSession, NetworkResult},
@@ -76,7 +76,11 @@ use std::{
     thread::JoinHandle,
     time::{Duration, Instant},
 };
-use std::{env, io::stdout, path::PathBuf};
+use std::{
+    env,
+    io::stdout,
+    path::{Path, PathBuf},
+};
 
 #[derive(Clone)]
 pub struct RepoHandle {
@@ -737,6 +741,10 @@ pub struct App {
     pub is_exit: bool,
 }
 
+fn current_dirty_worktrees(path: &Path, staged: &Result<UncommittedChanges, String>) -> Option<Vec<WorktreeEntry>> {
+    staged.as_ref().ok().and_then(|staged| list_worktrees_metadata_with_current_dirty_from_path(path, Some(path), staged).ok())
+}
+
 impl App {
     pub(crate) fn git2_repo(&self) -> Option<Rc<Repository>> {
         self.repo.as_ref()?.git2().ok()
@@ -1105,22 +1113,17 @@ impl App {
     }
 
     fn spawn_reload_metadata(&self, generation: Generation) {
-        let inputs = self
-            .path
-            .as_ref()
-            .map(PathBuf::from)
-            .and_then(|path| self.graph_tx.clone().zip(self.graph_event_tx.clone()).map(|(reload_metadata_tx, reload_uncommitted_tx)| (path, reload_metadata_tx, reload_uncommitted_tx)));
-
-        if let Some((path, reload_metadata_tx, reload_uncommitted_tx)) = inputs {
-            std::thread::spawn(move || {
-                let result = get_staged_filenames_diff_from_path(path.as_path()).map_err(|error| error.to_string());
-                if let Ok(staged) = &result
-                    && let Ok(worktrees) = list_worktrees_metadata_with_current_dirty_from_path(path.as_path(), Some(path.as_path()), staged)
-                {
-                    let _ = reload_metadata_tx.send(GraphCommand::UpdateWorktrees { generation, worktrees });
-                }
-                let _ = reload_uncommitted_tx.send(GraphEvent::Uncommitted { generation, result });
-            });
+        match (self.path.as_ref().map(PathBuf::from), self.graph_tx.clone(), self.graph_event_tx.clone()) {
+            (Some(path), Some(reload_metadata_tx), Some(reload_uncommitted_tx)) => {
+                std::thread::spawn(move || {
+                    let result = get_staged_filenames_diff_from_path(path.as_path()).map_err(|error| error.to_string());
+                    current_dirty_worktrees(path.as_path(), &result).into_iter().for_each(|worktrees| {
+                        let _ = reload_metadata_tx.send(GraphCommand::UpdateWorktrees { generation, worktrees });
+                    });
+                    let _ = reload_uncommitted_tx.send(GraphEvent::Uncommitted { generation, result });
+                });
+            },
+            _ => {},
         }
     }
 
@@ -1191,53 +1194,55 @@ impl App {
     }
 
     fn handle_lookup_result(&mut self, repo: Option<&git2::Repository>, request_id: RequestId, result: GraphLookupResult) {
-        let Some((pending_id, action)) = self.graph.pending_lookup.take() else {
-            return;
-        };
-        if request_id != pending_id {
-            self.graph.pending_lookup = Some((pending_id, action));
-            return;
-        }
-
-        let should_restore_selection = !matches!(action, PendingGraphLookup::RestoreSelection);
-        match (action, result) {
-            (PendingGraphLookup::SelectIndex, GraphLookupResult::Index(Some(index))) => {
-                self.select_graph_index_from_lookup(repo, index);
-                self.modal_input.clear();
-                self.focus = Focus::Viewport;
-            },
-            (PendingGraphLookup::RestoreSelection, GraphLookupResult::Index(Some(index))) => {
-                let selected_offset = self.graph.pending_selection_restore.map(|restore| restore.selected_offset).unwrap_or_default();
-                self.graph.pending_selection_restore = None;
-                self.restore_graph_index_from_lookup(repo, index, selected_offset);
-            },
-            (PendingGraphLookup::RestoreSelection, GraphLookupResult::Index(None)) if self.graph.is_complete => {
-                self.graph.pending_selection_restore = None;
-            },
-            (PendingGraphLookup::SelectPaneRow, GraphLookupResult::PaneRow(Some(row))) => {
-                self.open_graph_pane_row(row);
-                self.modal_input.clear();
-            },
-            (PendingGraphLookup::CacheGraphRow, GraphLookupResult::GraphRow(Some(row))) => {
-                let index = row.index;
-                self.cache_graph_row(row);
-                (index == self.graph_selected && index != 0)
-                    .then(|| self.graph_identity_at(index))
-                    .flatten()
-                    .into_iter()
-                    .for_each(|identity| self.refresh_current_diff_for_identity_from_event(repo, identity));
-            },
-            (PendingGraphLookup::OpenInspector, GraphLookupResult::GraphRow(Some(row))) => {
-                let index = row.index;
-                self.cache_graph_row(row);
-                if index == self.graph_selected {
-                    self.graph_identity_at(index).into_iter().for_each(|identity| self.refresh_current_diff_for_identity_from_event(repo, identity));
-                    self.layout_config.is_inspector = true;
-                    self.focus = Focus::Inspector;
+        let should_restore_selection = match self.graph.pending_lookup.take() {
+            Some((pending_id, action)) if request_id == pending_id => {
+                let should_restore_selection = !matches!(action, PendingGraphLookup::RestoreSelection);
+                match (action, result) {
+                    (PendingGraphLookup::SelectIndex, GraphLookupResult::Index(Some(index))) => {
+                        self.select_graph_index_from_lookup(repo, index);
+                        self.modal_input.clear();
+                        self.focus = Focus::Viewport;
+                    },
+                    (PendingGraphLookup::RestoreSelection, GraphLookupResult::Index(Some(index))) => {
+                        let selected_offset = self.graph.pending_selection_restore.map(|restore| restore.selected_offset).unwrap_or_default();
+                        self.graph.pending_selection_restore = None;
+                        self.restore_graph_index_from_lookup(repo, index, selected_offset);
+                    },
+                    (PendingGraphLookup::RestoreSelection, GraphLookupResult::Index(None)) if self.graph.is_complete => {
+                        self.graph.pending_selection_restore = None;
+                    },
+                    (PendingGraphLookup::SelectPaneRow, GraphLookupResult::PaneRow(Some(row))) => {
+                        self.open_graph_pane_row(row);
+                        self.modal_input.clear();
+                    },
+                    (PendingGraphLookup::CacheGraphRow, GraphLookupResult::GraphRow(Some(row))) => {
+                        let index = row.index;
+                        self.cache_graph_row(row);
+                        (index == self.graph_selected && index != 0)
+                            .then(|| self.graph_identity_at(index))
+                            .flatten()
+                            .into_iter()
+                            .for_each(|identity| self.refresh_current_diff_for_identity_from_event(repo, identity));
+                    },
+                    (PendingGraphLookup::OpenInspector, GraphLookupResult::GraphRow(Some(row))) => {
+                        let index = row.index;
+                        self.cache_graph_row(row);
+                        (index == self.graph_selected).then(|| self.graph_identity_at(index)).flatten().into_iter().for_each(|identity| {
+                            self.refresh_current_diff_for_identity_from_event(repo, identity);
+                            self.layout_config.is_inspector = true;
+                            self.focus = Focus::Inspector;
+                        });
+                    },
+                    _ => {},
                 }
+                should_restore_selection
             },
-            _ => {},
-        }
+            Some(pending) => {
+                self.graph.pending_lookup = Some(pending);
+                false
+            },
+            None => false,
+        };
 
         if should_restore_selection {
             self.request_pending_graph_selection_restore_lookup();
@@ -1287,20 +1292,15 @@ impl App {
                 self.request_pending_graph_selection_restore_lookup();
             },
             GraphEvent::GraphWindow { generation, request_id, version, start, end, total, head_alias, rows, history } if generation == self.graph.generation => {
-                let Some((pending_id, pending_start, pending_end)) = self.graph.requested_graph else {
-                    return;
-                };
-                if request_id < pending_id || start != pending_start || end != pending_end {
-                    return;
+                if self.graph.requested_graph.is_some_and(|(pending_id, pending_start, pending_end)| request_id >= pending_id && start == pending_start && end == pending_end) {
+                    self.graph.version = self.graph.version.max(version);
+                    self.graph.total = total;
+                    self.graph.graph_window = Some(GraphWindowCache { version, start, end, head_alias, rows, history });
+                    self.graph.clear_graph_projection();
+                    self.graph.requested_graph = None;
+
+                    self.graph_identity_at(self.graph_selected).into_iter().for_each(|identity| self.refresh_current_diff_for_identity_from_event(repo, identity));
                 }
-
-                self.graph.version = self.graph.version.max(version);
-                self.graph.total = total;
-                self.graph.graph_window = Some(GraphWindowCache { version, start, end, head_alias, rows, history });
-                self.graph.clear_graph_projection();
-                self.graph.requested_graph = None;
-
-                self.graph_identity_at(self.graph_selected).into_iter().for_each(|identity| self.refresh_current_diff_for_identity_from_event(repo, identity));
             },
             GraphEvent::PaneWindow { generation, version, pane, start, end, total, rows } if generation == self.graph.generation => {
                 let cache = PaneWindowCache { version, start, end, total, rows };
@@ -1378,11 +1378,7 @@ impl App {
     }
 
     pub(crate) fn graph_oid_for_identity(&self, identity: GraphIndexIdentity) -> Option<Oid> {
-        self.graph_row_at(identity.index)
-            .filter(|row| row.alias == identity.alias)
-            .map(|row| row.oid)
-            .or(Some(identity.oid))
-            .or_else(|| (identity.alias != crate::core::chunk::NONE).then(|| self.oids.get_oid_by_alias(identity.alias)))
+        Some(self.graph_row_at(identity.index).filter(|row| row.alias == identity.alias).map_or(identity.oid, |row| row.oid))
     }
 
     pub(crate) fn selected_commit_diff_is_loaded(&self) -> bool {
