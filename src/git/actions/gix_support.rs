@@ -2,12 +2,7 @@ use crate::git::gix::gix_error as gix_error_impl;
 use git2::{Error, Repository};
 use gix::refs::transaction::{Change, LogChange, PreviousValue, RefEdit, RefLog};
 use gix::refs::{FullName, Target};
-use std::{
-    fs::OpenOptions,
-    io::Write,
-    path::{Path, PathBuf},
-    sync::atomic::AtomicBool,
-};
+use std::{fs::OpenOptions, io::Write, path::PathBuf, sync::atomic::AtomicBool};
 
 pub(crate) fn open_repo(repo: &Repository) -> Result<gix::Repository, Error> {
     let path = repo.workdir().unwrap_or(repo.path());
@@ -17,10 +12,6 @@ pub(crate) fn open_repo(repo: &Repository) -> Result<gix::Repository, Error> {
 pub(crate) fn open_worktree_repo(repo: &Repository) -> Result<gix::Repository, Error> {
     let workdir = repo.workdir().ok_or_else(|| Error::from_str("Repository has no worktree"))?;
     gix::open(workdir.to_path_buf()).map_err(to_git2_error)
-}
-
-pub(crate) fn open_repo_path(path: impl AsRef<Path>) -> Result<gix::Repository, Error> {
-    gix::open(path.as_ref().to_path_buf()).map_err(to_git2_error)
 }
 
 pub(crate) fn head_ref_name() -> FullName {
