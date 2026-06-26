@@ -23,7 +23,11 @@ fn open_repo_path(path: PathBuf, options: gix::open::Options) -> Result<gix::Rep
 }
 
 fn open_repo(repo: &Repository) -> Result<gix::Repository, Error> {
-    open_repo_path(gix_path(repo), if repo.workdir().is_some() { gix::open::Options::default() } else { gix::open::Options::default().open_path_as_is(true) })
+    let options = match repo.workdir() {
+        Some(_) => gix::open::Options::default(),
+        None => gix::open::Options::default().open_path_as_is(true),
+    };
+    open_repo_path(gix_path(repo), options)
 }
 
 fn head_branch(repo: &gix::Repository) -> Option<String> {

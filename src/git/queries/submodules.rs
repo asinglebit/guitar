@@ -120,23 +120,22 @@ fn file_contains_gitmodules_path(path: &Path) -> bool {
 }
 
 pub fn list_submodules(repo: &Repository) -> Result<Vec<SubmoduleEntry>, git2::Error> {
-    if !has_committed_or_workdir_submodule_metadata(repo) {
-        return Ok(Vec::new());
-    }
-
-    let gix_repo = open_repo(repo)?;
-    let workdir = repo.workdir().map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from("."));
-    list_submodules_from_gix_repo(&gix_repo, workdir)
+    has_committed_or_workdir_submodule_metadata(repo)
+        .then(|| {
+            let gix_repo = open_repo(repo)?;
+            let workdir = repo.workdir().map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from("."));
+            list_submodules_from_gix_repo(&gix_repo, workdir)
+        })
+        .transpose()
+        .map(Option::unwrap_or_default)
 }
 
 pub fn list_submodules_from_path(path: impl AsRef<Path>) -> Result<Vec<SubmoduleEntry>, git2::Error> {
     let path = path.as_ref();
-    if !has_committed_or_workdir_submodule_metadata_from_path(path) {
-        return Ok(Vec::new());
-    }
-
-    let gix_repo = open_repo_path(path)?;
-    list_submodules_from_gix_repo(&gix_repo, path.to_path_buf())
+    has_committed_or_workdir_submodule_metadata_from_path(path)
+        .then(|| open_repo_path(path).and_then(|gix_repo| list_submodules_from_gix_repo(&gix_repo, path.to_path_buf())))
+        .transpose()
+        .map(Option::unwrap_or_default)
 }
 
 fn list_submodules_from_gix_repo(gix_repo: &gix::Repository, workdir: PathBuf) -> Result<Vec<SubmoduleEntry>, git2::Error> {
