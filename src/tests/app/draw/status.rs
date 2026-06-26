@@ -173,7 +173,7 @@ fn status_preserves_known_empty_commit_diff_state() {
     let mut app = status_app();
     let oid = Oid::zero();
     let alias = app.oids.get_alias_by_oid(oid);
-    let identity = GraphIndexIdentity { index: 1, alias };
+    let identity = GraphIndexIdentity { index: 1, alias, oid };
     app.graph_selected = 1;
     app.graph.index_rows.insert(1, graph_row(1, alias, oid));
     app.current_diff_identity = Some(identity);

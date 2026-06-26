@@ -109,11 +109,11 @@ impl App {
 
     fn append_settings_keybinding_rows(&mut self, lines: &mut Vec<Line<'static>>, mode: InputMode, keymap: &ModeKeymap, width: usize) {
         let rendered = render_keybindings(&self.theme, keymap, width);
-        for (idx, ((kb, cmd), kb_line)) in keymap.iter().zip(rendered).enumerate() {
+        keymap.iter().zip(rendered).enumerate().for_each(|(idx, ((kb, cmd), kb_line))| {
             let spans: Vec<Span<'static>> = kb_line.spans.iter().map(|span| Span::styled(span.content.clone(), self.settings_zebra_style(idx, span.style))).collect();
             lines.push(Line::from(spans).centered());
             self.add_settings_selection(lines, SettingsSelectionKind::KeyBinding(KeymapSelection::new(mode, kb.clone(), cmd.clone())));
-        }
+        });
     }
 
     fn settings_text_area(&self) -> (u16, u16) {
@@ -255,9 +255,8 @@ impl App {
         lines.push(self.settings_filled_line(settings_text::ACTIONS(), settings_text::REMOTES_ACTIONS_DETAIL(), width, Style::default().fg(self.theme.COLOR_TEXT)));
         lines.push(Line::default());
 
-        let remotes = self.remotes.clone();
-        match remotes.as_slice() {
-            [] => {
+        match self.remotes.is_empty() {
+            true => {
                 lines.push(self.settings_filled_line(settings_text::DEFAULT_REMOTE(), format!(" {} ", common::NONE()).as_str(), width, Style::default().fg(self.theme.COLOR_TEXT)));
                 lines.push(Line::default());
                 lines.push(self.settings_filled_line(
@@ -269,8 +268,8 @@ impl App {
                 self.add_settings_selection(lines, SettingsSelectionKind::RemoteAdd);
                 lines.push(self.settings_filled_line(&format!(" {}", empty::NO_REMOTES()), "", width, Style::default().fg(self.theme.COLOR_TEXT)));
             },
-            remotes => {
-                let default_remote = effective_default_remote_from_remotes(repo.workdir().unwrap_or(repo.path()), remotes);
+            false => {
+                let default_remote = effective_default_remote_from_remotes(repo.workdir().unwrap_or(repo.path()), &self.remotes);
                 let default_label = default_remote.as_deref().unwrap_or(common::NONE());
                 lines.push(self.settings_filled_line(settings_text::DEFAULT_REMOTE(), format!(" {default_label} ").as_str(), width, Style::default().fg(self.theme.COLOR_GRASS)));
                 lines.push(Line::default());
@@ -282,21 +281,26 @@ impl App {
                 ));
                 self.add_settings_selection(lines, SettingsSelectionKind::RemoteAdd);
 
-                for (idx, remote) in remotes.iter().enumerate() {
-                    let effective_push_url = remote.push_url.as_deref().filter(|url| !url.is_empty()).unwrap_or(remote.url.as_str());
-                    let is_default = default_remote.as_deref() == Some(remote.name.as_str());
-                    let marker = if is_default { format!(" {}", common::DEFAULT_REMOTE()) } else { String::new() };
-
-                    let style = self.settings_row_style(idx + 1, if is_default { self.theme.COLOR_GRASS } else { self.theme.COLOR_TEXT });
-
-                    lines.push(self.settings_filled_line(format!(" {} {}", remote.name, settings_text::FETCH_SUFFIX()).as_str(), format!(" {}{marker} ", remote.url).as_str(), width, style));
-                    self.add_settings_selection(lines, SettingsSelectionKind::Remote(remote.name.clone()));
-
-                    if !effective_push_url.is_empty() {
-                        lines.push(self.settings_filled_line(format!(" {} {}", remote.name, settings_text::PUSH_SUFFIX()).as_str(), format!(" {effective_push_url}{marker} ").as_str(), width, style));
-                        self.add_settings_selection(lines, SettingsSelectionKind::Remote(remote.name.clone()));
-                    }
-                }
+                (0..self.remotes.len()).for_each(|idx| {
+                    let (name, fetch_line, push_line) = {
+                        let remote = &self.remotes[idx];
+                        let effective_push_url = remote.push_url.as_deref().filter(|url| !url.is_empty()).unwrap_or(remote.url.as_str());
+                        let is_default = default_remote.as_deref() == Some(remote.name.as_str());
+                        let marker = if is_default { format!(" {}", common::DEFAULT_REMOTE()) } else { String::new() };
+                        let style = self.settings_row_style(idx + 1, if is_default { self.theme.COLOR_GRASS } else { self.theme.COLOR_TEXT });
+                        let fetch_line = self.settings_filled_line(format!(" {} {}", remote.name, settings_text::FETCH_SUFFIX()).as_str(), format!(" {}{marker} ", remote.url).as_str(), width, style);
+                        let push_line = (!effective_push_url.is_empty()).then(|| {
+                            self.settings_filled_line(format!(" {} {}", remote.name, settings_text::PUSH_SUFFIX()).as_str(), format!(" {effective_push_url}{marker} ").as_str(), width, style)
+                        });
+                        (remote.name.clone(), fetch_line, push_line)
+                    };
+                    lines.push(fetch_line);
+                    self.add_settings_selection(lines, SettingsSelectionKind::Remote(name.clone()));
+                    push_line.into_iter().for_each(|line| {
+                        lines.push(line);
+                        self.add_settings_selection(lines, SettingsSelectionKind::Remote(name.clone()));
+                    });
+                });
             },
         }
     }
@@ -389,14 +393,14 @@ impl App {
     }
 
     fn append_settings_layout_command_rows(&mut self, lines: &mut Vec<Line<'static>>, width: usize, commands: &[SettingsCommandRow]) {
-        for (idx, (fallback, command, label)) in commands.iter().enumerate() {
+        commands.iter().enumerate().for_each(|(idx, (fallback, command, label))| {
             let key = self.settings_layout_command_key(command, fallback);
             let label = format!(" {} {}:", key, label());
             let state = format!(" {} ", self.settings_layout_command_marker(command));
             let style = self.settings_row_style(idx, self.theme.COLOR_TEXT);
             lines.push(self.settings_filled_line(&label, &state, width, style));
             self.add_settings_selection(lines, SettingsSelectionKind::LayoutCommand(command.clone()));
-        }
+        });
     }
 
     fn append_settings_layout(&mut self, lines: &mut Vec<Line<'static>>, width: usize) {

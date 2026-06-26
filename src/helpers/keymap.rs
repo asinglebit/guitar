@@ -821,12 +821,11 @@ fn rewrite_untouched_ctrl_graph_metadata_defaults(map: &mut ModeKeymap) -> bool 
 
 fn insert_default_binding_if_available(map: &mut ModeKeymap, key: KeyBinding, command: Command) -> bool {
     let occupied = map.values().any(|existing| existing == &command) || map.contains_key(&key);
-    if occupied {
-        return false;
-    }
-
-    map.insert(key, command);
-    true
+    (!occupied)
+        .then(|| {
+            map.insert(key, command);
+        })
+        .is_some()
 }
 
 fn insert_default_binding_and_mark_changed(map: &mut ModeKeymap, key: KeyBinding, command: Command, changed: &mut bool) {

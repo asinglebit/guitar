@@ -57,9 +57,9 @@ impl App {
     }
 
     fn push_conflict_status_rows<'a>(&self, rows: &mut Vec<StatusRow<'a>>, files: &'a [String], max_width: usize) {
-        for file in files {
-            rows.push(StatusRow::file(file, &self.symbols.status.conflict_spaced, Style::default().fg(self.theme.COLOR_ORANGE), Style::default().fg(self.theme.COLOR_ORANGE), max_width));
-        }
+        rows.extend(
+            files.iter().map(|file| StatusRow::file(file, &self.symbols.status.conflict_spaced, Style::default().fg(self.theme.COLOR_ORANGE), Style::default().fg(self.theme.COLOR_ORANGE), max_width)),
+        );
     }
 
     fn push_file_status_rows<'a>(&self, rows: &mut Vec<StatusRow<'a>>, files: &'a [String], status: FileStatus, max_width: usize) {
@@ -71,9 +71,7 @@ impl App {
             FileStatus::Other => (self.symbols.status.other_spaced.as_str(), self.theme.COLOR_TEXT),
         };
 
-        for file in files {
-            rows.push(StatusRow::file(file, symbol, Style::default().fg(color), Style::default().fg(self.theme.COLOR_TEXT), max_width));
-        }
+        rows.extend(files.iter().map(|file| StatusRow::file(file, symbol, Style::default().fg(color), Style::default().fg(self.theme.COLOR_TEXT), max_width)));
     }
 
     fn push_file_change_rows<'a>(&self, rows: &mut Vec<StatusRow<'a>>, files: &'a FileChanges, max_width: usize) {
@@ -92,17 +90,15 @@ impl App {
 
     fn commit_status_rows(&self, visible_height: usize, max_width: usize) -> BuiltStatusRows<'_> {
         let mut rows = Vec::with_capacity(self.current_diff.len());
-        for file_change in &self.current_diff {
+        self.current_diff.iter().for_each(|file_change| {
             self.push_file_status_rows(&mut rows, std::slice::from_ref(&file_change.filename), file_change.status, max_width);
-        }
+        });
 
         if rows.is_empty() { self.status_empty_rows(visible_height, max_width, empty::NO_STAGED_CHANGES()) } else { BuiltStatusRows { rows, has_selectable_changes: true } }
     }
 
     fn push_empty_status_row(&self, rows: &mut Vec<StatusRow<'_>>, visible_height: usize, max_width: usize, message: &str) {
-        for _ in 0..empty_state_top_padding(visible_height) {
-            rows.push(StatusRow::plain(Line::from("")));
-        }
+        rows.extend((0..empty_state_top_padding(visible_height)).map(|_| StatusRow::plain(Line::from(""))));
         rows.push(StatusRow::plain(Line::from(Span::styled(
             center_line(&truncate_with_ellipsis(&format!("{} {message}", self.symbols.empty_state.mark), max_width), max_width + 3),
             Style::default().fg(self.theme.COLOR_GREY_800),
@@ -169,7 +165,7 @@ impl App {
         );
 
         // Bottom status pane is reserved for unstaged files on the pseudo-row.
-        if is_showing_uncommitted {
+        is_showing_uncommitted.then(|| {
             self.status_bottom_selected = render_status_pane(
                 frame,
                 StatusPaneConfig {
@@ -191,7 +187,7 @@ impl App {
                     theme: &self.theme,
                 },
             );
-        }
+        });
     }
 }
 
@@ -295,35 +291,27 @@ fn render_status_scrollbar(frame: &mut Frame, config: &StatusPaneConfig<'_, '_>,
 }
 
 fn status_scrollbar_begin<'a>(config: &'a StatusPaneConfig<'_, '_>) -> Option<&'a str> {
-    if config.is_zen {
-        return Some(config.symbols.scrollbar.begin.as_str());
-    }
-
-    match config.kind {
-        StatusPaneKind::Top if config.top_has_inspector_border => Some(config.symbols.border.vertical.as_str()),
-        StatusPaneKind::Top => Some(config.symbols.scrollbar.begin.as_str()),
-        StatusPaneKind::Bottom => Some(config.symbols.border.vertical.as_str()),
+    match (config.is_zen, config.kind) {
+        (true, _) => Some(config.symbols.scrollbar.begin.as_str()),
+        (false, StatusPaneKind::Top) if config.top_has_inspector_border => Some(config.symbols.border.vertical.as_str()),
+        (false, StatusPaneKind::Top) => Some(config.symbols.scrollbar.begin.as_str()),
+        (false, StatusPaneKind::Bottom) => Some(config.symbols.border.vertical.as_str()),
     }
 }
 
 fn status_scrollbar_end<'a>(config: &'a StatusPaneConfig<'_, '_>) -> Option<&'a str> {
-    if config.is_zen {
-        return Some(config.symbols.scrollbar.end.as_str());
-    }
-
-    match config.kind {
-        StatusPaneKind::Top if config.is_uncommitted_row => Some(config.symbols.border.t_right.as_str()),
-        StatusPaneKind::Top | StatusPaneKind::Bottom => Some(config.symbols.scrollbar.end.as_str()),
+    match (config.is_zen, config.kind) {
+        (true, _) => Some(config.symbols.scrollbar.end.as_str()),
+        (false, StatusPaneKind::Top) if config.is_uncommitted_row => Some(config.symbols.border.t_right.as_str()),
+        (false, StatusPaneKind::Top | StatusPaneKind::Bottom) => Some(config.symbols.scrollbar.end.as_str()),
     }
 }
 
 fn centered_loading_lines(visible_height: usize, width: usize, style: Style) -> Vec<StatusRow<'static>> {
-    let mut lines = Vec::new();
-    for _ in 0..empty_state_top_padding(visible_height) {
-        lines.push(StatusRow::plain(Line::from("")));
-    }
-    lines.push(StatusRow::plain(Line::from(Span::styled(center_line(&truncate_with_ellipsis(common::LOADING(), width), width), style))));
-    lines
+    (0..empty_state_top_padding(visible_height))
+        .map(|_| StatusRow::plain(Line::from("")))
+        .chain(std::iter::once(StatusRow::plain(Line::from(Span::styled(center_line(&truncate_with_ellipsis(common::LOADING(), width), width), style)))))
+        .collect()
 }
 
 fn status_list_items<'a>(config: StatusListConfig<'a, '_>) -> Vec<ListItem<'a>> {

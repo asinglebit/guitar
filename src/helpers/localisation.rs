@@ -82,14 +82,7 @@ fn language_path() -> PathBuf {
 }
 
 pub fn load_language_from_path(path: &Path) -> Language {
-    if let Ok(contents) = fs::read_to_string(path)
-        && let Ok(language_id) = facet_json::from_str::<String>(&contents)
-        && let Some(language) = Language::from_id(&language_id)
-    {
-        return language;
-    }
-
-    Language::English
+    fs::read_to_string(path).ok().and_then(|contents| facet_json::from_str::<String>(&contents).ok()).and_then(|language_id| Language::from_id(&language_id)).unwrap_or(Language::English)
 }
 
 pub fn save_language_to_path(path: &Path, language: Language) -> Result<(), Box<dyn std::error::Error>> {
