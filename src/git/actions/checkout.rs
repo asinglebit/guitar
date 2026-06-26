@@ -8,10 +8,11 @@ use im::HashSet;
 use std::collections::HashMap;
 
 fn set_branch_upstream(repo: &gix::Repository, branch: &str, remote: &str) -> Result<(), git2::Error> {
+    let merge_ref = branch_ref_name(branch)?;
+    let branch_name = branch.as_bytes().as_bstr();
     edit_repo_config(repo, |config| {
-        config.set_raw_value_by("branch", Some(branch.as_bytes().as_bstr()), "remote", remote.as_bytes().as_bstr()).map_err(to_git2_error)?;
-        let merge_value = format!("refs/heads/{branch}");
-        config.set_raw_value_by("branch", Some(branch.as_bytes().as_bstr()), "merge", merge_value.as_bytes().as_bstr()).map_err(to_git2_error)?;
+        config.set_raw_value_by("branch", Some(branch_name), "remote", remote.as_bytes().as_bstr()).map_err(to_git2_error)?;
+        config.set_raw_value_by("branch", Some(branch_name), "merge", merge_ref.as_ref()).map_err(to_git2_error)?;
         Ok(true)
     })
 }
