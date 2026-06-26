@@ -50,23 +50,35 @@ pub fn stage_all(repo: &Repository) -> Result<(), Error> {
 fn stage_submodule_pointer_change(repo: &Repository, submodule: &crate::core::submodules::SubmoduleEntry) -> Result<(), Error> {
     let path = submodule.path.as_path();
     let name = submodule.name.as_str();
+    match submodule_pointer_action(repo, submodule, path, name) {
+        SubmodulePointerAction::None => Ok(()),
+        SubmodulePointerAction::Remove => {
+            let mut index = repo.index()?;
+            if index.get_path(path, 0).is_some() {
+                index.remove_path(path)?;
+                index.write()?;
+            }
+            Ok(())
+        },
+        SubmodulePointerAction::StageHead => stage_submodule_head(repo, name),
+    }
+}
+
+enum SubmodulePointerAction {
+    None,
+    Remove,
+    StageHead,
+}
+
+fn submodule_pointer_action(repo: &Repository, submodule: &crate::core::submodules::SubmoduleEntry, path: &Path, name: &str) -> SubmodulePointerAction {
     let status = submodule_status_for(repo, name, path);
     let has_pointer_change = status.is_wd_added() || status.is_wd_deleted() || status.is_wd_modified() || submodule.workdir.zip(submodule.index).is_some_and(|(workdir, index)| workdir != index);
 
     if !has_pointer_change {
-        return Ok(());
+        return SubmodulePointerAction::None;
     }
 
-    if status.is_wd_deleted() {
-        let mut index = repo.index()?;
-        if index.get_path(path, 0).is_some() {
-            index.remove_path(path)?;
-            index.write()?;
-        }
-        return Ok(());
-    }
-
-    stage_submodule_head(repo, name)
+    if status.is_wd_deleted() { SubmodulePointerAction::Remove } else { SubmodulePointerAction::StageHead }
 }
 
 fn submodule_status_for(repo: &Repository, name: &str, path: &Path) -> SubmoduleStatus {

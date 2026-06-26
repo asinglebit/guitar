@@ -27,6 +27,7 @@ pub mod git {
         pub mod committing;
         pub mod conflicts;
         pub mod fetching;
+        pub mod gix_support;
         pub mod merging;
         pub mod network;
         pub mod pushing;
