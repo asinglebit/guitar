@@ -28,15 +28,12 @@ impl App {
     pub fn handle_key_event(&mut self, key_event: KeyEvent) {
         let key_binding = KeyBinding::new(key_event.code, key_event.modifiers);
         let current_mode = self.mode;
+        let consumed = self.consume_priority_key_event(key_event);
+        let command = (!consumed).then(|| self.keymap_command_for(&key_binding)).flatten();
 
-        if self.consume_priority_key_event(key_event) {
-            self.mode = InputMode::Normal;
-            return;
-        }
+        command.into_iter().for_each(|command| self.dispatch_keymap_command(&command));
 
-        self.keymap_command_for(&key_binding).into_iter().for_each(|command| self.dispatch_keymap_command(&command));
-
-        if current_mode == InputMode::Action {
+        if consumed || current_mode == InputMode::Action {
             self.mode = InputMode::Normal;
         }
     }

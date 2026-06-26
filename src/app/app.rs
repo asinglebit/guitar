@@ -844,45 +844,6 @@ impl App {
         run_result
     }
 
-    fn draw_graph_if_repo(&mut self, frame: &mut Frame) {
-        if let Some(repo) = self.git2_repo() {
-            self.draw_graph(frame, repo.as_ref());
-        }
-    }
-
-    fn draw_settings_if_repo(&mut self, frame: &mut Frame) {
-        if let Some(repo) = self.git2_repo() {
-            self.draw_settings(frame, repo.as_ref());
-        }
-    }
-
-    fn draw_stashes_if_repo(&mut self, frame: &mut Frame) {
-        if let Some(repo) = self.git2_repo() {
-            self.draw_stashes(frame, repo.as_ref());
-        }
-    }
-
-    fn draw_inspector_if_repo(&mut self, frame: &mut Frame) {
-        if self.layout_config.is_inspector
-            && (self.graph_selected != 0 || self.uncommitted.has_conflicts)
-            && let Some(repo) = self.git2_repo()
-        {
-            self.draw_inspector(frame, repo.as_ref());
-        }
-    }
-
-    fn draw_statusbar_if_repo(&mut self, frame: &mut Frame) {
-        if let Some(repo) = self.git2_repo() {
-            self.draw_statusbar(frame, repo.as_ref());
-        }
-    }
-
-    fn draw_modal_delete_branch_if_repo(&mut self, frame: &mut Frame) {
-        if let Some(repo) = self.git2_repo() {
-            self.draw_modal_delete_branch(frame, repo.as_ref());
-        }
-    }
-
     pub fn draw(&mut self, frame: &mut Frame) {
         // Layout must be recomputed every frame because terminal size and focus can change.
         self.layout(frame);
@@ -907,11 +868,15 @@ impl App {
         );
 
         if self.repo.is_some() {
-            match self.viewport {
-                Viewport::Graph => self.draw_graph_if_repo(frame),
-                Viewport::Viewer => self.draw_viewer(frame),
-                Viewport::Splash => self.draw_splash(frame),
-                Viewport::Settings => self.draw_settings_if_repo(frame),
+            let git2_repo = self.git2_repo();
+            let repo = git2_repo.as_deref();
+
+            match (&self.viewport, repo) {
+                (Viewport::Graph, Some(repo)) => self.draw_graph(frame, repo),
+                (Viewport::Settings, Some(repo)) => self.draw_settings(frame, repo),
+                (Viewport::Viewer, _) => self.draw_viewer(frame),
+                (Viewport::Splash, _) => self.draw_splash(frame),
+                _ => {},
             }
 
             if !is_splash {
@@ -927,8 +892,10 @@ impl App {
                     if self.layout_config.is_tags {
                         self.draw_tags(frame);
                     }
-                    if self.layout_config.is_stashes {
-                        self.draw_stashes_if_repo(frame);
+                    if self.layout_config.is_stashes
+                        && let Some(repo) = repo
+                    {
+                        self.draw_stashes(frame, repo);
                     }
                     if self.layout_config.is_reflogs {
                         self.draw_reflogs(frame);
@@ -945,19 +912,24 @@ impl App {
                     if self.layout_config.is_status {
                         self.draw_status(frame);
                     }
-                    self.draw_inspector_if_repo(frame);
+                    if self.layout_config.is_inspector
+                        && (self.graph_selected != 0 || self.uncommitted.has_conflicts)
+                        && let Some(repo) = repo
+                    {
+                        self.draw_inspector(frame, repo);
+                    }
                 },
             }
 
-            if !is_splash {
-                self.draw_statusbar_if_repo(frame);
+            if !is_splash && let Some(repo) = repo {
+                self.draw_statusbar(frame, repo);
             }
 
             self.modal_area = None;
             match self.focus {
                 Focus::ModalCheckout => self.draw_modal_checkout(frame),
                 Focus::ModalSolo => self.draw_modal_solo(frame),
-                Focus::ModalDeleteBranch => self.draw_modal_delete_branch_if_repo(frame),
+                Focus::ModalDeleteBranch => repo.into_iter().for_each(|repo| self.draw_modal_delete_branch(frame, repo)),
                 Focus::ModalWorktreeChooser => self.draw_modal_worktree_chooser(frame),
                 Focus::ModalRemoveWorktree => self.draw_modal_remove_worktree(frame),
                 Focus::ModalRemoteAction => self.draw_modal_remote_action(frame),

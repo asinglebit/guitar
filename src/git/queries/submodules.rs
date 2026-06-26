@@ -138,52 +138,56 @@ pub fn list_submodules_from_path(path: impl AsRef<Path>) -> Result<Vec<Submodule
         .map(Option::unwrap_or_default)
 }
 
+fn submodule_content_flags(status: Option<&gix::submodule::Status>) -> (bool, bool) {
+    status.and_then(|status| status.changes.as_ref()).map(|changes| changed_content_flags(changes)).unwrap_or((false, false))
+}
+
+fn submodule_state(submodule: &gix::Submodule<'_>, status: Option<&gix::submodule::Status>) -> gix::submodule::State {
+    status.map(|status| status.state).unwrap_or_else(|| submodule.state().unwrap_or_default())
+}
+
+fn submodule_entry(submodule: gix::Submodule<'_>, workdir: &Path) -> Option<SubmoduleEntry> {
+    let path = gix::path::from_bstring(submodule.path().ok()?.into_owned());
+    let name = submodule.name().to_str().ok().map(str::to_string).unwrap_or_else(|| path.display().to_string());
+    let opened = submodule.open().ok().flatten();
+    let status = submodule.status(gix::submodule::config::Ignore::None, false).ok();
+    let state = submodule_state(&submodule, status.as_ref());
+    let branch = opened.as_ref().and_then(current_branch).or_else(|| configured_branch(submodule.branch().ok().flatten()));
+    let head = submodule.head_id().ok().flatten();
+    let index = submodule.index_id().ok().flatten();
+    let workdir_id = opened.as_ref().and_then(|repo| repo.head_id().ok().map(|id| id.detach()));
+    let absolute_path = workdir.join(&path);
+
+    let (has_modified_content, has_untracked_content) = submodule_content_flags(status.as_ref());
+    let is_index_modified = head != index;
+    let has_new_commits = workdir_id.zip(index).is_some_and(|(workdir, index)| workdir != index);
+    let is_workdir_modified = has_new_commits || has_modified_content || has_untracked_content;
+
+    Some(SubmoduleEntry {
+        name,
+        path,
+        absolute_path,
+        url: submodule.url().ok().map(|url| url.to_string()),
+        branch,
+        head,
+        index,
+        workdir: workdir_id,
+        is_open: opened.is_some(),
+        is_uninitialized: !state.repository_exists,
+        is_in_head: head.is_some(),
+        is_in_index: index.is_some(),
+        is_in_config: state.superproject_configuration,
+        is_in_workdir: state.worktree_checkout,
+        is_index_modified,
+        is_workdir_modified,
+        has_new_commits,
+        has_modified_content,
+        has_untracked_content,
+    })
+}
+
 fn list_submodules_from_gix_repo(gix_repo: &gix::Repository, workdir: PathBuf) -> Result<Vec<SubmoduleEntry>, git2::Error> {
-    let mut entries = gix_repo
-        .submodules()
-        .map_err(gix_error)?
-        .into_iter()
-        .flatten()
-        .filter_map(|submodule| {
-            let path = gix::path::from_bstring(submodule.path().ok()?.into_owned());
-            let name = submodule.name().to_str().ok().map(str::to_string).unwrap_or_else(|| path.display().to_string());
-            let opened = submodule.open().ok().flatten();
-            let status = submodule.status(gix::submodule::config::Ignore::None, false).ok();
-            let state = status.as_ref().map(|status| status.state).unwrap_or_else(|| submodule.state().unwrap_or_default());
-            let branch = opened.as_ref().and_then(current_branch).or_else(|| configured_branch(submodule.branch().ok().flatten()));
-            let head = submodule.head_id().ok().flatten();
-            let index = submodule.index_id().ok().flatten();
-            let workdir_id = opened.as_ref().and_then(|repo| repo.head_id().ok().map(|id| id.detach()));
-            let absolute_path = workdir.join(&path);
-
-            let (has_modified_content, has_untracked_content) = status.as_ref().and_then(|status| status.changes.as_ref().map(|changes| changed_content_flags(changes))).unwrap_or((false, false));
-            let is_index_modified = head != index;
-            let has_new_commits = workdir_id.zip(index).is_some_and(|(workdir, index)| workdir != index);
-            let is_workdir_modified = has_new_commits || has_modified_content || has_untracked_content;
-
-            Some(SubmoduleEntry {
-                name,
-                path,
-                absolute_path,
-                url: submodule.url().ok().map(|url| url.to_string()),
-                branch,
-                head,
-                index,
-                workdir: workdir_id,
-                is_open: opened.is_some(),
-                is_uninitialized: !state.repository_exists,
-                is_in_head: head.is_some(),
-                is_in_index: index.is_some(),
-                is_in_config: state.superproject_configuration,
-                is_in_workdir: state.worktree_checkout,
-                is_index_modified,
-                is_workdir_modified,
-                has_new_commits,
-                has_modified_content,
-                has_untracked_content,
-            })
-        })
-        .collect::<Vec<_>>();
+    let mut entries = gix_repo.submodules().map_err(gix_error)?.into_iter().flatten().filter_map(|submodule| submodule_entry(submodule, &workdir)).collect::<Vec<_>>();
 
     entries.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(entries)
