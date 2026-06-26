@@ -27,24 +27,23 @@ fn graph_row(index: usize, alias: u32, oid: Oid, summary: &str) -> GraphRow {
         index,
         alias,
         oid,
-        short_oid: oid.to_string()[..9].to_string(),
         summary: summary.to_string(),
         committer_date: String::new(),
         committer_name: String::new(),
         is_merge: false,
         has_any_branch: false,
-        branches: Vec::new(),
-        tags: Vec::new(),
+        branches: Default::default(),
+        tags: Default::default(),
         is_stash: false,
         stash_lane: None,
-        worktrees: Vec::new(),
+        worktrees: Default::default(),
         has_current_worktree: false,
         reflog: None,
     }
 }
 
 fn history_row(graph_index: usize, oid: Oid) -> GraphFileHistoryRow {
-    GraphFileHistoryRow { graph_index, oid, short_oid: oid.to_string()[..8].to_string(), summary: "history".to_string(), status: FileStatus::Modified }
+    GraphFileHistoryRow { graph_index, oid, summary: "history".to_string(), status: FileStatus::Modified }
 }
 
 fn app_with_cached_window(start: usize, summaries: &[&str], oid: Oid) -> App {

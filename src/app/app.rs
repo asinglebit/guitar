@@ -872,7 +872,7 @@ impl App {
             let repo = git2_repo.as_deref();
 
             match (&self.viewport, repo) {
-                (Viewport::Graph, Some(repo)) => self.draw_graph(frame, repo),
+                (Viewport::Graph, Some(repo)) => self.draw_graph(frame, Some(repo)),
                 (Viewport::Settings, Some(repo)) => self.draw_settings(frame, repo),
                 (Viewport::Viewer, _) => self.draw_viewer(frame),
                 (Viewport::Splash, _) => self.draw_splash(frame),
@@ -921,8 +921,8 @@ impl App {
                 },
             }
 
-            if !is_splash && let Some(repo) = repo {
-                self.draw_statusbar(frame, repo);
+            if !is_splash {
+                self.draw_statusbar(frame);
             }
 
             self.modal_area = None;

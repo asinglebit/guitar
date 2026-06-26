@@ -19,16 +19,17 @@ impl App {
     }
 
     fn head_status_label(&self) -> Span<'static> {
-        let Some(current) = self.worktrees.entries.iter().find(|entry| entry.is_current) else {
-            return Span::styled(status_text::NO_HEAD_NO_COMMITS(), Style::default().fg(self.theme.COLOR_TEXT));
-        };
-        if let Some(branch) = current.branch.as_deref() {
-            return Span::styled(format!("{} {}", self.symbols.branch.local_visible, branch), Style::default().fg(self.theme.COLOR_GRASS));
-        }
-        if let Some(oid) = current.head {
-            return Span::styled(format!("{} #{:.6}", status_text::DETACHED_HEAD(), oid), Style::default().fg(self.theme.COLOR_TEXT));
-        }
-        Span::styled(status_text::NO_HEAD_NO_COMMITS(), Style::default().fg(self.theme.COLOR_TEXT))
+        let text_style = Style::default().fg(self.theme.COLOR_TEXT);
+        self.worktrees
+            .entries
+            .iter()
+            .find(|entry| entry.is_current)
+            .map(|current| match (current.branch.as_deref(), current.head) {
+                (Some(branch), _) => Span::styled(format!("{} {}", self.symbols.branch.local_visible, branch), Style::default().fg(self.theme.COLOR_GRASS)),
+                (None, Some(oid)) => Span::styled(format!("{} #{:.6}", status_text::DETACHED_HEAD(), oid), text_style),
+                (None, None) => Span::styled(status_text::NO_HEAD_NO_COMMITS(), text_style),
+            })
+            .unwrap_or_else(|| Span::styled(status_text::NO_HEAD_NO_COMMITS(), text_style))
     }
 
     fn statusbar_branch_total(&self) -> usize {
@@ -96,17 +97,16 @@ impl App {
             }
         };
 
-        let icon_spinner = if self.spinner.is_running() { format!("{} ", self.spinner.get_char()) } else { "".to_string() };
+        let count_hint = (total != 0).then(|| {
+            let text = if self.spinner.is_running() { format!("{}/{}{} ", cursor, total, self.spinner.get_char()) } else { format!("{}/{} ", cursor, total) };
+            Span::styled(text, Style::default().fg(self.theme.COLOR_TEXT))
+        });
 
-        let mut right_spans = vec![Span::styled(if total == 0 { "".to_string() } else { format!("{}/{}{} ", cursor, total, icon_spinner) }, Style::default().fg(self.theme.COLOR_TEXT))];
-
-        // Action and zen mode indicators.
-        if self.mode == InputMode::Action {
-            right_spans.push(Span::styled(format!("{} ", self.symbols.graph.commit_branch), Style::default().fg(self.theme.COLOR_GRAPEFRUIT)));
-        }
-        if self.layout_config.is_zen {
-            right_spans.push(Span::styled(format!("{} ", self.symbols.graph.commit_branch), Style::default().fg(self.theme.COLOR_GRASS)));
-        }
+        let action_hint = [
+            (self.mode == InputMode::Action).then(|| Span::styled(format!("{} ", self.symbols.graph.commit_branch), Style::default().fg(self.theme.COLOR_GRAPEFRUIT))),
+            self.layout_config.is_zen.then(|| Span::styled(format!("{} ", self.symbols.graph.commit_branch), Style::default().fg(self.theme.COLOR_GRASS))),
+        ];
+        let right_spans: Vec<_> = count_hint.into_iter().chain(action_hint.into_iter().flatten()).collect();
 
         let title_paragraph = ratatui::widgets::Paragraph::new(Text::from(Line::from(right_spans))).right_aligned().block(Block::default());
 

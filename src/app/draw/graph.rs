@@ -189,18 +189,17 @@ impl App {
 }
 
 fn graph_backdrop_rows<'a>(visible_height: usize, start: usize, selected: Option<usize>, theme: &crate::helpers::palette::Theme) -> Vec<Row<'a>> {
-    let mut rows = Vec::with_capacity(visible_height);
-    for idx in 0..visible_height {
-        let global_idx = start + idx;
-        let mut row = Row::new([WidgetCell::from(Line::default())]);
-        if selected == Some(global_idx) {
-            row = row.style(Style::default().bg(theme.background_or_default(theme.COLOR_GREY_800)));
-        } else if global_idx.is_multiple_of(2) {
-            row = row.style(Style::default().bg(theme.background_or_default(theme.COLOR_GREY_900)));
-        }
-        rows.push(row);
-    }
-    rows
+    (0..visible_height)
+        .map(|idx| {
+            let global_idx = start + idx;
+            let row = Row::new([WidgetCell::from(Line::default())]);
+            match (selected == Some(global_idx), global_idx.is_multiple_of(2)) {
+                (true, _) => row.style(Style::default().bg(theme.background_or_default(theme.COLOR_GREY_800))),
+                (false, true) => row.style(Style::default().bg(theme.background_or_default(theme.COLOR_GREY_900))),
+                (false, false) => row,
+            }
+        })
+        .collect()
 }
 
 fn graph_window_has_stable_visible_page(window: &crate::app::app::GraphWindowCache, target_start: usize, target_end: usize) -> bool {
@@ -209,11 +208,10 @@ fn graph_window_has_stable_visible_page(window: &crate::app::app::GraphWindowCac
 }
 
 fn graph_preload_window(start: usize, end: usize, total_lines: usize, visible_height: usize) -> (usize, usize) {
-    if visible_height == 0 {
-        return (start, end);
+    match visible_height {
+        0 => (start, end),
+        height => (start.saturating_sub(height), end.saturating_add(height).min(total_lines)),
     }
-
-    (start.saturating_sub(visible_height), end.saturating_add(visible_height).min(total_lines))
 }
 
 fn projected_line<'a, 'line>(lines: &'a [Line<'line>], cached_start: usize, target_index: usize) -> Option<&'a Line<'line>> {
@@ -240,29 +238,21 @@ struct GraphRowsWidget<'a, 'line> {
 
 impl Widget for GraphRowsWidget<'_, '_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        if area.is_empty() || self.visible_height == 0 {
-            return;
-        }
+        if !area.is_empty() && self.visible_height != 0 {
+            let columns = graph_columns(area, self.is_shas, self.is_dates, self.is_committers, self.graph_width);
+            (0..self.visible_height.min(area.height as usize)).for_each(|idx| {
+                let global_idx = self.start + idx;
+                let y = area.y.saturating_add(idx as u16);
+                let row_area = Rect::new(area.x, y, area.width, 1);
+                buf.set_style(row_area, row_style(global_idx, idx < self.visible_len, self.selected, self.is_focused, self.search_highlight_indices, self.theme));
 
-        let columns = graph_columns(area, self.is_shas, self.is_dates, self.is_committers, self.graph_width);
-        for idx in 0..self.visible_height.min(area.height as usize) {
-            let global_idx = self.start + idx;
-            let y = area.y.saturating_add(idx as u16);
-            let row_area = Rect::new(area.x, y, area.width, 1);
-            buf.set_style(row_area, row_style(global_idx, idx < self.visible_len, self.selected, self.is_focused, self.search_highlight_indices, self.theme));
-
-            let row = global_idx.checked_sub(self.cached_start).and_then(|source_index| self.cached_rows.get(source_index));
-            if let Some(sha) = columns.sha {
-                render_sha(buf, sha.with_y(y), row, self.selected, self.theme);
-            }
-            render_projected_line(buf, columns.graph.with_y(y), projected_line(&self.graph_lines, self.cached_start, global_idx));
-            if let Some(date) = columns.date {
-                render_date(buf, date.with_y(y), row, self.selected, self.theme);
-            }
-            if let Some(committer) = columns.committer {
-                render_committer(buf, committer.with_y(y), row, self.selected, self.theme);
-            }
-            render_projected_line(buf, columns.message.with_y(y), projected_line(self.message_lines, self.cached_start, global_idx));
+                let row = global_idx.checked_sub(self.cached_start).and_then(|source_index| self.cached_rows.get(source_index));
+                columns.sha.into_iter().for_each(|sha| render_sha(buf, sha.with_y(y), row, self.selected, self.theme));
+                render_projected_line(buf, columns.graph.with_y(y), projected_line(&self.graph_lines, self.cached_start, global_idx));
+                columns.date.into_iter().for_each(|date| render_date(buf, date.with_y(y), row, self.selected, self.theme));
+                columns.committer.into_iter().for_each(|committer| render_committer(buf, committer.with_y(y), row, self.selected, self.theme));
+                render_projected_line(buf, columns.message.with_y(y), projected_line(self.message_lines, self.cached_start, global_idx));
+            });
         }
     }
 }
@@ -275,22 +265,36 @@ struct GraphColumns {
     message: Rect,
 }
 
-fn graph_columns(area: Rect, is_shas: bool, is_dates: bool, is_committers: bool, graph_width: u16) -> GraphColumns {
-    let mut cursor = area.x;
-    let right = area.x.saturating_add(area.width);
-    let mut next_column = |width: u16| {
-        let available = right.saturating_sub(cursor);
-        let actual = width.min(available);
-        let rect = Rect::new(cursor, area.y, actual, 1);
-        cursor = cursor.saturating_add(actual).saturating_add(u16::from(cursor.saturating_add(actual) < right));
-        rect
-    };
+struct GraphColumnCursor {
+    cursor: u16,
+    right: u16,
+    y: u16,
+}
 
-    let sha = is_shas.then(|| next_column(9));
-    let graph = next_column(graph_width);
-    let date = is_dates.then(|| next_column(16));
-    let committer = is_committers.then(|| next_column(GRAPH_COMMITTER_WIDTH as u16));
-    let message = Rect::new(cursor, area.y, right.saturating_sub(cursor), 1);
+impl GraphColumnCursor {
+    fn new(area: Rect) -> Self {
+        Self { cursor: area.x, right: area.x.saturating_add(area.width), y: area.y }
+    }
+
+    fn take(&mut self, width: u16) -> Rect {
+        let actual = width.min(self.right.saturating_sub(self.cursor));
+        let rect = Rect::new(self.cursor, self.y, actual, 1);
+        self.cursor = self.cursor.saturating_add(actual).saturating_add(u16::from(self.cursor.saturating_add(actual) < self.right));
+        rect
+    }
+
+    fn rest(self) -> Rect {
+        Rect::new(self.cursor, self.y, self.right.saturating_sub(self.cursor), 1)
+    }
+}
+
+fn graph_columns(area: Rect, is_shas: bool, is_dates: bool, is_committers: bool, graph_width: u16) -> GraphColumns {
+    let mut cursor = GraphColumnCursor::new(area);
+    let sha = is_shas.then(|| cursor.take(9));
+    let graph = cursor.take(graph_width);
+    let date = is_dates.then(|| cursor.take(16));
+    let committer = is_committers.then(|| cursor.take(GRAPH_COMMITTER_WIDTH as u16));
+    let message = cursor.rest();
 
     GraphColumns { sha, graph, date, committer, message }
 }
@@ -319,40 +323,37 @@ fn row_style(global_idx: usize, is_visible: bool, selected: usize, is_focused: b
 }
 
 fn render_projected_line(buf: &mut Buffer, area: Rect, line: Option<&Line<'_>>) {
-    if area.width == 0 {
-        return;
-    }
-    if let Some(line) = line {
-        buf.set_line(area.x, area.y, line, area.width);
+    if area.width != 0 {
+        line.into_iter().for_each(|line| {
+            buf.set_line(area.x, area.y, line, area.width);
+        });
     }
 }
 
 fn render_sha(buf: &mut Buffer, area: Rect, row: Option<&GraphRow>, selected: usize, theme: &crate::helpers::palette::Theme) {
-    let Some(row) = row.filter(|row| row.alias != NONE) else {
-        return;
-    };
-    buf.set_stringn(area.x, area.y, row.short_oid.as_str(), area.width as usize, Style::default().fg(text_color(row, selected, theme)));
+    row.filter(|row| row.alias != NONE).into_iter().for_each(|row| {
+        let short_oid = row.oid.to_string();
+        buf.set_stringn(area.x, area.y, &short_oid[..9.min(short_oid.len())], area.width as usize, Style::default().fg(text_color(row, selected, theme)));
+    });
 }
 
 fn render_date(buf: &mut Buffer, area: Rect, row: Option<&GraphRow>, selected: usize, theme: &crate::helpers::palette::Theme) {
-    let Some(row) = row.filter(|row| row.alias != NONE) else {
-        return;
-    };
-    buf.set_stringn(area.x, area.y, row.committer_date.as_str(), area.width as usize, Style::default().fg(text_color(row, selected, theme)));
+    row.filter(|row| row.alias != NONE).into_iter().for_each(|row| {
+        buf.set_stringn(area.x, area.y, row.committer_date.as_str(), area.width as usize, Style::default().fg(text_color(row, selected, theme)));
+    });
 }
 
 fn render_committer(buf: &mut Buffer, area: Rect, row: Option<&GraphRow>, selected: usize, theme: &crate::helpers::palette::Theme) {
-    let Some(row) = row.filter(|row| row.alias != NONE) else {
-        return;
-    };
-    let max_width = GRAPH_COMMITTER_WIDTH.min(area.width as usize);
-    let style = Style::default().fg(text_color(row, selected, theme));
-    if row.committer_name.chars().count() <= max_width {
-        buf.set_stringn(area.x, area.y, row.committer_name.as_str(), max_width, style);
-    } else {
-        let truncated = truncate_with_ellipsis(&row.committer_name, max_width);
-        buf.set_stringn(area.x, area.y, truncated, max_width, style);
-    }
+    row.filter(|row| row.alias != NONE).into_iter().for_each(|row| {
+        let max_width = GRAPH_COMMITTER_WIDTH.min(area.width as usize);
+        let style = Style::default().fg(text_color(row, selected, theme));
+        if row.committer_name.chars().count() <= max_width {
+            buf.set_stringn(area.x, area.y, row.committer_name.as_str(), max_width, style);
+        } else {
+            let truncated = truncate_with_ellipsis(&row.committer_name, max_width);
+            buf.set_stringn(area.x, area.y, truncated, max_width, style);
+        }
+    });
 }
 
 fn text_color(row: &GraphRow, selected: usize, theme: &crate::helpers::palette::Theme) -> ratatui::style::Color {
