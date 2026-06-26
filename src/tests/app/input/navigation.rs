@@ -1074,9 +1074,9 @@ fn graph_metadata_shifted_punctuation_aliases_toggle_display_flags() {
 
 #[test]
 fn graph_reflog_shift_digit_shortcut_toggles_and_reloads() {
-    let (path, repo) = temp_repo("graph-reflog-shortcut");
+    let (dir, repo) = temp_repo("graph-reflog-shortcut");
     commit_file(&repo, "head.txt", "head");
-    let path = path.display().to_string();
+    let path = dir.join("repo").display().to_string();
     let mut keymaps = minimal_keymaps();
     keymaps.get_mut(&InputMode::Normal).unwrap().insert(KeyBinding::new(KeyCode::Char('0'), KeyModifiers::SHIFT), Command::ToggleGraphReflogs);
     let mut app = App { path: Some(path.clone()), recent: vec![path], repo: Some(repo_handle(repo)), viewport: Viewport::Graph, focus: Focus::Branches, keymaps, ..Default::default() };

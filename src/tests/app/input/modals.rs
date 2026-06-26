@@ -8,12 +8,13 @@ use crate::helpers::keymap::{Command, InputMode, KeyBinding, Keymaps};
 use git2::Repository;
 use indexmap::IndexMap;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use std::{path::PathBuf, rc::Rc};
+use std::rc::Rc;
 
-fn modal_app(name: &str) -> App {
-    let (_path, repo) = temp_repo(name);
+fn modal_app(name: &str) -> (crate::git::test_support::TestDir, App) {
+    let (dir, repo) = temp_repo(name);
     commit_files(&repo, &["src/app/draw/search.rs", "src/app/draw/status.rs", "src/app/draw/stashes.rs"], "files");
-    App { repo: Some(repo_handle(repo)), viewport: Viewport::Graph, focus: Focus::ModalFileSearch, modal_file_search_return_focus: Focus::Branches, ..Default::default() }
+    let app = App { repo: Some(repo_handle(repo)), viewport: Viewport::Graph, focus: Focus::ModalFileSearch, modal_file_search_return_focus: Focus::Branches, ..Default::default() };
+    (dir, app)
 }
 
 fn repo_handle(repo: Repository) -> RepoHandle {
@@ -48,7 +49,7 @@ fn shutdown_graph_worker(app: &mut App) {
 
 #[test]
 fn file_search_esc_closes_and_restores_prior_focus() {
-    let (_path, repo) = temp_repo("esc");
+    let (_dir, repo) = temp_repo("esc");
     let mut app = App { repo: Some(repo_handle(repo)), viewport: Viewport::Graph, focus: Focus::Reflogs, ..Default::default() };
     app.on_find_file();
     app.modal_input.set_value("search");
@@ -63,7 +64,7 @@ fn file_search_esc_closes_and_restores_prior_focus() {
 
 #[test]
 fn file_search_typing_updates_results_and_resets_selection() {
-    let mut app = modal_app("typing");
+    let (_dir, mut app) = modal_app("typing");
     app.modal_file_search_selected = 2;
     app.modal_file_search_scroll.set(2);
 
@@ -77,7 +78,7 @@ fn file_search_typing_updates_results_and_resets_selection() {
 
 #[test]
 fn file_search_ctrl_and_arrow_keys_move_selection() {
-    let mut app = modal_app("navigation");
+    let (_dir, mut app) = modal_app("navigation");
     app.handle_modal_key_event(key(KeyCode::Char('s'), KeyModifiers::NONE));
     assert!(app.modal_file_search_results.len() > 1);
 
@@ -96,7 +97,7 @@ fn file_search_ctrl_and_arrow_keys_move_selection() {
 
 #[test]
 fn file_search_enter_starts_file_history_search() {
-    let mut app = modal_app("enter");
+    let (_dir, mut app) = modal_app("enter");
     let (tx, rx) = std::sync::mpsc::channel();
     app.graph.generation = 5;
     app.graph_tx = Some(tx);
@@ -125,7 +126,7 @@ fn file_search_enter_starts_file_history_search() {
 
 #[test]
 fn file_search_plain_l_is_inserted_into_input() {
-    let mut app = modal_app("plain-l");
+    let (_dir, mut app) = modal_app("plain-l");
 
     app.handle_modal_key_event(key(KeyCode::Char('l'), KeyModifiers::NONE));
 
@@ -134,15 +135,16 @@ fn file_search_plain_l_is_inserted_into_input() {
 
 #[test]
 fn rename_branch_submit_renames_and_clears_modal_state() {
-    let (path, repo) = temp_repo("rename-submit");
+    let (dir, repo) = temp_repo("rename-submit");
     commit_files(&repo, &["file.txt"], "initial");
     let target = repo.head().unwrap().peel_to_commit().unwrap();
     repo.branch("feature", &target, false).unwrap();
     drop(target);
 
+    let repo_path = dir.join("repo").display().to_string();
     let mut app = App {
-        path: Some(path.display().to_string()),
-        recent: vec![path.display().to_string()],
+        path: Some(repo_path.clone()),
+        recent: vec![repo_path],
         repo: Some(repo_handle(repo)),
         viewport: Viewport::Graph,
         focus: Focus::ModalRenameBranch,
@@ -157,7 +159,7 @@ fn rename_branch_submit_renames_and_clears_modal_state() {
     assert!(app.modal_input.value().is_empty());
     assert_eq!(app.modal_rename_branch_source, None);
 
-    let repo = Repository::open(path).unwrap();
+    let repo = Repository::open(dir.join("repo")).unwrap();
     assert!(repo.find_branch("feature", git2::BranchType::Local).is_err());
     assert!(repo.find_branch("topic", git2::BranchType::Local).is_ok());
 }
@@ -200,13 +202,12 @@ fn rename_branch_esc_closes_and_clears_modal_state() {
     assert_eq!(app.modal_rename_branch_source, None);
 }
 
-fn remote_app(name: &str) -> (PathBuf, App) {
-    let (path, repo) = temp_repo(name);
+fn remote_app(name: &str) -> (crate::git::test_support::TestDir, App) {
+    let (dir, repo) = temp_repo(name);
     commit_files(&repo, &["file.txt"], "initial");
-    let path = path.path().to_path_buf();
-    let path_string = path.display().to_string();
+    let path_string = dir.join("repo").display().to_string();
     let app = App { path: Some(path_string.clone()), recent: vec![path_string], repo: Some(repo_handle(repo)), viewport: Viewport::Settings, focus: Focus::Viewport, ..Default::default() };
-    (path, app)
+    (dir, app)
 }
 
 #[test]
@@ -305,9 +306,9 @@ fn graph_lane_limit_shortcuts_adjust_and_clamp_without_repo() {
 
 #[test]
 fn graph_lane_limit_shortcut_reloads_open_repo_and_preserves_settings_position() {
-    let (path, repo) = temp_repo("lane-limit-shortcut-reload");
+    let (dir, repo) = temp_repo("lane-limit-shortcut-reload");
     commit_files(&repo, &["file.txt"], "initial");
-    let repo_path = path.display().to_string();
+    let repo_path = dir.join("repo").display().to_string();
     let mut app = App {
         path: Some(repo_path.clone()),
         recent: vec![repo_path],
@@ -336,9 +337,9 @@ fn graph_lane_limit_shortcut_reloads_open_repo_and_preserves_settings_position()
 
 #[test]
 fn graph_lane_limit_input_reloads_open_repo_and_preserves_settings_position() {
-    let (path, repo) = temp_repo("lane-limit-reload");
+    let (dir, repo) = temp_repo("lane-limit-reload");
     commit_files(&repo, &["file.txt"], "initial");
-    let repo_path = path.display().to_string();
+    let repo_path = dir.join("repo").display().to_string();
     let mut app = App {
         path: Some(repo_path.clone()),
         recent: vec![repo_path],
@@ -367,7 +368,7 @@ fn graph_lane_limit_input_reloads_open_repo_and_preserves_settings_position() {
 
 #[test]
 fn add_remote_flow_creates_remote_and_returns_to_settings() {
-    let (path, mut app) = remote_app("add-remote");
+    let (dir, mut app) = remote_app("add-remote");
     app.begin_add_remote();
 
     app.modal_input.set_value("origin");
@@ -382,7 +383,7 @@ fn add_remote_flow_creates_remote_and_returns_to_settings() {
     assert_eq!(app.viewport, Viewport::Settings);
     assert_eq!(app.focus, Focus::Viewport);
     assert!(app.modal_input.value().is_empty());
-    assert_eq!(Repository::open(path).unwrap().find_remote("origin").unwrap().url(), Some("https://example.com/repo.git"));
+    assert_eq!(Repository::open(dir.join("repo")).unwrap().find_remote("origin").unwrap().url(), Some("https://example.com/repo.git"));
 }
 
 #[test]
@@ -400,7 +401,7 @@ fn add_remote_invalid_name_returns_to_name_prompt_with_text_preserved() {
 
 #[test]
 fn rename_remote_flow_rewrites_hidden_remote_branch_names() {
-    let (path, mut app) = remote_app("rename-remote");
+    let (dir, mut app) = remote_app("rename-remote");
     app.repo.as_ref().unwrap().remote("origin", "https://example.com/repo.git").unwrap();
     {
         let mut config = app.repo.as_ref().unwrap().config().unwrap();
@@ -419,7 +420,7 @@ fn rename_remote_flow_rewrites_hidden_remote_branch_names() {
 
     app.handle_modal_key_event(key(KeyCode::Enter, KeyModifiers::NONE));
 
-    let repo = Repository::open(path).unwrap();
+    let repo = Repository::open(dir.join("repo")).unwrap();
     assert!(repo.find_remote("origin").is_err());
     assert!(repo.find_remote("upstream").is_ok());
     let config = repo.config().unwrap();
@@ -432,7 +433,7 @@ fn rename_remote_flow_rewrites_hidden_remote_branch_names() {
 
 #[test]
 fn remote_action_sets_selected_remote_as_default() {
-    let (path, mut app) = remote_app("set-default");
+    let (dir, mut app) = remote_app("set-default");
     app.repo.as_ref().unwrap().remote("upstream", "https://example.com/repo.git").unwrap();
     app.modal_remote_target = Some("upstream".to_string());
     app.modal_remote_selected = 1;
@@ -440,7 +441,7 @@ fn remote_action_sets_selected_remote_as_default() {
 
     app.on_select();
 
-    let repo = Repository::open(path).unwrap();
+    let repo = Repository::open(dir.join("repo")).unwrap();
     let config = repo.config().unwrap();
     assert_eq!(config.get_string(GUITAR_DEFAULT_REMOTE_CONFIG).unwrap(), "upstream");
     assert_eq!(config.get_string(PUSH_DEFAULT_CONFIG).unwrap(), "upstream");
@@ -450,7 +451,7 @@ fn remote_action_sets_selected_remote_as_default() {
 
 #[test]
 fn edit_remote_fetch_url_flow_updates_url() {
-    let (path, mut app) = remote_app("edit-fetch-url");
+    let (dir, mut app) = remote_app("edit-fetch-url");
     app.repo.as_ref().unwrap().remote("origin", "https://example.com/repo.git").unwrap();
     app.modal_remote_target = Some("origin".to_string());
     app.modal_remote_input_action = RemoteInputAction::EditUrl;
@@ -459,14 +460,14 @@ fn edit_remote_fetch_url_flow_updates_url() {
 
     app.handle_modal_key_event(key(KeyCode::Enter, KeyModifiers::NONE));
 
-    assert_eq!(Repository::open(path).unwrap().find_remote("origin").unwrap().url(), Some("https://example.com/renamed.git"));
+    assert_eq!(Repository::open(dir.join("repo")).unwrap().find_remote("origin").unwrap().url(), Some("https://example.com/renamed.git"));
     assert_eq!(app.focus, Focus::Viewport);
     assert_eq!(app.viewport, Viewport::Settings);
 }
 
 #[test]
 fn edit_remote_empty_push_url_clears_push_url() {
-    let (path, mut app) = remote_app("edit-push-url");
+    let (dir, mut app) = remote_app("edit-push-url");
     app.repo.as_ref().unwrap().remote("origin", "https://example.com/repo.git").unwrap();
     app.repo.as_ref().unwrap().remote_set_pushurl("origin", Some("ssh://example.com/repo.git")).unwrap();
     app.modal_remote_target = Some("origin".to_string());
@@ -476,12 +477,12 @@ fn edit_remote_empty_push_url_clears_push_url() {
 
     app.handle_modal_key_event(key(KeyCode::Enter, KeyModifiers::NONE));
 
-    assert_eq!(Repository::open(path).unwrap().find_remote("origin").unwrap().pushurl(), None);
+    assert_eq!(Repository::open(dir.join("repo")).unwrap().find_remote("origin").unwrap().pushurl(), None);
 }
 
 #[test]
 fn delete_remote_confirmation_deletes_remote_and_prunes_hidden_remote_branches() {
-    let (path, mut app) = remote_app("delete-remote");
+    let (dir, mut app) = remote_app("delete-remote");
     app.repo.as_ref().unwrap().remote("origin", "https://example.com/repo.git").unwrap();
     {
         let mut config = app.repo.as_ref().unwrap().config().unwrap();
@@ -497,7 +498,7 @@ fn delete_remote_confirmation_deletes_remote_and_prunes_hidden_remote_branches()
 
     app.on_select();
 
-    let repo = Repository::open(path).unwrap();
+    let repo = Repository::open(dir.join("repo")).unwrap();
     assert!(repo.find_remote("origin").is_err());
     let config = repo.config().unwrap();
     assert!(config.get_string(GUITAR_DEFAULT_REMOTE_CONFIG).is_err());
@@ -527,7 +528,7 @@ fn remote_modal_cancel_clears_pending_state_and_returns_to_settings() {
 
 #[test]
 fn selected_remote_fetch_uses_selected_remote_name() {
-    let (_path, mut app) = remote_app("fetch-selected");
+    let (_dir, mut app) = remote_app("fetch-selected");
     {
         let mut config = app.repo.as_ref().unwrap().config().unwrap();
         config.set_str(GUITAR_DEFAULT_REMOTE_CONFIG, "origin").unwrap();

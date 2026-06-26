@@ -60,12 +60,10 @@ impl App {
     }
 
     fn open_status_viewer(&mut self) {
-        let Some(repo) = self.repo.clone() else {
-            return;
-        };
-
-        self.open_viewer(&repo);
-        self.focus = Focus::Viewport;
+        if let Some(repo) = self.git2_repo() {
+            self.open_viewer(&repo);
+            self.focus = Focus::Viewport;
+        }
     }
 
     fn selected_settings_recent_repository(&self) -> Option<(usize, usize)> {

@@ -9,29 +9,32 @@ impl App {
         self.keymaps = load_or_init_keymaps();
     }
 
+    fn handle_settings_escape(&mut self, key_event: KeyEvent) -> bool {
+        let is_settings_escape = key_event.code == KeyCode::Esc && key_event.modifiers == KeyModifiers::NONE && self.viewport == Viewport::Settings && self.focus == Focus::Viewport;
+        if is_settings_escape {
+            self.on_back();
+        }
+        is_settings_escape
+    }
+
+    fn consume_priority_key_event(&mut self, key_event: KeyEvent) -> bool {
+        self.handle_settings_escape(key_event) || self.handle_modal_key_event(key_event) || self.handle_context_menu_key_event(key_event)
+    }
+
+    fn keymap_command_for(&self, key_binding: &KeyBinding) -> Option<Command> {
+        self.keymaps.get(&self.mode).and_then(|mode_map| command_for_key_binding(mode_map, key_binding))
+    }
+
     pub fn handle_key_event(&mut self, key_event: KeyEvent) {
         let key_binding = KeyBinding::new(key_event.code, key_event.modifiers);
         let current_mode = self.mode;
 
-        if key_event.code == KeyCode::Esc && key_event.modifiers == KeyModifiers::NONE && self.viewport == Viewport::Settings && self.focus == Focus::Viewport {
-            self.on_back();
+        if self.consume_priority_key_event(key_event) {
             self.mode = InputMode::Normal;
             return;
         }
 
-        if self.handle_modal_key_event(key_event) {
-            self.mode = InputMode::Normal;
-            return;
-        }
-
-        if self.handle_context_menu_key_event(key_event) {
-            self.mode = InputMode::Normal;
-            return;
-        }
-
-        if let Some(command) = self.keymaps.get(&self.mode).and_then(|mode_map| command_for_key_binding(mode_map, &key_binding)) {
-            self.dispatch_keymap_command(&command);
-        }
+        self.keymap_command_for(&key_binding).into_iter().for_each(|command| self.dispatch_keymap_command(&command));
 
         if current_mode == InputMode::Action {
             self.mode = InputMode::Normal;
@@ -39,10 +42,9 @@ impl App {
     }
 
     fn dispatch_keymap_command(&mut self, command: &Command) {
-        if self.viewport == Viewport::Splash && self.focus == Focus::Viewport {
-            self.dispatch_splash_command(command);
-        } else {
-            self.dispatch_command(command);
+        match self.viewport == Viewport::Splash && self.focus == Focus::Viewport {
+            true => self.dispatch_splash_command(command),
+            false => self.dispatch_command(command),
         }
     }
 

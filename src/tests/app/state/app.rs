@@ -83,7 +83,7 @@ fn splash_draws_recent_repository_actions() {
 fn reload_captures_selected_commit_oid_and_visual_offset_for_restore() {
     let (dir, repo) = temp_repo("restore-capture");
     let oid = commit_file(&repo, "selected.txt", "selected", "selected");
-    let path_string = dir.path().display().to_string();
+    let path_string = dir.join("repo").display().to_string();
     let repo = Rc::new(repo);
     let mut app = app_with_repo(repo.clone());
     app.path = Some(path_string.clone());
@@ -235,7 +235,7 @@ fn uncommitted_metadata_waits_for_complete_progress_then_selection_loads_details
     let (cmd_tx, _cmd_rx) = std::sync::mpsc::channel();
     let (event_tx, event_rx) = std::sync::mpsc::channel();
     let mut app = app_with_repo(repo.clone());
-    app.path = Some(dir.path().display().to_string());
+    app.path = Some(dir.join("repo").display().to_string());
     app.graph_tx = Some(cmd_tx);
     app.graph_event_tx = Some(event_tx.clone());
     app.graph_rx = Some(event_rx);

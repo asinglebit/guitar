@@ -743,24 +743,24 @@ impl App {
     }
 
     pub fn shutdown_background_tasks(&mut self) {
-        if let Some(tx) = self.graph_tx.take() {
+        self.graph_tx.take().into_iter().for_each(|tx| {
             let _ = tx.send(GraphCommand::Shutdown);
-        }
+        });
         self.graph_event_tx = None;
         self.graph_rx = None;
 
-        if let Some(cancel) = self.walker_cancel.take() {
+        self.walker_cancel.take().into_iter().for_each(|cancel| {
             cancel.store(true, std::sync::atomic::Ordering::SeqCst);
-        }
-        if let Some(handle) = self.walker_handle.take() {
+        });
+        self.walker_handle.take().into_iter().for_each(|handle| {
             let _ = handle.join();
-        }
+        });
     }
 
     pub fn wait_until_graph_complete(&mut self, timeout: Duration) -> io::Result<usize> {
-        let start = Instant::now();
         self.repo.as_ref().ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "repository not loaded"))?;
 
+        let started = Instant::now();
         loop {
             self.sync_lazy();
 
@@ -780,7 +780,7 @@ impl App {
         }
     }
 
-    pub fn bootstrap(&mut self, repo_path: Option<String>) {
+    fn load_startup_config(&mut self) {
         self.load_language_config();
         self.load_recent();
         self.load_layout();
@@ -789,6 +789,10 @@ impl App {
             self.load_symbol_theme_config();
         }
         self.load_keymap();
+    }
+
+    pub fn bootstrap(&mut self, repo_path: Option<String>) {
+        self.load_startup_config();
         self.reload(repo_path);
     }
 
@@ -822,7 +826,7 @@ impl App {
             Ok(())
         })();
 
-        let pop_result = if has_keyboard_enhancement { execute!(stdout(), PopKeyboardEnhancementFlags) } else { Ok(()) };
+        let pop_result = has_keyboard_enhancement.then(|| execute!(stdout(), PopKeyboardEnhancementFlags)).unwrap_or(Ok(()));
         let mouse_result = execute!(stdout(), DisableMouseCapture);
         if run_result.is_ok() {
             pop_result?;
@@ -830,6 +834,45 @@ impl App {
         }
 
         run_result
+    }
+
+    fn draw_graph_if_repo(&mut self, frame: &mut Frame) {
+        if let Some(repo) = self.git2_repo() {
+            self.draw_graph(frame, repo.as_ref());
+        }
+    }
+
+    fn draw_settings_if_repo(&mut self, frame: &mut Frame) {
+        if let Some(repo) = self.git2_repo() {
+            self.draw_settings(frame, repo.as_ref());
+        }
+    }
+
+    fn draw_stashes_if_repo(&mut self, frame: &mut Frame) {
+        if let Some(repo) = self.git2_repo() {
+            self.draw_stashes(frame, repo.as_ref());
+        }
+    }
+
+    fn draw_inspector_if_repo(&mut self, frame: &mut Frame) {
+        if self.layout_config.is_inspector
+            && (self.graph_selected != 0 || self.uncommitted.has_conflicts)
+            && let Some(repo) = self.git2_repo()
+        {
+            self.draw_inspector(frame, repo.as_ref());
+        }
+    }
+
+    fn draw_statusbar_if_repo(&mut self, frame: &mut Frame) {
+        if let Some(repo) = self.git2_repo() {
+            self.draw_statusbar(frame, repo.as_ref());
+        }
+    }
+
+    fn draw_modal_delete_branch_if_repo(&mut self, frame: &mut Frame) {
+        if let Some(repo) = self.git2_repo() {
+            self.draw_modal_delete_branch(frame, repo.as_ref());
+        }
     }
 
     pub fn draw(&mut self, frame: &mut Frame) {
@@ -850,46 +893,25 @@ impl App {
         frame.render_widget(Block::default().style(self.theme.background_style()), frame.area());
 
         let is_splash = self.viewport == Viewport::Splash;
-
         frame.render_widget(
             Block::default().borders(if is_splash { Borders::NONE } else { Borders::ALL }).border_style(Style::default().fg(self.theme.COLOR_BORDER)).border_set(self.symbols.border.block_set()),
             self.layout.app,
         );
 
-        // Repo-dependent panes render only after a repository has opened successfully.
         if self.repo.is_some() {
-            // The central viewport is mutually exclusive, while side panes can be toggled.
             match self.viewport {
-                Viewport::Graph => {
-                    let repo = self.git2_repo();
-                    let repo = repo.as_deref();
-                    if let Some(repo) = repo {
-                        self.draw_graph(frame, repo);
-                    }
-                },
-                Viewport::Viewer => {
-                    self.draw_viewer(frame);
-                },
-                Viewport::Splash => {
-                    self.draw_splash(frame);
-                },
-                Viewport::Settings => {
-                    let repo = self.git2_repo();
-                    let repo = repo.as_deref();
-                    if let Some(repo) = repo {
-                        self.draw_settings(frame, repo);
-                    }
-                },
+                Viewport::Graph => self.draw_graph_if_repo(frame),
+                Viewport::Viewer => self.draw_viewer(frame),
+                Viewport::Splash => self.draw_splash(frame),
+                Viewport::Settings => self.draw_settings_if_repo(frame),
             }
 
             if !is_splash {
                 self.draw_title(frame);
             }
 
-            // Side panes are hidden on splash/settings because those views own the frame.
             match self.viewport {
-                Viewport::Splash => {},
-                Viewport::Settings => {},
+                Viewport::Splash | Viewport::Settings => {},
                 _ => {
                     if self.layout_config.is_branches {
                         self.draw_branches(frame);
@@ -898,11 +920,7 @@ impl App {
                         self.draw_tags(frame);
                     }
                     if self.layout_config.is_stashes {
-                        let repo = self.git2_repo();
-                        let repo = repo.as_deref();
-                        if let Some(repo) = repo {
-                            self.draw_stashes(frame, repo);
-                        }
+                        self.draw_stashes_if_repo(frame);
                     }
                     if self.layout_config.is_reflogs {
                         self.draw_reflogs(frame);
@@ -919,109 +937,42 @@ impl App {
                     if self.layout_config.is_status {
                         self.draw_status(frame);
                     }
-                    if self.layout_config.is_inspector && (self.graph_selected != 0 || self.uncommitted.has_conflicts) {
-                        let repo = self.git2_repo();
-                        let repo = repo.as_deref();
-                        if let Some(repo) = repo {
-                            self.draw_inspector(frame, repo);
-                        }
-                    }
+                    self.draw_inspector_if_repo(frame);
                 },
             }
 
             if !is_splash {
-                let repo = self.git2_repo();
-                let repo = repo.as_deref();
-                if let Some(repo) = repo {
-                    self.draw_statusbar(frame, repo);
-                }
+                self.draw_statusbar_if_repo(frame);
             }
 
-            // Modals render last so they overlay panes without changing pane layout.
             self.modal_area = None;
             match self.focus {
-                Focus::ModalCheckout => {
-                    self.draw_modal_checkout(frame);
-                },
-                Focus::ModalSolo => {
-                    self.draw_modal_solo(frame);
-                },
-                Focus::ModalDeleteBranch => {
-                    let repo = self.git2_repo();
-                    let repo = repo.as_deref();
-                    if let Some(repo) = repo {
-                        self.draw_modal_delete_branch(frame, repo);
-                    }
-                },
-                Focus::ModalWorktreeChooser => {
-                    self.draw_modal_worktree_chooser(frame);
-                },
-                Focus::ModalRemoveWorktree => {
-                    self.draw_modal_remove_worktree(frame);
-                },
-                Focus::ModalRemoteAction => {
-                    self.draw_modal_remote_action(frame);
-                },
-                Focus::ModalRemoteDelete => {
-                    self.draw_modal_delete_remote(frame);
-                },
-                Focus::ModalDeleteTag => {
-                    self.draw_modal_delete_tag(frame);
-                },
-                Focus::ModalOperationProgress | Focus::ModalOperationConflict | Focus::ModalOperationSuccess => {
-                    self.draw_modal_rebase(frame);
-                },
-                Focus::ModalError => {
-                    self.draw_modal_error(frame);
-                },
-                Focus::ModalCommit => {
-                    self.draw_modal_input(frame, modal::PROMPT_CREATE_COMMIT());
-                },
-                Focus::ModalCherrypick => {
-                    self.draw_modal_input(frame, modal::PROMPT_CHERRYPICK_COMMIT());
-                },
-                Focus::ModalRevert => {
-                    self.draw_modal_input(frame, modal::PROMPT_REVERT_COMMIT());
-                },
-                Focus::ModalCreateBranch => {
-                    self.draw_modal_input(frame, modal::PROMPT_CREATE_BRANCH());
-                },
-                Focus::ModalRenameBranch => {
-                    self.draw_modal_input(frame, modal::PROMPT_RENAME_BRANCH());
-                },
-                Focus::ModalCreateWorktreeName => {
-                    self.draw_modal_input(frame, modal::PROMPT_CREATE_WORKTREE_NAME());
-                },
-                Focus::ModalCreateWorktreePath => {
-                    self.draw_modal_input(frame, modal::PROMPT_CREATE_WORKTREE_PATH());
-                },
-                Focus::ModalLockWorktree => {
-                    self.draw_modal_input(frame, modal::PROMPT_LOCK_WORKTREE());
-                },
-                Focus::ModalRemoteName | Focus::ModalRemoteUrl => {
-                    self.draw_modal_input(frame, self.remote_input_title());
-                },
-                Focus::ModalGraphLaneLimit => {
-                    self.draw_modal_input(frame, modal::PROMPT_GRAPH_LANE_LIMIT());
-                },
-                Focus::ModalGrep => {
-                    self.draw_modal_input(frame, modal::PROMPT_FIND_SHA());
-                },
-                Focus::ModalFileSearch => {
-                    self.draw_modal_file_search(frame, modal::PROMPT_FIND_FILE());
-                },
-                Focus::ModalTag => {
-                    self.draw_modal_input(frame, modal::PROMPT_CREATE_TAG());
-                },
-                Focus::ModalKeyCapture => {
-                    self.draw_modal_key_capture(frame);
-                },
-                Focus::ModalAuth => {
-                    self.draw_modal_auth(frame);
-                },
-                Focus::ModalNetworkProgress => {
-                    self.draw_modal_network_progress(frame);
-                },
+                Focus::ModalCheckout => self.draw_modal_checkout(frame),
+                Focus::ModalSolo => self.draw_modal_solo(frame),
+                Focus::ModalDeleteBranch => self.draw_modal_delete_branch_if_repo(frame),
+                Focus::ModalWorktreeChooser => self.draw_modal_worktree_chooser(frame),
+                Focus::ModalRemoveWorktree => self.draw_modal_remove_worktree(frame),
+                Focus::ModalRemoteAction => self.draw_modal_remote_action(frame),
+                Focus::ModalRemoteDelete => self.draw_modal_delete_remote(frame),
+                Focus::ModalDeleteTag => self.draw_modal_delete_tag(frame),
+                Focus::ModalOperationProgress | Focus::ModalOperationConflict | Focus::ModalOperationSuccess => self.draw_modal_rebase(frame),
+                Focus::ModalError => self.draw_modal_error(frame),
+                Focus::ModalCommit => self.draw_modal_input(frame, modal::PROMPT_CREATE_COMMIT()),
+                Focus::ModalCherrypick => self.draw_modal_input(frame, modal::PROMPT_CHERRYPICK_COMMIT()),
+                Focus::ModalRevert => self.draw_modal_input(frame, modal::PROMPT_REVERT_COMMIT()),
+                Focus::ModalCreateBranch => self.draw_modal_input(frame, modal::PROMPT_CREATE_BRANCH()),
+                Focus::ModalRenameBranch => self.draw_modal_input(frame, modal::PROMPT_RENAME_BRANCH()),
+                Focus::ModalCreateWorktreeName => self.draw_modal_input(frame, modal::PROMPT_CREATE_WORKTREE_NAME()),
+                Focus::ModalCreateWorktreePath => self.draw_modal_input(frame, modal::PROMPT_CREATE_WORKTREE_PATH()),
+                Focus::ModalLockWorktree => self.draw_modal_input(frame, modal::PROMPT_LOCK_WORKTREE()),
+                Focus::ModalRemoteName | Focus::ModalRemoteUrl => self.draw_modal_input(frame, self.remote_input_title()),
+                Focus::ModalGraphLaneLimit => self.draw_modal_input(frame, modal::PROMPT_GRAPH_LANE_LIMIT()),
+                Focus::ModalGrep => self.draw_modal_input(frame, modal::PROMPT_FIND_SHA()),
+                Focus::ModalFileSearch => self.draw_modal_file_search(frame, modal::PROMPT_FIND_FILE()),
+                Focus::ModalTag => self.draw_modal_input(frame, modal::PROMPT_CREATE_TAG()),
+                Focus::ModalKeyCapture => self.draw_modal_key_capture(frame),
+                Focus::ModalAuth => self.draw_modal_auth(frame),
+                Focus::ModalNetworkProgress => self.draw_modal_network_progress(frame),
                 _ => {},
             }
         } else {
@@ -1154,69 +1105,51 @@ impl App {
     }
 
     fn spawn_reload_metadata(&self, generation: Generation) {
-        let Some(path) = self.path.as_ref().map(PathBuf::from) else {
-            return;
-        };
-        let Some(reload_metadata_tx) = self.graph_tx.clone() else {
-            return;
-        };
-        let Some(reload_uncommitted_tx) = self.graph_event_tx.clone() else {
-            return;
-        };
+        let inputs = self
+            .path
+            .as_ref()
+            .map(PathBuf::from)
+            .and_then(|path| self.graph_tx.clone().zip(self.graph_event_tx.clone()).map(|(reload_metadata_tx, reload_uncommitted_tx)| (path, reload_metadata_tx, reload_uncommitted_tx)));
 
-        std::thread::spawn(move || {
-            let result = get_staged_filenames_diff_from_path(path.as_path()).map_err(|error| error.to_string());
-            if let Ok(staged) = &result
-                && let Ok(worktrees) = list_worktrees_metadata_with_current_dirty_from_path(path.as_path(), Some(path.as_path()), staged)
-            {
-                let _ = reload_metadata_tx.send(GraphCommand::UpdateWorktrees { generation, worktrees });
-            }
-            let _ = reload_uncommitted_tx.send(GraphEvent::Uncommitted { generation, result });
-        });
+        if let Some((path, reload_metadata_tx, reload_uncommitted_tx)) = inputs {
+            std::thread::spawn(move || {
+                let result = get_staged_filenames_diff_from_path(path.as_path()).map_err(|error| error.to_string());
+                if let Ok(staged) = &result
+                    && let Ok(worktrees) = list_worktrees_metadata_with_current_dirty_from_path(path.as_path(), Some(path.as_path()), staged)
+                {
+                    let _ = reload_metadata_tx.send(GraphCommand::UpdateWorktrees { generation, worktrees });
+                }
+                let _ = reload_uncommitted_tx.send(GraphEvent::Uncommitted { generation, result });
+            });
+        }
     }
 
     pub(crate) fn refresh_current_diff_for_identity(&mut self, repo: &git2::Repository, identity: GraphIndexIdentity) {
-        if self.current_diff_identity == Some(identity) {
-            return;
-        }
-        if let Some(oid) = self.graph_oid_for_identity(identity) {
+        (self.current_diff_identity != Some(identity)).then(|| self.graph_oid_for_identity(identity)).flatten().into_iter().for_each(|oid| {
             self.current_diff = get_filenames_diff_at_oid(repo, oid);
             self.current_diff_identity = Some(identity);
-        }
+        });
     }
 
     fn refresh_current_diff_for_identity_lazy(&mut self, identity: GraphIndexIdentity) {
-        if let Some(repo) = self.git2_repo() {
-            self.refresh_current_diff_for_identity(&repo, identity);
-        }
+        self.git2_repo().into_iter().for_each(|repo| self.refresh_current_diff_for_identity(repo.as_ref(), identity));
     }
 
     pub fn ensure_uncommitted_details_loaded(&mut self) {
-        if self.is_uncommitted_detail_loaded || self.is_uncommitted_detail_loading {
-            return;
-        }
-        let generation = self.graph.generation;
-        let Some(path) = self.path.as_ref().map(PathBuf::from) else {
-            return;
-        };
-        let Some(reload_metadata_tx) = self.graph_tx.clone() else {
-            return;
-        };
-        let Some(reload_uncommitted_tx) = self.graph_event_tx.clone() else {
-            return;
-        };
-        self.is_uncommitted_detail_loading = true;
+        if let Some((generation, path, reload_metadata_tx, reload_uncommitted_tx)) = self.pending_uncommitted_details_request() {
+            self.is_uncommitted_detail_loading = true;
 
-        std::thread::spawn(move || {
-            let result = Repository::open(&path).map_err(|error| error.to_string()).and_then(|repo| {
-                let uncommitted = get_filenames_diff_at_workdir(&repo).map_err(|error| error.to_string())?;
-                if let Ok(worktrees) = list_worktrees_metadata_with_current_dirty(&repo, Some(path.as_path()), &uncommitted) {
-                    let _ = reload_metadata_tx.send(GraphCommand::UpdateWorktrees { generation, worktrees });
-                }
-                Ok(uncommitted)
+            std::thread::spawn(move || {
+                let result = Repository::open(&path).map_err(|error| error.to_string()).and_then(|repo| {
+                    get_filenames_diff_at_workdir(&repo).map_err(|error| error.to_string()).inspect(|uncommitted| {
+                        if let Ok(worktrees) = list_worktrees_metadata_with_current_dirty(&repo, Some(path.as_path()), uncommitted) {
+                            let _ = reload_metadata_tx.send(GraphCommand::UpdateWorktrees { generation, worktrees });
+                        }
+                    })
+                });
+                let _ = reload_uncommitted_tx.send(GraphEvent::UncommittedDetails { generation, result });
             });
-            let _ = reload_uncommitted_tx.send(GraphEvent::UncommittedDetails { generation, result });
-        });
+        }
     }
 
     pub fn sync(&mut self, repo: &git2::Repository) {
@@ -1225,6 +1158,90 @@ impl App {
 
     pub fn sync_lazy(&mut self) {
         self.sync_events(None);
+    }
+
+    fn refresh_current_diff_for_identity_from_event(&mut self, repo: Option<&git2::Repository>, identity: GraphIndexIdentity) {
+        match repo {
+            Some(repo) => self.refresh_current_diff_for_identity(repo, identity),
+            None => self.refresh_current_diff_for_identity_lazy(identity),
+        }
+    }
+
+    fn pending_uncommitted_details_request(&self) -> Option<(Generation, PathBuf, std::sync::mpsc::Sender<GraphCommand>, std::sync::mpsc::Sender<GraphEvent>)> {
+        (!self.is_uncommitted_detail_loaded && !self.is_uncommitted_detail_loading)
+            .then(|| Some((self.graph.generation, self.path.as_ref().map(PathBuf::from)?, self.graph_tx.clone()?, self.graph_event_tx.clone()?)))
+            .flatten()
+    }
+
+    fn apply_uncommitted_result(&mut self, result: Result<UncommittedChanges, String>) {
+        match result {
+            Ok(uncommitted) => self.uncommitted = uncommitted,
+            Err(error) => {
+                self.uncommitted = UncommittedChanges::default();
+                self.show_error(errors::with_error(errors::FILE_DIFF(), error));
+            },
+        }
+        self.is_uncommitted_loaded = true;
+    }
+
+    fn apply_uncommitted_details_result(&mut self, result: Result<UncommittedChanges, String>) {
+        self.apply_uncommitted_result(result);
+        self.is_uncommitted_detail_loaded = true;
+        self.is_uncommitted_detail_loading = false;
+    }
+
+    fn handle_lookup_result(&mut self, repo: Option<&git2::Repository>, request_id: RequestId, result: GraphLookupResult) {
+        let Some((pending_id, action)) = self.graph.pending_lookup.take() else {
+            return;
+        };
+        if request_id != pending_id {
+            self.graph.pending_lookup = Some((pending_id, action));
+            return;
+        }
+
+        let should_restore_selection = !matches!(action, PendingGraphLookup::RestoreSelection);
+        match (action, result) {
+            (PendingGraphLookup::SelectIndex, GraphLookupResult::Index(Some(index))) => {
+                self.select_graph_index_from_lookup(repo, index);
+                self.modal_input.clear();
+                self.focus = Focus::Viewport;
+            },
+            (PendingGraphLookup::RestoreSelection, GraphLookupResult::Index(Some(index))) => {
+                let selected_offset = self.graph.pending_selection_restore.map(|restore| restore.selected_offset).unwrap_or_default();
+                self.graph.pending_selection_restore = None;
+                self.restore_graph_index_from_lookup(repo, index, selected_offset);
+            },
+            (PendingGraphLookup::RestoreSelection, GraphLookupResult::Index(None)) if self.graph.is_complete => {
+                self.graph.pending_selection_restore = None;
+            },
+            (PendingGraphLookup::SelectPaneRow, GraphLookupResult::PaneRow(Some(row))) => {
+                self.open_graph_pane_row(row);
+                self.modal_input.clear();
+            },
+            (PendingGraphLookup::CacheGraphRow, GraphLookupResult::GraphRow(Some(row))) => {
+                let index = row.index;
+                self.cache_graph_row(row);
+                (index == self.graph_selected && index != 0)
+                    .then(|| self.graph_identity_at(index))
+                    .flatten()
+                    .into_iter()
+                    .for_each(|identity| self.refresh_current_diff_for_identity_from_event(repo, identity));
+            },
+            (PendingGraphLookup::OpenInspector, GraphLookupResult::GraphRow(Some(row))) => {
+                let index = row.index;
+                self.cache_graph_row(row);
+                if index == self.graph_selected {
+                    self.graph_identity_at(index).into_iter().for_each(|identity| self.refresh_current_diff_for_identity_from_event(repo, identity));
+                    self.layout_config.is_inspector = true;
+                    self.focus = Focus::Inspector;
+                }
+            },
+            _ => {},
+        }
+
+        if should_restore_selection {
+            self.request_pending_graph_selection_restore_lookup();
+        }
     }
 
     fn sync_events(&mut self, repo: Option<&git2::Repository>) {
@@ -1253,10 +1270,7 @@ impl App {
 
     fn handle_graph_event(&mut self, repo: Option<&git2::Repository>, event: GraphEvent) {
         match event {
-            GraphEvent::Progress { generation, version, total, is_first, is_complete } => {
-                if generation != self.graph.generation {
-                    return;
-                }
+            GraphEvent::Progress { generation, version, total, is_first, is_complete } if generation == self.graph.generation => {
                 self.graph.version = version;
                 self.graph.total = total;
                 self.graph.is_complete = is_complete;
@@ -1264,46 +1278,31 @@ impl App {
                 if is_complete && !self.is_uncommitted_loaded {
                     self.spawn_reload_metadata(generation);
                 }
-
                 if is_first && self.viewport == Viewport::Splash {
                     self.viewport = Viewport::Graph;
                 }
-
                 if is_complete {
                     self.spinner.stop();
                 }
                 self.request_pending_graph_selection_restore_lookup();
             },
-            GraphEvent::GraphWindow { generation, request_id, version, start, end, total, head_alias, rows, history } => {
-                if generation != self.graph.generation {
-                    return;
-                }
+            GraphEvent::GraphWindow { generation, request_id, version, start, end, total, head_alias, rows, history } if generation == self.graph.generation => {
                 let Some((pending_id, pending_start, pending_end)) = self.graph.requested_graph else {
                     return;
                 };
                 if request_id < pending_id || start != pending_start || end != pending_end {
                     return;
                 }
+
                 self.graph.version = self.graph.version.max(version);
                 self.graph.total = total;
                 self.graph.graph_window = Some(GraphWindowCache { version, start, end, head_alias, rows, history });
                 self.graph.clear_graph_projection();
                 self.graph.requested_graph = None;
 
-                if self.graph_selected != 0
-                    && let Some(identity) = self.graph_identity_at(self.graph_selected)
-                {
-                    if let Some(repo) = repo {
-                        self.refresh_current_diff_for_identity(repo, identity);
-                    } else {
-                        self.refresh_current_diff_for_identity_lazy(identity);
-                    }
-                }
+                self.graph_identity_at(self.graph_selected).into_iter().for_each(|identity| self.refresh_current_diff_for_identity_from_event(repo, identity));
             },
-            GraphEvent::PaneWindow { generation, version, pane, start, end, total, rows } => {
-                if generation != self.graph.generation {
-                    return;
-                }
+            GraphEvent::PaneWindow { generation, version, pane, start, end, total, rows } if generation == self.graph.generation => {
                 let cache = PaneWindowCache { version, start, end, total, rows };
                 match pane {
                     GraphPane::Branches => self.graph.branches_window = Some(cache),
@@ -1312,11 +1311,9 @@ impl App {
                     GraphPane::Reflogs => self.graph.reflogs_window = Some(cache),
                 }
             },
-            GraphEvent::FileHistory { generation, request_id, path, rows, error } => {
-                if generation != self.graph.generation || self.search_request_id != Some(request_id) || self.search_path.as_deref() != Some(path.as_str()) {
-                    return;
-                }
-
+            GraphEvent::FileHistory { generation, request_id, path, rows, error }
+                if generation == self.graph.generation && self.search_request_id == Some(request_id) && self.search_path.as_deref() == Some(path.as_str()) =>
+            {
                 self.search_is_loading = false;
                 self.search_request_id = None;
                 self.search_error = error;
@@ -1324,122 +1321,19 @@ impl App {
                 self.search_selected = self.search_selected.min(self.search_rows.len().saturating_sub(1));
                 self.search_scroll.set(0);
             },
-            GraphEvent::LookupResult { generation, request_id, result, .. } => {
-                if generation != self.graph.generation {
-                    return;
-                }
-                let Some((pending_id, action)) = self.graph.pending_lookup.take() else {
-                    return;
-                };
-                if request_id != pending_id {
-                    self.graph.pending_lookup = Some((pending_id, action));
-                    return;
-                }
-                let was_restore_lookup = matches!(action, PendingGraphLookup::RestoreSelection);
-                match (action, result) {
-                    (PendingGraphLookup::SelectIndex, GraphLookupResult::Index(Some(index))) => {
-                        self.select_graph_index_from_lookup(repo, index);
-                        self.modal_input.clear();
-                        self.focus = Focus::Viewport;
-                    },
-                    (PendingGraphLookup::RestoreSelection, GraphLookupResult::Index(Some(index))) => {
-                        let selected_offset = self.graph.pending_selection_restore.map(|restore| restore.selected_offset).unwrap_or_default();
-                        self.graph.pending_selection_restore = None;
-                        self.restore_graph_index_from_lookup(repo, index, selected_offset);
-                    },
-                    (PendingGraphLookup::RestoreSelection, GraphLookupResult::Index(None)) => {
-                        if self.graph.is_complete {
-                            self.graph.pending_selection_restore = None;
-                        }
-                    },
-                    (PendingGraphLookup::SelectPaneRow, GraphLookupResult::PaneRow(Some(row))) => {
-                        self.open_graph_pane_row(row);
-                        self.modal_input.clear();
-                    },
-                    (PendingGraphLookup::CacheGraphRow, GraphLookupResult::GraphRow(Some(row))) => {
-                        let index = row.index;
-                        self.cache_graph_row(row);
-                        if index == self.graph_selected
-                            && index != 0
-                            && let Some(identity) = self.graph_identity_at(index)
-                        {
-                            if let Some(repo) = repo {
-                                self.refresh_current_diff_for_identity(repo, identity);
-                            } else {
-                                self.refresh_current_diff_for_identity_lazy(identity);
-                            }
-                        }
-                    },
-                    (PendingGraphLookup::OpenInspector, GraphLookupResult::GraphRow(Some(row))) => {
-                        let index = row.index;
-                        self.cache_graph_row(row);
-                        if index == self.graph_selected {
-                            if let Some(identity) = self.graph_identity_at(index) {
-                                if let Some(repo) = repo {
-                                    self.refresh_current_diff_for_identity(repo, identity);
-                                } else {
-                                    self.refresh_current_diff_for_identity_lazy(identity);
-                                }
-                            }
-                            self.layout_config.is_inspector = true;
-                            self.focus = Focus::Inspector;
-                        }
-                    },
-                    _ => {},
-                }
-                if !was_restore_lookup {
-                    self.request_pending_graph_selection_restore_lookup();
-                }
+            GraphEvent::LookupResult { generation, request_id, result, .. } if generation == self.graph.generation => self.handle_lookup_result(repo, request_id, result),
+            GraphEvent::Heatmap { generation, heatmap } if generation == self.graph.generation => self.heatmap = heatmap,
+            GraphEvent::Worktrees { generation, version, worktrees } if generation == self.graph.generation => {
+                self.graph.version = self.graph.version.max(version);
+                self.worktrees = Worktrees::from_entries(worktrees);
             },
-            GraphEvent::Heatmap { generation, heatmap } => {
-                if generation == self.graph.generation {
-                    self.heatmap = heatmap;
-                }
+            GraphEvent::Uncommitted { generation, result } if generation == self.graph.generation => self.apply_uncommitted_result(result),
+            GraphEvent::UncommittedDetails { generation, result } if generation == self.graph.generation => self.apply_uncommitted_details_result(result),
+            GraphEvent::Error { generation, message } if generation == self.graph.generation => {
+                self.show_error(message);
+                self.spinner.stop();
             },
-            GraphEvent::Worktrees { generation, version, worktrees } => {
-                if generation == self.graph.generation {
-                    self.graph.version = self.graph.version.max(version);
-                    self.worktrees = Worktrees::from_entries(worktrees);
-                }
-            },
-            GraphEvent::Uncommitted { generation, result } => {
-                if generation == self.graph.generation {
-                    match result {
-                        Ok(uncommitted) => {
-                            self.uncommitted = uncommitted;
-                        },
-                        Err(error) => {
-                            self.uncommitted = UncommittedChanges::default();
-                            self.show_error(errors::with_error(errors::FILE_DIFF(), error));
-                        },
-                    }
-                    self.is_uncommitted_loaded = true;
-                }
-            },
-            GraphEvent::UncommittedDetails { generation, result } => {
-                if generation == self.graph.generation {
-                    match result {
-                        Ok(uncommitted) => {
-                            self.uncommitted = uncommitted;
-                            self.is_uncommitted_detail_loaded = true;
-                            self.is_uncommitted_detail_loading = false;
-                        },
-                        Err(error) => {
-                            self.uncommitted = UncommittedChanges::default();
-                            self.is_uncommitted_detail_loaded = true;
-                            self.is_uncommitted_detail_loading = false;
-                            self.show_error(errors::with_error(errors::FILE_DIFF(), error));
-                        },
-                    }
-                    self.is_uncommitted_loaded = true;
-                }
-            },
-            GraphEvent::Error { generation, message } => {
-                if generation == self.graph.generation {
-                    self.show_error(message);
-                    self.spinner.stop();
-                }
-            },
+            _ => {},
         }
     }
 
@@ -1484,12 +1378,11 @@ impl App {
     }
 
     pub(crate) fn graph_oid_for_identity(&self, identity: GraphIndexIdentity) -> Option<Oid> {
-        if let Some(row) = self.graph_row_at(identity.index)
-            && row.alias == identity.alias
-        {
-            return Some(row.oid);
-        }
-        (identity.alias != crate::core::chunk::NONE).then(|| self.oids.get_oid_by_alias(identity.alias))
+        self.graph_row_at(identity.index)
+            .filter(|row| row.alias == identity.alias)
+            .map(|row| row.oid)
+            .or(Some(identity.oid))
+            .or_else(|| (identity.alias != crate::core::chunk::NONE).then(|| self.oids.get_oid_by_alias(identity.alias)))
     }
 
     pub(crate) fn selected_commit_diff_is_loaded(&self) -> bool {
