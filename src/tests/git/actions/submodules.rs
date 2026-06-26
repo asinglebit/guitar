@@ -25,6 +25,10 @@ fn submodule_remote_url(repo: &Repository, submodule_path: &str) -> String {
     sub_repo.find_remote("origin").unwrap().url().unwrap().to_string()
 }
 
+fn reopen(repo: &Repository) -> Repository {
+    Repository::open(repo.workdir().unwrap()).unwrap()
+}
+
 fn stage_submodule_to_oid(repo: &Repository, name: &str, oid: git2::Oid) {
     let gix_repo = gix::open(repo.workdir().unwrap()).unwrap();
     let mut index = gix_repo.index_or_load_from_head_or_empty().unwrap().into_owned();
@@ -46,10 +50,12 @@ fn stages_and_unstages_submodule_pointer() {
     let advanced = git2_to_gix_oid(commit_file(&sub_repo, "file.txt", "changed\n", "advance child"));
     stage_submodule_head(&parent, "deps/child").unwrap();
 
+    let parent = reopen(&parent);
     let staged = list_submodules(&parent).unwrap()[0].clone();
     assert_eq!(staged.index, Some(advanced));
 
     unstage_submodule(&parent, "deps/child").unwrap();
+    let parent = reopen(&parent);
     let unstaged = list_submodules(&parent).unwrap()[0].clone();
     assert_eq!(unstaged.index, original);
 }
@@ -65,6 +71,7 @@ fn stage_all_stages_submodule_pointer_without_staging_inner_content() {
 
     stage_all(&parent).unwrap();
 
+    let parent = reopen(&parent);
     let entry = list_submodules(&parent).unwrap()[0].clone();
     assert_eq!(entry.index, Some(advanced));
     assert_eq!(entry.workdir, Some(advanced));
