@@ -17,19 +17,47 @@ use ratatui::{
 };
 use std::collections::HashSet;
 
+#[derive(Clone, Copy)]
+struct GraphVisibleWindow {
+    start: usize,
+    end: usize,
+    visible_height: usize,
+    visible_len: usize,
+    total_lines: usize,
+}
+
+struct CachedGraphProjection<'a> {
+    cached_start: usize,
+    cached_rows: &'a [GraphRow],
+    graph_lines: Vec<Line<'a>>,
+    message_lines: &'a [Line<'static>],
+}
+
 impl App {
     pub fn draw_graph(&mut self, frame: &mut Frame, repo: Option<&git2::Repository>) {
-        if self.layout.graph.width != 0 && self.layout.graph.height != 0 {
-            // Determine the visible graph window before requesting projected rows.
+        if let Some(window) = self.prepare_graph_window(repo) {
+            match self.graph.total == 0 && self.graph.is_complete {
+                true => self.render_unborn_graph(frame, window.visible_height),
+                false => self.render_graph_window(frame, window),
+            }
+        }
+    }
+
+    fn prepare_graph_window(&mut self, repo: Option<&git2::Repository>) -> Option<GraphVisibleWindow> {
+        (!self.layout.graph.is_empty()).then(|| {
             let total_lines = self.graph_commit_count();
-            let visible_height = if self.layout_config.is_zen { self.layout.graph.height.saturating_sub(2) as usize } else { self.layout.graph.height as usize };
+            let visible_height = match self.layout_config.is_zen {
+                true => self.layout.graph.height.saturating_sub(2) as usize,
+                false => self.layout.graph.height as usize,
+            };
 
             let previous_selected = self.graph_selected;
-            if total_lines == 0 {
-                self.graph_selected = 0;
-            } else if self.graph_selected >= total_lines {
-                self.graph_selected = total_lines.saturating_sub(1);
-            }
+            self.graph_selected = match total_lines {
+                0 => 0,
+                total if self.graph_selected >= total => total.saturating_sub(1),
+                _ => self.graph_selected,
+            };
+
             if self.graph_selected != previous_selected {
                 self.current_diff.clear();
                 self.current_diff_identity = None;
@@ -45,114 +73,142 @@ impl App {
 
             let start = self.graph_scroll.get().min(total_lines.saturating_sub(visible_height));
             let end = (start + visible_height).min(total_lines);
-
+            let window = GraphVisibleWindow { start, end, visible_height, visible_len: end.saturating_sub(start), total_lines };
             let (preload_start, preload_end) = graph_preload_window(start, end, total_lines, visible_height);
             self.request_graph_window(preload_start, preload_end);
+            window
+        })
+    }
 
-            if self.graph.total == 0 && self.graph.is_complete {
-                // The graph service reports completion with zero rows for unborn repositories.
-                let table = Table::new(graph_backdrop_rows(visible_height, 0, None, &self.theme), [ratatui::layout::Constraint::Min(0)])
-                    .block(Block::default().borders(Borders::LEFT | Borders::RIGHT).border_style(Style::default().fg(self.theme.COLOR_BORDER)))
-                    .column_spacing(0);
+    fn render_unborn_graph(&self, frame: &mut Frame, visible_height: usize) {
+        let table = Table::new(graph_backdrop_rows(visible_height, 0, None, &self.theme), [ratatui::layout::Constraint::Min(0)])
+            .block(Block::default().borders(Borders::LEFT | Borders::RIGHT).border_style(Style::default().fg(self.theme.COLOR_BORDER)))
+            .column_spacing(0);
 
-                frame.render_widget(table, self.layout.graph);
+        frame.render_widget(table, self.layout.graph);
 
-                let chunks = Layout::default().direction(Direction::Vertical).constraints([Constraint::Percentage(50), Constraint::Length(3), Constraint::Percentage(50)]).split(self.layout.graph);
+        let chunks = Layout::default().direction(Direction::Vertical).constraints([Constraint::Percentage(50), Constraint::Length(3), Constraint::Percentage(50)]).split(self.layout.graph);
 
-                let message = Paragraph::new(format!("{} {}", self.symbols.empty_state.mark, empty::NO_COMMITS())).alignment(Alignment::Center).style(Style::default().fg(self.theme.COLOR_BORDER));
+        let message = Paragraph::new(format!("{} {}", self.symbols.empty_state.mark, empty::NO_COMMITS())).alignment(Alignment::Center).style(Style::default().fg(self.theme.COLOR_BORDER));
 
-                frame.render_widget(message, chunks[1]);
-            } else {
-                let visible_len = end.saturating_sub(start);
-                let projection_key = self.graph.graph_window.as_ref().filter(|window| window.start < end && start < window.end).map(|window| {
-                    let render_uncommitted_row = graph_window_has_stable_visible_page(window, start, end);
-                    GraphProjectionKey {
-                        version: window.version,
-                        start: window.start,
-                        end: window.end,
-                        head_alias: window.head_alias,
-                        selected: self.graph_selected,
-                        show_reflog_labels: self.layout_config.is_graph_reflogs,
-                        show_ref_labels: self.layout_config.is_graph_refs,
-                        render_uncommitted_row,
-                        conflict_count: self.uncommitted.conflict_count,
-                        modified_count: self.uncommitted.modified_count,
-                        added_count: self.uncommitted.added_count,
-                        deleted_count: self.uncommitted.deleted_count,
-                    }
-                });
+        frame.render_widget(message, chunks[1]);
+    }
 
-                if let Some(key) = projection_key
-                    && self.graph.graph_projection.key != Some(key)
-                {
-                    let window = self.graph.graph_window.as_ref().expect("projection key requires graph window");
-                    let message_lines =
-                        render_message_projection(&self.theme, &self.symbols, &window.rows, key.show_reflog_labels, key.show_ref_labels, key.selected, &self.uncommitted, key.render_uncommitted_row);
-                    self.graph.graph_projection = GraphProjectionCache { key: Some(key), message_lines };
-                }
+    fn render_graph_window(&mut self, frame: &mut Frame, window: GraphVisibleWindow) {
+        let projection_key = self.refresh_graph_projection_cache(window);
+        let cached = self.cached_graph_projection(window, projection_key);
+        let search_highlight_indices = self.search_highlight_indices();
+        let graph_rows = self.graph_rows_widget(window, cached, &search_highlight_indices);
 
-                // Render from the cached window, then reindex into the requested viewport so scrolling
-                // still looks like movement while loading.
-                let (cached_start, cached_rows, graph_lines, message_lines) =
-                    if let Some(window) = self.graph.graph_window.as_ref().filter(|window| window.start < end && start < window.end && self.graph.graph_projection.key.is_some()) {
-                        let graph_lines = render_graph_projection(
-                            &self.theme,
-                            &self.symbols,
-                            &window.rows,
-                            &window.history,
-                            window.head_alias,
-                            window.start,
-                            window.end,
-                            projection_key.is_some_and(|key| key.render_uncommitted_row),
-                        );
-                        (window.start, window.rows.as_slice(), graph_lines, self.graph.graph_projection.message_lines.as_slice())
-                    } else {
-                        (start, &[][..], Vec::new(), &[][..])
-                    };
+        let borders = match self.layout_config.is_zen {
+            true => Borders::ALL,
+            false => Borders::RIGHT | Borders::LEFT,
+        };
+        let block = Block::default().borders(borders).border_style(Style::default().fg(self.theme.COLOR_BORDER)).border_set(self.symbols.border.block_set());
+        let inner = block.inner(self.layout.graph);
+        frame.render_widget(block, self.layout.graph);
+        frame.render_widget(graph_rows, inner);
 
-                // Measure the graph column from visible rendered span widths only.
-                let width = (start..end).filter_map(|index| projected_line(&graph_lines, cached_start, index)).map(|line| line.width()).max().unwrap_or(0) as u16;
-                let search_highlight_indices: HashSet<usize> =
-                    if self.layout_config.is_search && self.search_path.is_some() { self.search_rows.iter().map(|row| row.graph_index).filter(|&index| index != 0).collect() } else { HashSet::new() };
+        if window.total_lines > window.visible_height {
+            let (begin, end) = self.graph_scrollbar_symbols();
+            let mut scrollbar_state = ScrollbarState::new(scrollbar_content_length(window.total_lines, window.visible_height)).position(self.graph_scroll.get());
+            let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                .begin_symbol(Some(begin))
+                .end_symbol(Some(end))
+                .track_symbol(Some(self.symbols.scrollbar.track.as_str()))
+                .thumb_symbol(self.symbols.scrollbar.thumb.as_str())
+                .thumb_style(Style::default().fg(if self.focus == Focus::Viewport { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
 
-                let graph_rows = GraphRowsWidget {
-                    start,
-                    visible_height,
-                    visible_len,
-                    cached_start,
-                    cached_rows,
-                    graph_lines,
-                    message_lines,
-                    graph_width: width.saturating_add(5),
-                    selected: self.graph_selected,
-                    is_focused: self.focus == Focus::Viewport,
-                    search_highlight_indices: &search_highlight_indices,
-                    is_shas: self.layout_config.is_shas,
-                    is_dates: self.layout_config.is_graph_dates,
-                    is_committers: self.layout_config.is_graph_committers,
-                    theme: &self.theme,
-                };
+            frame.render_stateful_widget(scrollbar, self.layout.graph_scrollbar, &mut scrollbar_state);
+        }
+    }
 
-                let borders = if self.layout_config.is_zen { Borders::ALL } else { Borders::RIGHT | Borders::LEFT };
-                let block = Block::default().borders(borders).border_style(Style::default().fg(self.theme.COLOR_BORDER)).border_set(self.symbols.border.block_set());
-                let inner = block.inner(self.layout.graph);
-                frame.render_widget(block, self.layout.graph);
-                frame.render_widget(graph_rows, inner);
-
-                if total_lines > visible_height {
-                    let mut scrollbar_state = ScrollbarState::new(scrollbar_content_length(total_lines, visible_height)).position(self.graph_scroll.get());
-                    let normal_cap_symbol = ((self.layout_config.is_inspector && (self.graph_selected != 0 || self.uncommitted.has_conflicts)) || self.layout_config.is_status)
-                        .then_some(self.symbols.border.horizontal.as_str());
-                    let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
-                        .begin_symbol(Some(if self.layout_config.is_zen { self.symbols.scrollbar.begin.as_str() } else { normal_cap_symbol.unwrap_or(self.symbols.scrollbar.begin.as_str()) }))
-                        .end_symbol(Some(if self.layout_config.is_zen { self.symbols.scrollbar.end.as_str() } else { normal_cap_symbol.unwrap_or(self.symbols.scrollbar.end.as_str()) }))
-                        .track_symbol(Some(self.symbols.scrollbar.track.as_str()))
-                        .thumb_symbol(self.symbols.scrollbar.thumb.as_str())
-                        .thumb_style(Style::default().fg(if self.focus == Focus::Viewport { self.theme.COLOR_GREY_600 } else { self.theme.COLOR_BORDER }));
-
-                    frame.render_stateful_widget(scrollbar, self.layout.graph_scrollbar, &mut scrollbar_state);
-                }
+    fn refresh_graph_projection_cache(&mut self, window: GraphVisibleWindow) -> Option<GraphProjectionKey> {
+        let key = self.graph.graph_window.as_ref().filter(|cached| cached.start < window.end && window.start < cached.end).map(|cached| {
+            let render_uncommitted_row = graph_window_has_stable_visible_page(cached, window.start, window.end);
+            GraphProjectionKey {
+                version: cached.version,
+                start: cached.start,
+                end: cached.end,
+                head_alias: cached.head_alias,
+                selected: self.graph_selected,
+                show_reflog_labels: self.layout_config.is_graph_reflogs,
+                show_ref_labels: self.layout_config.is_graph_refs,
+                render_uncommitted_row,
+                conflict_count: self.uncommitted.conflict_count,
+                modified_count: self.uncommitted.modified_count,
+                added_count: self.uncommitted.added_count,
+                deleted_count: self.uncommitted.deleted_count,
             }
+        });
+
+        if let Some(key) = key
+            && self.graph.graph_projection.key != Some(key)
+            && let Some(cached) = self.graph.graph_window.as_ref().filter(|cached| cached.version == key.version && cached.start == key.start && cached.end == key.end)
+        {
+            let message_lines =
+                render_message_projection(&self.theme, &self.symbols, &cached.rows, key.show_reflog_labels, key.show_ref_labels, key.selected, &self.uncommitted, key.render_uncommitted_row);
+            self.graph.graph_projection = GraphProjectionCache { key: Some(key), message_lines };
+        }
+
+        key
+    }
+
+    fn cached_graph_projection<'a>(&'a self, window: GraphVisibleWindow, projection_key: Option<GraphProjectionKey>) -> CachedGraphProjection<'a> {
+        self.graph
+            .graph_window
+            .as_ref()
+            .filter(|cached| cached.start < window.end && window.start < cached.end && self.graph.graph_projection.key.is_some())
+            .map(|cached| {
+                let graph_lines = render_graph_projection(
+                    &self.theme,
+                    &self.symbols,
+                    &cached.rows,
+                    &cached.history,
+                    cached.head_alias,
+                    cached.start,
+                    cached.end,
+                    projection_key.is_some_and(|key| key.render_uncommitted_row),
+                );
+                CachedGraphProjection { cached_start: cached.start, cached_rows: cached.rows.as_slice(), graph_lines, message_lines: self.graph.graph_projection.message_lines.as_slice() }
+            })
+            .unwrap_or_else(|| CachedGraphProjection { cached_start: window.start, cached_rows: &[], graph_lines: Vec::new(), message_lines: &[] })
+    }
+
+    fn search_highlight_indices(&self) -> HashSet<usize> {
+        match self.layout_config.is_search && self.search_path.is_some() {
+            true => self.search_rows.iter().map(|row| row.graph_index).filter(|&index| index != 0).collect(),
+            false => HashSet::new(),
+        }
+    }
+
+    fn graph_rows_widget<'a>(&'a self, window: GraphVisibleWindow, cached: CachedGraphProjection<'a>, search_highlight_indices: &'a HashSet<usize>) -> GraphRowsWidget<'a, 'a> {
+        let graph_width = (window.start..window.end).filter_map(|index| projected_line(&cached.graph_lines, cached.cached_start, index)).map(|line| line.width()).max().unwrap_or(0) as u16;
+
+        GraphRowsWidget {
+            start: window.start,
+            visible_height: window.visible_height,
+            visible_len: window.visible_len,
+            cached_start: cached.cached_start,
+            cached_rows: cached.cached_rows,
+            graph_lines: cached.graph_lines,
+            message_lines: cached.message_lines,
+            graph_width: graph_width.saturating_add(5),
+            selected: self.graph_selected,
+            is_focused: self.focus == Focus::Viewport,
+            search_highlight_indices,
+            is_shas: self.layout_config.is_shas,
+            is_dates: self.layout_config.is_graph_dates,
+            is_committers: self.layout_config.is_graph_committers,
+            theme: &self.theme,
+        }
+    }
+
+    fn graph_scrollbar_symbols(&self) -> (&str, &str) {
+        match (self.layout_config.is_zen, (self.layout_config.is_inspector && (self.graph_selected != 0 || self.uncommitted.has_conflicts)) || self.layout_config.is_status) {
+            (true, _) => (self.symbols.scrollbar.begin.as_str(), self.symbols.scrollbar.end.as_str()),
+            (false, true) => (self.symbols.border.horizontal.as_str(), self.symbols.border.horizontal.as_str()),
+            (false, false) => (self.symbols.scrollbar.begin.as_str(), self.symbols.scrollbar.end.as_str()),
         }
     }
 }
