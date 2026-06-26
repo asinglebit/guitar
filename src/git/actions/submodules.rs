@@ -39,19 +39,20 @@ fn submodule_url_from_modules(repo: &gix::Repository, submodule: &gix::Submodule
     gix::Url::from_bytes(url.as_ref()).map_err(to_git2_error)
 }
 
-fn sync_superproject_submodule_url(repo: &gix::Repository, submodule: &gix::Submodule<'_>, url: &gix::bstr::BStr) -> Result<(), git2::Error> {
+fn update_repo_config(repo: &gix::Repository, update: impl FnOnce(&mut gix::config::File<'static>) -> Result<(), git2::Error>) -> Result<(), git2::Error> {
     edit_repo_config(repo, |config| {
-        config.set_raw_value_by("submodule", Some(submodule.name()), "url", url).map_err(to_git2_error)?;
+        update(config)?;
         Ok(true)
     })
 }
 
+fn sync_superproject_submodule_url(repo: &gix::Repository, submodule: &gix::Submodule<'_>, url: &gix::bstr::BStr) -> Result<(), git2::Error> {
+    update_repo_config(repo, |config| config.set_raw_value_by("submodule", Some(submodule.name()), "url", url).map(drop).map_err(to_git2_error))
+}
+
 fn sync_checked_out_submodule_url(submodule: &gix::Repository, url: &gix::Url) -> Result<(), git2::Error> {
     let remote = submodule.find_fetch_remote(None).map_err(to_git2_error)?;
-    edit_repo_config(submodule, |config| {
-        remote.with_url(url.clone()).map_err(to_git2_error)?.save_to(config).map_err(to_git2_error)?;
-        Ok(true)
-    })
+    update_repo_config(submodule, |config| remote.with_url(url.clone()).map_err(to_git2_error)?.save_to(config).map_err(to_git2_error))
 }
 
 fn open_or_init_submodule_repo(submodule: &gix::Submodule<'_>) -> Result<(gix::Repository, bool), git2::Error> {
@@ -72,10 +73,7 @@ fn configure_submodule_remote<'repo>(repo: &'repo gix::Repository, url: gix::Url
     remote = remote.with_fetch_tags(gix::remote::fetch::Tags::All);
     remote = remote.with_refspecs(Some("+refs/heads/*:refs/remotes/origin/*"), gix::remote::Direction::Fetch).map_err(to_git2_error)?;
 
-    edit_repo_config(repo, |config| {
-        remote.save_as_to("origin", config).map_err(to_git2_error)?;
-        Ok(true)
-    })?;
+    update_repo_config(repo, |config| remote.save_as_to("origin", config).map_err(to_git2_error))?;
     Ok(remote)
 }
 

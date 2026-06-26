@@ -77,9 +77,7 @@ pub fn create_branch(repo: &Repository, branch_name: &str, target_oid: Oid) -> R
     // Branch creation is intentionally non-checkout; the graph stays on the current HEAD.
     let mut repo = open_repo(repo)?;
     let branch_ref_name = branch_ref_name(branch_name)?;
-    if repo.try_find_reference(branch_ref_name.as_ref()).map_err(to_git2_error)?.is_some() {
-        return Err(Error::from_str("branch name already exists"));
-    }
+    ensure_branch_name_available(&repo, &branch_ref_name)?;
     let target_oid = {
         let target_commit = repo.find_commit(git2_to_gix_oid(target_oid)).map_err(to_git2_error)?;
         target_commit.id
@@ -96,10 +94,10 @@ pub fn delete_branch(repo: &Repository, branch: &str) -> Result<(), git2::Error>
     let branch_ref_name = branch_ref_name(branch)?;
     let target_oid = branch_target(&repo, &branch_ref_name)?;
     ensure_branch_is_not_current(&repo, &branch_ref_name)?;
+
     delete_branch_ref(&mut repo, branch_ref_name, target_oid)?;
 
-    remove_branch_config(&repo, branch)?;
-    Ok(())
+    remove_branch_config(&repo, branch)
 }
 
 pub fn rename_branch(repo: &Repository, old_name: &str, new_name: &str) -> Result<(), Error> {
