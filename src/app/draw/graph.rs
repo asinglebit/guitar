@@ -36,9 +36,10 @@ struct CachedGraphProjection<'a> {
 impl App {
     pub fn draw_graph(&mut self, frame: &mut Frame, repo: Option<&git2::Repository>) {
         if let Some(window) = self.prepare_graph_window(repo) {
-            match self.graph.total == 0 && self.graph.is_complete {
-                true => self.render_unborn_graph(frame, window.visible_height),
-                false => self.render_graph_window(frame, window),
+            if self.graph.total == 0 && self.graph.is_complete {
+                self.render_unborn_graph(frame, window.visible_height);
+            } else {
+                self.render_graph_window(frame, window);
             }
         }
     }
@@ -46,10 +47,7 @@ impl App {
     fn prepare_graph_window(&mut self, repo: Option<&git2::Repository>) -> Option<GraphVisibleWindow> {
         (!self.layout.graph.is_empty()).then(|| {
             let total_lines = self.graph_commit_count();
-            let visible_height = match self.layout_config.is_zen {
-                true => self.layout.graph.height.saturating_sub(2) as usize,
-                false => self.layout.graph.height as usize,
-            };
+            let visible_height = if self.layout_config.is_zen { self.layout.graph.height.saturating_sub(2) as usize } else { self.layout.graph.height as usize };
 
             let previous_selected = self.graph_selected;
             self.graph_selected = match total_lines {
@@ -100,10 +98,7 @@ impl App {
         let search_highlight_indices = self.search_highlight_indices();
         let graph_rows = self.graph_rows_widget(window, cached, &search_highlight_indices);
 
-        let borders = match self.layout_config.is_zen {
-            true => Borders::ALL,
-            false => Borders::RIGHT | Borders::LEFT,
-        };
+        let borders = if self.layout_config.is_zen { Borders::ALL } else { Borders::RIGHT | Borders::LEFT };
         let block = Block::default().borders(borders).border_style(Style::default().fg(self.theme.COLOR_BORDER)).border_set(self.symbols.border.block_set());
         let inner = block.inner(self.layout.graph);
         frame.render_widget(block, self.layout.graph);
@@ -176,10 +171,7 @@ impl App {
     }
 
     fn search_highlight_indices(&self) -> HashSet<usize> {
-        match self.layout_config.is_search && self.search_path.is_some() {
-            true => self.search_rows.iter().map(|row| row.graph_index).filter(|&index| index != 0).collect(),
-            false => HashSet::new(),
-        }
+        if self.layout_config.is_search && self.search_path.is_some() { self.search_rows.iter().map(|row| row.graph_index).filter(|&index| index != 0).collect() } else { HashSet::new() }
     }
 
     fn graph_rows_widget<'a>(&'a self, window: GraphVisibleWindow, cached: CachedGraphProjection<'a>, search_highlight_indices: &'a HashSet<usize>) -> GraphRowsWidget<'a, 'a> {
@@ -261,27 +253,95 @@ struct GraphRowsWidget<'a, 'line> {
     theme: &'a crate::helpers::palette::Theme,
 }
 
-impl Widget for GraphRowsWidget<'_, '_> {
-    fn render(self, area: Rect, buf: &mut Buffer) {
-        if !area.is_empty() && self.visible_height != 0 {
-            let columns = graph_columns(area, self.is_shas, self.is_dates, self.is_committers, self.graph_width);
-            (0..self.visible_height.min(area.height as usize)).for_each(|idx| {
-                let global_idx = self.start + idx;
-                let y = area.y.saturating_add(idx as u16);
-                let row_area = Rect::new(area.x, y, area.width, 1);
-                buf.set_style(row_area, row_style(global_idx, idx < self.visible_len, self.selected, self.is_focused, self.search_highlight_indices, self.theme));
+struct GraphRenderRow<'a> {
+    index: usize,
+    area: Rect,
+    source: Option<&'a GraphRow>,
+    is_visible: bool,
+}
 
-                let row = global_idx.checked_sub(self.cached_start).and_then(|source_index| self.cached_rows.get(source_index));
-                columns.sha.into_iter().for_each(|sha| render_sha(buf, sha.with_y(y), row, self.selected, self.theme));
-                render_projected_line(buf, columns.graph.with_y(y), projected_line(&self.graph_lines, self.cached_start, global_idx));
-                columns.date.into_iter().for_each(|date| render_date(buf, date.with_y(y), row, self.selected, self.theme));
-                columns.committer.into_iter().for_each(|committer| render_committer(buf, committer.with_y(y), row, self.selected, self.theme));
-                render_projected_line(buf, columns.message.with_y(y), projected_line(self.message_lines, self.cached_start, global_idx));
-            });
+struct RenderedGraphRow<'a, 'line> {
+    area: Rect,
+    style: Style,
+    sha_area: Option<Rect>,
+    graph_area: Rect,
+    graph_line: Option<&'a Line<'line>>,
+    date_area: Option<Rect>,
+    committer_area: Option<Rect>,
+    message_area: Rect,
+    message_line: Option<&'a Line<'static>>,
+    source: Option<&'a GraphRow>,
+    selected: usize,
+    theme: &'a crate::helpers::palette::Theme,
+}
+
+impl<'a, 'line> GraphRowsWidget<'a, 'line> {
+    fn rows(&'a self, area: Rect) -> impl Iterator<Item = GraphRenderRow<'a>> + 'a {
+        (0..self.visible_height.min(area.height as usize)).map(move |offset| {
+            let index = self.start + offset;
+            let y = area.y.saturating_add(offset as u16);
+
+            GraphRenderRow {
+                index,
+                area: Rect::new(area.x, y, area.width, 1),
+                source: index.checked_sub(self.cached_start).and_then(|source_index| self.cached_rows.get(source_index)),
+                is_visible: offset < self.visible_len,
+            }
+        })
+    }
+
+    fn rendered_rows(&'a self, area: Rect) -> impl Iterator<Item = RenderedGraphRow<'a, 'line>> + 'a {
+        let columns = graph_columns(area, self.is_shas, self.is_dates, self.is_committers, self.graph_width);
+        self.rows(area).map(move |row| row.rendered(columns, self))
+    }
+}
+
+impl<'a> GraphRenderRow<'a> {
+    fn rendered<'line>(self, columns: GraphColumns, rows: &'a GraphRowsWidget<'a, 'line>) -> RenderedGraphRow<'a, 'line> {
+        let y = self.area.y;
+        RenderedGraphRow {
+            area: self.area,
+            style: row_style(self.index, self.is_visible, rows.selected, rows.is_focused, rows.search_highlight_indices, rows.theme),
+            sha_area: columns.sha.map(|area| area.with_y(y)),
+            graph_area: columns.graph.with_y(y),
+            graph_line: projected_line(&rows.graph_lines, rows.cached_start, self.index),
+            date_area: columns.date.map(|area| area.with_y(y)),
+            committer_area: columns.committer.map(|area| area.with_y(y)),
+            message_area: columns.message.with_y(y),
+            message_line: projected_line(rows.message_lines, rows.cached_start, self.index),
+            source: self.source,
+            selected: rows.selected,
+            theme: rows.theme,
         }
     }
 }
 
+impl RenderedGraphRow<'_, '_> {
+    fn draw(self, buf: &mut Buffer) {
+        buf.set_style(self.area, self.style);
+        if let Some(area) = self.sha_area {
+            render_sha(buf, area, self.source, self.selected, self.theme);
+        }
+        render_projected_line(buf, self.graph_area, self.graph_line);
+        if let Some(area) = self.date_area {
+            render_date(buf, area, self.source, self.selected, self.theme);
+        }
+        if let Some(area) = self.committer_area {
+            render_committer(buf, area, self.source, self.selected, self.theme);
+        }
+        render_projected_line(buf, self.message_area, self.message_line);
+    }
+}
+
+impl Widget for GraphRowsWidget<'_, '_> {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        for row in self.rendered_rows(area) {
+            row.draw(buf);
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
 struct GraphColumns {
     sha: Option<Rect>,
     graph: Rect,
@@ -348,28 +408,28 @@ fn row_style(global_idx: usize, is_visible: bool, selected: usize, is_focused: b
 }
 
 fn render_projected_line(buf: &mut Buffer, area: Rect, line: Option<&Line<'_>>) {
-    if area.width != 0 {
-        line.into_iter().for_each(|line| {
-            buf.set_line(area.x, area.y, line, area.width);
-        });
+    if area.width != 0
+        && let Some(line) = line
+    {
+        buf.set_line(area.x, area.y, line, area.width);
     }
 }
 
 fn render_sha(buf: &mut Buffer, area: Rect, row: Option<&GraphRow>, selected: usize, theme: &crate::helpers::palette::Theme) {
-    row.filter(|row| row.alias != NONE).into_iter().for_each(|row| {
+    if let Some(row) = row.filter(|row| row.alias != NONE) {
         let short_oid = row.oid.to_string();
         buf.set_stringn(area.x, area.y, &short_oid[..9.min(short_oid.len())], area.width as usize, Style::default().fg(text_color(row, selected, theme)));
-    });
+    }
 }
 
 fn render_date(buf: &mut Buffer, area: Rect, row: Option<&GraphRow>, selected: usize, theme: &crate::helpers::palette::Theme) {
-    row.filter(|row| row.alias != NONE).into_iter().for_each(|row| {
+    if let Some(row) = row.filter(|row| row.alias != NONE) {
         buf.set_stringn(area.x, area.y, row.committer_date.as_str(), area.width as usize, Style::default().fg(text_color(row, selected, theme)));
-    });
+    }
 }
 
 fn render_committer(buf: &mut Buffer, area: Rect, row: Option<&GraphRow>, selected: usize, theme: &crate::helpers::palette::Theme) {
-    row.filter(|row| row.alias != NONE).into_iter().for_each(|row| {
+    if let Some(row) = row.filter(|row| row.alias != NONE) {
         let max_width = GRAPH_COMMITTER_WIDTH.min(area.width as usize);
         let style = Style::default().fg(text_color(row, selected, theme));
         if row.committer_name.chars().count() <= max_width {
@@ -378,7 +438,7 @@ fn render_committer(buf: &mut Buffer, area: Rect, row: Option<&GraphRow>, select
             let truncated = truncate_with_ellipsis(&row.committer_name, max_width);
             buf.set_stringn(area.x, area.y, truncated, max_width, style);
         }
-    });
+    }
 }
 
 fn text_color(row: &GraphRow, selected: usize, theme: &crate::helpers::palette::Theme) -> ratatui::style::Color {

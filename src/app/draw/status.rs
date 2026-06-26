@@ -47,62 +47,61 @@ impl<'a> StatusRow<'a> {
 
 impl App {
     fn status_empty_rows(&self, visible_height: usize, max_width: usize, message: &str) -> BuiltStatusRows<'static> {
-        let mut rows = Vec::new();
-        self.push_empty_status_row(&mut rows, visible_height, max_width, message);
-        BuiltStatusRows { rows, has_selectable_changes: false }
+        BuiltStatusRows { rows: self.empty_status_row_iter(visible_height, max_width, message).collect(), has_selectable_changes: false }
     }
 
     fn status_loading_rows(&self, visible_height: usize, max_width: usize) -> BuiltStatusRows<'static> {
         BuiltStatusRows { rows: centered_loading_lines(visible_height, max_width + 3, Style::default().fg(self.theme.COLOR_GREY_800)), has_selectable_changes: false }
     }
 
-    fn push_conflict_status_rows<'a>(&self, rows: &mut Vec<StatusRow<'a>>, files: &'a [String], max_width: usize) {
-        rows.extend(
-            files.iter().map(|file| StatusRow::file(file, &self.symbols.status.conflict_spaced, Style::default().fg(self.theme.COLOR_ORANGE), Style::default().fg(self.theme.COLOR_ORANGE), max_width)),
-        );
+    fn conflict_status_rows<'a>(&self, files: &'a [String], max_width: usize) -> impl Iterator<Item = StatusRow<'a>> + 'a {
+        let symbol = self.symbols.status.conflict_spaced.clone();
+        let symbol_style = Style::default().fg(self.theme.COLOR_ORANGE);
+        let text_style = Style::default().fg(self.theme.COLOR_ORANGE);
+        files.iter().map(move |file| StatusRow::file(file, symbol.as_str(), symbol_style, text_style, max_width))
     }
 
-    fn push_file_status_rows<'a>(&self, rows: &mut Vec<StatusRow<'a>>, files: &'a [String], status: FileStatus, max_width: usize) {
+    fn file_status_rows<'a>(&self, files: &'a [String], status: FileStatus, max_width: usize) -> impl Iterator<Item = StatusRow<'a>> + 'a {
         let (symbol, color) = match status {
-            FileStatus::Added => (self.symbols.status.added_spaced.as_str(), self.theme.COLOR_GREEN),
-            FileStatus::Modified => (self.symbols.status.modified_spaced.as_str(), self.theme.COLOR_BLUE),
-            FileStatus::Deleted => (self.symbols.status.deleted_spaced.as_str(), self.theme.COLOR_RED),
-            FileStatus::Renamed => (self.symbols.status.renamed_arrow_spaced.as_str(), self.theme.COLOR_YELLOW),
-            FileStatus::Other => (self.symbols.status.other_spaced.as_str(), self.theme.COLOR_TEXT),
+            FileStatus::Added => (self.symbols.status.added_spaced.clone(), self.theme.COLOR_GREEN),
+            FileStatus::Modified => (self.symbols.status.modified_spaced.clone(), self.theme.COLOR_BLUE),
+            FileStatus::Deleted => (self.symbols.status.deleted_spaced.clone(), self.theme.COLOR_RED),
+            FileStatus::Renamed => (self.symbols.status.renamed_arrow_spaced.clone(), self.theme.COLOR_YELLOW),
+            FileStatus::Other => (self.symbols.status.other_spaced.clone(), self.theme.COLOR_TEXT),
         };
+        let symbol_style = Style::default().fg(color);
+        let text_style = Style::default().fg(self.theme.COLOR_TEXT);
 
-        rows.extend(files.iter().map(|file| StatusRow::file(file, symbol, Style::default().fg(color), Style::default().fg(self.theme.COLOR_TEXT), max_width)));
+        files.iter().map(move |file| StatusRow::file(file, symbol.as_str(), symbol_style, text_style, max_width))
     }
 
-    fn push_file_change_rows<'a>(&self, rows: &mut Vec<StatusRow<'a>>, files: &'a FileChanges, max_width: usize) {
-        self.push_file_status_rows(rows, &files.modified, FileStatus::Modified, max_width);
-        self.push_file_status_rows(rows, &files.added, FileStatus::Added, max_width);
-        self.push_file_status_rows(rows, &files.deleted, FileStatus::Deleted, max_width);
+    fn file_change_rows<'a>(&self, files: &'a FileChanges, max_width: usize) -> impl Iterator<Item = StatusRow<'a>> + 'a {
+        self.file_status_rows(&files.modified, FileStatus::Modified, max_width).chain(self.file_status_rows(&files.added, FileStatus::Added, max_width)).chain(self.file_status_rows(
+            &files.deleted,
+            FileStatus::Deleted,
+            max_width,
+        ))
     }
 
     fn uncommitted_status_rows<'a>(&self, files: &'a FileChanges, conflicts: &'a [String], visible_height: usize, max_width: usize, empty_message: &str) -> BuiltStatusRows<'a> {
-        let mut rows = Vec::new();
-        self.push_conflict_status_rows(&mut rows, conflicts, max_width);
-        self.push_file_change_rows(&mut rows, files, max_width);
+        let rows: Vec<_> = self.conflict_status_rows(conflicts, max_width).chain(self.file_change_rows(files, max_width)).collect();
 
         if rows.is_empty() { self.status_empty_rows(visible_height, max_width, empty_message) } else { BuiltStatusRows { rows, has_selectable_changes: true } }
     }
 
     fn commit_status_rows(&self, visible_height: usize, max_width: usize) -> BuiltStatusRows<'_> {
-        let mut rows = Vec::with_capacity(self.current_diff.len());
-        self.current_diff.iter().for_each(|file_change| {
-            self.push_file_status_rows(&mut rows, std::slice::from_ref(&file_change.filename), file_change.status, max_width);
-        });
+        let rows: Vec<_> = self.current_diff.iter().flat_map(|file_change| self.file_status_rows(std::slice::from_ref(&file_change.filename), file_change.status, max_width)).collect();
 
         if rows.is_empty() { self.status_empty_rows(visible_height, max_width, empty::NO_STAGED_CHANGES()) } else { BuiltStatusRows { rows, has_selectable_changes: true } }
     }
 
-    fn push_empty_status_row(&self, rows: &mut Vec<StatusRow<'_>>, visible_height: usize, max_width: usize, message: &str) {
-        rows.extend((0..empty_state_top_padding(visible_height)).map(|_| StatusRow::plain(Line::from(""))));
-        rows.push(StatusRow::plain(Line::from(Span::styled(
+    fn empty_status_row_iter(&self, visible_height: usize, max_width: usize, message: &str) -> impl Iterator<Item = StatusRow<'static>> {
+        let message = StatusRow::plain(Line::from(Span::styled(
             center_line(&truncate_with_ellipsis(&format!("{} {message}", self.symbols.empty_state.mark), max_width), max_width + 3),
             Style::default().fg(self.theme.COLOR_GREY_800),
-        ))));
+        )));
+
+        (0..empty_state_top_padding(visible_height)).map(|_| StatusRow::plain(Line::from(""))).chain(std::iter::once(message))
     }
 
     pub fn draw_status(&mut self, frame: &mut Frame) {
@@ -165,7 +164,7 @@ impl App {
         );
 
         // Bottom status pane is reserved for unstaged files on the pseudo-row.
-        is_showing_uncommitted.then(|| {
+        if is_showing_uncommitted {
             self.status_bottom_selected = render_status_pane(
                 frame,
                 StatusPaneConfig {
@@ -187,7 +186,7 @@ impl App {
                     theme: &self.theme,
                 },
             );
-        });
+        }
     }
 }
 

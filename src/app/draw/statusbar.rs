@@ -14,17 +14,19 @@ impl App {
         2 + self.submodule_stack.first().map_or(0, |_| 4 + self.submodule_stack.len() * 2)
     }
 
-    fn push_submodule_stack_status<'a>(&'a self, left_spans: &mut Vec<Span<'a>>) {
-        if let Some(first) = self.submodule_stack.first() {
+    fn submodule_stack_status_spans<'a>(&'a self) -> impl Iterator<Item = Span<'a>> + 'a {
+        self.submodule_stack.first().into_iter().flat_map(move |first| {
             let style = Style::default().fg(self.theme.COLOR_TEAL);
             let root = first.parent_path.file_name().unwrap_or_else(|| first.parent_path.as_os_str()).to_string_lossy();
-            left_spans.extend([Span::styled(self.symbols.submodule.default.as_str(), style), Span::styled(" ", style), Span::styled(root, style)]);
-            self.submodule_stack.iter().for_each(|entry| {
-                left_spans.push(Span::styled(self.symbols.submodule.stack_separator.as_str(), style));
-                left_spans.push(Span::styled(entry.submodule_path.as_os_str().to_string_lossy(), style));
-            });
-            left_spans.push(Span::styled(" ", style));
-        }
+            [Span::styled(self.symbols.submodule.default.as_str(), style), Span::styled(" ", style), Span::styled(root, style)]
+                .into_iter()
+                .chain(
+                    self.submodule_stack
+                        .iter()
+                        .flat_map(move |entry| [Span::styled(self.symbols.submodule.stack_separator.as_str(), style), Span::styled(entry.submodule_path.as_os_str().to_string_lossy(), style)]),
+                )
+                .chain(std::iter::once(Span::styled(" ", style)))
+        })
     }
 
     fn head_status_label(&self) -> Span<'static> {
@@ -45,14 +47,13 @@ impl App {
         self.graph.branches_window.as_ref().map_or_else(|| self.branches.sorted.iter().filter(|(_, branch)| !self.branches.hidden_branch_names.contains(branch)).count(), |window| window.total)
     }
 
-    fn push_statusbar_left_spans<'a>(&'a self, left_spans: &mut Vec<Span<'a>>) {
-        left_spans.push(match self.worktrees.current_name() {
+    fn statusbar_left_spans<'a>(&'a self) -> impl Iterator<Item = Span<'a>> + 'a {
+        let worktree = match self.worktrees.current_name() {
             Some(name) => Span::styled(format!("  {} {name} ", self.symbols.worktree.current), Style::default().fg(self.theme.COLOR_GRASS)),
             None => Span::raw("  "),
-        });
+        };
 
-        self.push_submodule_stack_status(left_spans);
-        left_spans.push(self.head_status_label());
+        std::iter::once(worktree).chain(self.submodule_stack_status_spans()).chain(std::iter::once(self.head_status_label()))
     }
 
     fn statusbar_position(&self) -> Option<(usize, usize)> {
@@ -92,31 +93,31 @@ impl App {
         (total != 0).then_some((cursor, total))
     }
 
-    fn push_statusbar_count_hint<'a>(&self, right_spans: &mut Vec<Span<'a>>) {
-        if let Some((cursor, total)) = self.statusbar_position() {
+    fn statusbar_count_hint<'a>(&self) -> Option<Span<'a>> {
+        self.statusbar_position().map(|(cursor, total)| {
             let text = if self.spinner.is_running() { format!("{cursor}/{total}{} ", self.spinner.get_char()) } else { format!("{cursor}/{total} ") };
-            right_spans.push(Span::styled(text, Style::default().fg(self.theme.COLOR_TEXT)));
-        }
+            Span::styled(text, Style::default().fg(self.theme.COLOR_TEXT))
+        })
     }
 
-    fn push_action_hint<'a>(&'a self, right_spans: &mut Vec<Span<'a>>) {
-        [(self.mode == InputMode::Action, self.theme.COLOR_GRAPEFRUIT), (self.layout_config.is_zen, self.theme.COLOR_GRASS)].into_iter().filter(|(enabled, _)| *enabled).for_each(|(_, color)| {
-            right_spans.push(Span::styled(self.symbols.graph.commit_branch.as_str(), Style::default().fg(color)));
-            right_spans.push(Span::raw(" "));
-        });
+    fn action_hint_spans<'a>(&'a self) -> impl Iterator<Item = Span<'a>> + 'a {
+        [(self.mode == InputMode::Action, self.theme.COLOR_GRAPEFRUIT), (self.layout_config.is_zen, self.theme.COLOR_GRASS)]
+            .into_iter()
+            .filter_map(|(enabled, color)| enabled.then_some(color))
+            .flat_map(|color| [Span::styled(self.symbols.graph.commit_branch.as_str(), Style::default().fg(color)), Span::raw(" ")])
     }
 
     pub fn draw_statusbar(&mut self, frame: &mut Frame) {
         let mut left_spans = Vec::with_capacity(self.statusbar_left_span_capacity());
-        self.push_statusbar_left_spans(&mut left_spans);
+        left_spans.extend(self.statusbar_left_spans());
 
         let status_paragraph = ratatui::widgets::Paragraph::new(Text::from(Line::from(left_spans))).left_aligned().block(Block::default());
 
         frame.render_widget(status_paragraph, self.layout.statusbar_left);
 
         let mut right_spans = Vec::with_capacity(5);
-        self.push_statusbar_count_hint(&mut right_spans);
-        self.push_action_hint(&mut right_spans);
+        right_spans.extend(self.statusbar_count_hint());
+        right_spans.extend(self.action_hint_spans());
 
         let title_paragraph = ratatui::widgets::Paragraph::new(Text::from(Line::from(right_spans))).right_aligned().block(Block::default());
 
