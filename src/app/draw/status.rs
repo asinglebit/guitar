@@ -321,20 +321,15 @@ fn status_list_items<'a>(config: StatusListConfig<'a, '_>) -> Vec<ListItem<'a>> 
             let global_idx = config.start + idx;
             let is_selected = config.selection_enabled && config.is_focused && global_idx == config.selected;
             let is_search_highlighted = row.path.zip(config.search_highlight_path).is_some_and(|(path, searched)| path == searched);
-            let is_highlighted = is_selected || is_search_highlighted;
 
-            let mut item = if is_highlighted {
-                let spans: Vec<Span> = row.line.iter().map(|span| Span::styled(span.content.clone(), span.style.fg(config.theme.COLOR_HIGHLIGHTED))).collect();
-                ListItem::new(Line::from(spans)).style(Style::default().bg(config.theme.background_or_default(config.theme.COLOR_GREY_800)).fg(config.theme.COLOR_HIGHLIGHTED))
-            } else {
-                ListItem::new(row.line)
-            };
-
-            if !is_highlighted && global_idx.is_multiple_of(2) {
-                item = item.style(Style::default().bg(config.theme.background_or_default(config.theme.COLOR_GREY_900)));
+            match (is_selected || is_search_highlighted, global_idx.is_multiple_of(2)) {
+                (true, _) => {
+                    let spans: Vec<Span> = row.line.iter().map(|span| Span::styled(span.content.clone(), span.style.fg(config.theme.COLOR_HIGHLIGHTED))).collect();
+                    ListItem::new(Line::from(spans)).style(Style::default().bg(config.theme.background_or_default(config.theme.COLOR_GREY_800)).fg(config.theme.COLOR_HIGHLIGHTED))
+                },
+                (false, true) => ListItem::new(row.line).style(Style::default().bg(config.theme.background_or_default(config.theme.COLOR_GREY_900))),
+                (false, false) => ListItem::new(row.line),
             }
-
-            item
         })
         .collect()
 }
