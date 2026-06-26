@@ -119,16 +119,16 @@ fn list_worktrees_with_dirty_check_from_path(current_repo: gix::Repository, curr
     let current = canonical_path(&current);
     let owner_repo = current_repo.main_repo().map_err(gix_error)?;
 
-    let mut entries = Vec::new();
-
-    if let Some(main_path) = owner_repo.worktree().map(|worktree| worktree.base().to_path_buf()) {
+    let main_entry = owner_repo.worktree().map(|worktree| {
+        let main_path = worktree.base().to_path_buf();
         let main_name = main_path.file_name().and_then(|name| name.to_str()).unwrap_or("main").to_string();
-        entries.push(worktree_entry_from_repo(&owner_repo, main_name, main_path, WorktreeKind::Main, &current, dirty_check));
-    }
+        worktree_entry_from_repo(&owner_repo, main_name, main_path, WorktreeKind::Main, &current, dirty_check)
+    });
 
-    let mut linked: Vec<WorktreeEntry> = owner_repo.worktrees().map_err(gix_error)?.into_iter().filter_map(|proxy| linked_entry(proxy, &current, dirty_check)).collect();
-    linked.sort_by(|a, b| a.name.cmp(&b.name));
-    entries.extend(linked);
+    let first_linked = usize::from(main_entry.is_some());
+    let linked_entries = owner_repo.worktrees().map_err(gix_error)?.into_iter().filter_map(|proxy| linked_entry(proxy, &current, dirty_check));
+    let mut entries: Vec<_> = main_entry.into_iter().chain(linked_entries).collect();
+    entries[first_linked..].sort_by(|a, b| a.name.cmp(&b.name));
 
     Ok(entries)
 }
@@ -159,12 +159,9 @@ pub fn list_worktrees_metadata_with_current_dirty_from_path(path: impl AsRef<Pat
 }
 
 fn mark_current_dirty(entries: &mut [WorktreeEntry], uncommitted: &UncommittedChanges) {
-    let is_dirty = !uncommitted.is_clean;
-    for entry in entries {
-        if entry.is_current {
-            entry.is_dirty = is_dirty;
-        }
-    }
+    entries.iter_mut().filter(|entry| entry.is_current).for_each(|entry| {
+        entry.is_dirty = !uncommitted.is_clean;
+    });
 }
 
 #[cfg(test)]

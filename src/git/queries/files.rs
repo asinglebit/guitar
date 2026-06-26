@@ -23,45 +23,33 @@ struct TermMatch {
 }
 
 pub fn search_tracked_files(repo: &Repository, query: &str, limit: usize) -> Result<Vec<FileSearchResult>, git2::Error> {
-    let Some(workdir) = repo.workdir() else {
-        return Ok(Vec::new());
-    };
-
-    if query.trim().is_empty() || limit == 0 {
-        return Ok(Vec::new());
-    }
-
-    let gix_repo = gix::open(workdir).map_err(gix_error)?;
-    let paths = tracked_file_paths_from_repo(&gix_repo)?;
-
-    Ok(rank_file_paths(&paths, query, limit))
+    let query = query.trim();
+    repo.workdir().filter(|_| !query.is_empty() && limit != 0).map_or_else(
+        || Ok(Vec::new()),
+        |workdir| {
+            let gix_repo = gix::open(workdir).map_err(gix_error)?;
+            tracked_file_paths_from_repo(&gix_repo).map(|paths| rank_file_paths(&paths, query, limit))
+        },
+    )
 }
 
 fn tracked_file_paths_from_repo(repo: &gix::Repository) -> Result<Vec<String>, git2::Error> {
-    let Some(workdir) = repo.workdir() else {
-        return Ok(Vec::new());
-    };
-
-    let index = repo.index().map_err(gix_error)?;
-    let mut seen = HashSet::new();
-    let mut paths = Vec::new();
-
-    for entry in index.entries() {
-        let Ok(path) = std::str::from_utf8(entry.path(&index)) else {
-            continue;
-        };
-
-        let path = normalize_path(path);
-        if path.is_empty() || is_git_internal_path(&path) || !seen.insert(path.clone()) {
-            continue;
-        }
-
-        if workdir.join(Path::new(&path)).is_file() {
-            paths.push(path);
-        }
-    }
-
-    Ok(paths)
+    repo.workdir().map_or_else(
+        || Ok(Vec::new()),
+        |workdir| {
+            let index = repo.index().map_err(gix_error)?;
+            let mut seen = HashSet::new();
+            Ok(index
+                .entries()
+                .iter()
+                .filter_map(|entry| std::str::from_utf8(entry.path(&index)).ok())
+                .map(normalize_path)
+                .filter(|path| !path.is_empty() && !is_git_internal_path(path))
+                .filter(|path| seen.insert(path.clone()))
+                .filter(|path| workdir.join(Path::new(path)).is_file())
+                .collect())
+        },
+    )
 }
 
 pub fn rank_file_paths(paths: &[String], query: &str, limit: usize) -> Vec<FileSearchResult> {

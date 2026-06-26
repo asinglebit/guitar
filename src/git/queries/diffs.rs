@@ -11,6 +11,7 @@ use crate::{
 };
 use git2::{Delta, DiffOptions, Error, Oid, Repository, SubmoduleIgnore, SubmoduleStatus};
 use gix::bstr::{BStr, ByteSlice};
+use gix::status::index_worktree::iter::Summary;
 use std::path::{Path, PathBuf};
 
 // Collect staged and unstaged changes separately so the status panes can act on each side.
@@ -28,48 +29,51 @@ pub fn get_filenames_diff_at_workdir(repo: &Repository) -> Result<UncommittedCha
         .index_worktree_rewrites(None)
         .index_worktree_submodules(gix::status::Submodule::AsConfigured { check_dirty: true });
 
-    for item in status.into_iter(Vec::new()).map_err(gix_error)? {
-        match item.map_err(gix_error)? {
-            gix::status::Item::TreeIndex(change) => {
-                let path = gix_path(change.location());
-                if is_submodule_status_path(&path, &submodule_paths) {
-                    continue;
-                }
-                match change {
-                    gix::diff::index::Change::Addition { .. } => push_unique(&mut changes.staged.added, path),
-                    gix::diff::index::Change::Deletion { .. } => push_unique(&mut changes.staged.deleted, path),
-                    gix::diff::index::Change::Modification { .. } | gix::diff::index::Change::Rewrite { .. } => {
-                        push_unique(&mut changes.staged.modified, path);
-                    },
-                }
-            },
-            gix::status::Item::IndexWorktree(item) => {
-                let path = gix_path(item.rela_path());
-                if is_submodule_status_path(&path, &submodule_paths) {
-                    continue;
-                }
-                match item.summary() {
-                    Some(gix::status::index_worktree::iter::Summary::Conflict) => push_unique(&mut changes.conflicts, path),
-                    Some(gix::status::index_worktree::iter::Summary::Removed) => push_unique(&mut changes.unstaged.deleted, path),
-                    Some(gix::status::index_worktree::iter::Summary::Added) | Some(gix::status::index_worktree::iter::Summary::IntentToAdd) => {
-                        push_unique(&mut changes.unstaged.added, path);
-                    },
-                    Some(
-                        gix::status::index_worktree::iter::Summary::Modified
-                        | gix::status::index_worktree::iter::Summary::TypeChange
-                        | gix::status::index_worktree::iter::Summary::Renamed
-                        | gix::status::index_worktree::iter::Summary::Copied,
-                    ) => push_unique(&mut changes.unstaged.modified, path),
-                    None => {},
-                }
-            },
-        }
-    }
+    status.into_iter(Vec::new()).map_err(gix_error)?.try_for_each(|item| {
+        apply_workdir_status_item(&mut changes, item.map_err(gix_error)?, &submodule_paths);
+        Ok::<(), Error>(())
+    })?;
 
     add_submodule_pointer_changes(repo, &gix_repo, &submodules, &mut changes);
     finalize_uncommitted_changes(&mut changes);
 
     Ok(changes)
+}
+
+fn apply_workdir_status_item(changes: &mut UncommittedChanges, item: gix::status::Item, submodule_paths: &[PathBuf]) {
+    match item {
+        gix::status::Item::TreeIndex(change) => apply_tree_index_change(changes, change, submodule_paths),
+        gix::status::Item::IndexWorktree(item) => apply_index_worktree_change(changes, item.rela_path(), item.summary(), submodule_paths),
+    }
+}
+
+fn apply_tree_index_change(changes: &mut UncommittedChanges, change: gix::diff::index::Change, submodule_paths: &[PathBuf]) {
+    let path = change.location().to_str_lossy();
+    if !is_submodule_status_path(path.as_ref(), submodule_paths) {
+        let bucket = match change {
+            gix::diff::index::Change::Addition { .. } => &mut changes.staged.added,
+            gix::diff::index::Change::Deletion { .. } => &mut changes.staged.deleted,
+            gix::diff::index::Change::Modification { .. } | gix::diff::index::Change::Rewrite { .. } => &mut changes.staged.modified,
+        };
+        push_unique(bucket, path.into_owned());
+    }
+}
+
+fn apply_index_worktree_change(changes: &mut UncommittedChanges, path: &BStr, summary: Option<Summary>, submodule_paths: &[PathBuf]) {
+    let path = path.to_str_lossy();
+    if !is_submodule_status_path(path.as_ref(), submodule_paths) {
+        let bucket = match summary {
+            Some(Summary::Conflict) => Some(&mut changes.conflicts),
+            Some(Summary::Removed) => Some(&mut changes.unstaged.deleted),
+            Some(Summary::Added | Summary::IntentToAdd) => Some(&mut changes.unstaged.added),
+            Some(Summary::Modified | Summary::TypeChange | Summary::Renamed | Summary::Copied) => Some(&mut changes.unstaged.modified),
+            None => None,
+        };
+
+        if let Some(bucket) = bucket {
+            push_unique(bucket, path.into_owned());
+        }
+    }
 }
 
 pub fn get_staged_filenames_diff(repo: &Repository) -> Result<UncommittedChanges, Error> {

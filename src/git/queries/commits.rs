@@ -68,12 +68,11 @@ pub fn get_tag_oids(repo: &gix::Repository, oids: &mut Oids) -> HashMap<u32, Vec
 pub fn get_sorted_oids(batcher: &mut Batcher, oids: &mut Oids, sorted: &mut Vec<u32>, amount: usize, scratch: &mut Vec<WalkedCommit>) {
     scratch.clear();
     let fetched = batcher.next_aliased_into(amount, scratch, oids);
-    if fetched == 0 {
-        return;
-    }
 
-    sorted.reserve(fetched);
-    sorted.extend(scratch.iter().map(|commit| commit.alias));
+    if fetched != 0 {
+        sorted.reserve(fetched);
+        sorted.extend(scratch.iter().map(|commit| commit.alias));
+    }
 }
 
 // Return the current branch name, or None when HEAD is detached.

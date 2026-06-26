@@ -32,80 +32,47 @@ fn configured_branch(branch: Option<gix::submodule::config::Branch>) -> Option<S
 }
 
 fn changed_content_flags(changes: &[gix::status::Item]) -> (bool, bool) {
-    let mut has_modified_content = false;
-    let mut has_untracked_content = false;
-
-    for change in changes {
-        match change {
-            gix::status::Item::IndexWorktree(item) => match item {
-                gix::status::index_worktree::Item::DirectoryContents { entry, .. } if matches!(entry.status, gix::dir::entry::Status::Untracked) => {
-                    has_untracked_content = true;
-                },
-                gix::status::index_worktree::Item::DirectoryContents { .. } => {
-                    has_modified_content = true;
-                },
-                gix::status::index_worktree::Item::Rewrite { .. } => {
-                    has_modified_content = true;
-                },
-                gix::status::index_worktree::Item::Modification { status, .. } => match status {
-                    gix::status::plumbing::index_as_worktree::EntryStatus::Change(
-                        gix::status::plumbing::index_as_worktree::Change::Removed
+    changes.iter().fold((false, false), |(modified, untracked), change| match change {
+        gix::status::Item::TreeIndex(_) => (true, untracked),
+        gix::status::Item::IndexWorktree(gix::status::index_worktree::Item::DirectoryContents { entry, .. }) => {
+            let is_untracked = matches!(entry.status, gix::dir::entry::Status::Untracked);
+            (modified || !is_untracked, untracked || is_untracked)
+        },
+        gix::status::Item::IndexWorktree(gix::status::index_worktree::Item::Rewrite { .. }) => (true, untracked),
+        gix::status::Item::IndexWorktree(gix::status::index_worktree::Item::Modification { status, .. }) => {
+            let is_modified = matches!(
+                status,
+                gix::status::plumbing::index_as_worktree::EntryStatus::Change(
+                    gix::status::plumbing::index_as_worktree::Change::Removed
                         | gix::status::plumbing::index_as_worktree::Change::Type { .. }
                         | gix::status::plumbing::index_as_worktree::Change::Modification { .. }
                         | gix::status::plumbing::index_as_worktree::Change::SubmoduleModification(_),
-                    )
-                    | gix::status::plumbing::index_as_worktree::EntryStatus::Conflict { .. }
-                    | gix::status::plumbing::index_as_worktree::EntryStatus::IntentToAdd => {
-                        has_modified_content = true;
-                    },
-                    gix::status::plumbing::index_as_worktree::EntryStatus::NeedsUpdate(_) => {},
-                },
-            },
-            gix::status::Item::TreeIndex(_) => {
-                has_modified_content = true;
-            },
-        }
-    }
+                ) | gix::status::plumbing::index_as_worktree::EntryStatus::Conflict { .. }
+                    | gix::status::plumbing::index_as_worktree::EntryStatus::IntentToAdd
+            );
+            (modified || is_modified, untracked)
+        },
+    })
+}
 
-    (has_modified_content, has_untracked_content)
+fn head_contains_gitmodules(gix_repo: &gix::Repository, gitmodules: &Path) -> bool {
+    gix_repo.head_tree_id_or_empty().ok().and_then(|tree_id| gix_repo.find_tree(tree_id).ok()).and_then(|tree| tree.lookup_entry_by_path(gitmodules).ok().flatten()).is_some()
 }
 
 fn has_committed_or_workdir_submodule_metadata(repo: &Repository) -> bool {
     let gitmodules = Path::new(".gitmodules");
-    if repo.workdir().is_some_and(|workdir| workdir.join(gitmodules).exists()) {
-        return true;
-    }
+    let workdir_has_gitmodules = repo.workdir().is_some_and(|workdir| workdir.join(gitmodules).exists());
+    let head_has_gitmodules = open_repo(repo).ok().is_some_and(|gix_repo| head_contains_gitmodules(&gix_repo, gitmodules));
 
-    let Ok(gix_repo) = open_repo(repo) else {
-        return false;
-    };
-    let Ok(tree_id) = gix_repo.head_tree_id_or_empty() else {
-        return false;
-    };
-    let Ok(tree) = gix_repo.find_tree(tree_id) else {
-        return false;
-    };
-
-    tree.lookup_entry_by_path(gitmodules).ok().flatten().is_some()
+    workdir_has_gitmodules || head_has_gitmodules
 }
 
 fn has_committed_or_workdir_submodule_metadata_from_path(path: &Path) -> bool {
     let gitmodules = Path::new(".gitmodules");
-    if path.join(gitmodules).exists() {
-        return true;
-    }
+    let workdir_has_gitmodules = path.join(gitmodules).exists();
+    let head_has_gitmodules = open_repo_path(path).ok().is_some_and(|gix_repo| head_contains_gitmodules(&gix_repo, gitmodules));
 
-    let Ok(gix_repo) = open_repo_path(path) else {
-        return false;
-    };
-    let Ok(tree_id) = gix_repo.head_tree_id_or_empty() else {
-        return false;
-    };
-    let Ok(tree) = gix_repo.find_tree(tree_id) else {
-        return false;
-    };
-
-    tree.lookup_entry_by_path(gitmodules).ok().flatten().is_some()
+    workdir_has_gitmodules || head_has_gitmodules
 }
 
 pub fn has_submodule_metadata(repo: &Repository) -> bool {
@@ -118,40 +85,38 @@ fn index_contains_gitmodules_path(repo: &Repository) -> bool {
 }
 
 fn file_contains_gitmodules_path(path: &Path) -> bool {
-    let Ok(mut file) = File::open(path) else {
-        return false;
-    };
+    File::open(path).ok().is_some_and(|mut file| {
+        let mut buffer = [0u8; INDEX_SCAN_BUFFER];
+        let mut overlap = [0u8; GITMODULES_OVERLAP];
+        let mut overlap_len = 0;
 
-    let mut buffer = [0u8; INDEX_SCAN_BUFFER];
-    let mut overlap = [0u8; GITMODULES_OVERLAP];
-    let mut overlap_len = 0;
-
-    loop {
-        let Ok(read) = file.read(&mut buffer) else {
-            return false;
-        };
-        if read == 0 {
-            return false;
-        }
-
-        if overlap_len > 0 {
-            let prefix_len = (GITMODULES_PATH.len() - 1).min(read);
-            let mut boundary = [0u8; GITMODULES_OVERLAP * 2 + 1];
-            boundary[..overlap_len].copy_from_slice(&overlap[..overlap_len]);
-            boundary[overlap_len..overlap_len + prefix_len].copy_from_slice(&buffer[..prefix_len]);
-            if boundary[..overlap_len + prefix_len].windows(GITMODULES_PATH.len()).any(|window| window == GITMODULES_PATH) {
-                return true;
+        loop {
+            let Ok(read) = file.read(&mut buffer) else {
+                break false;
+            };
+            if read == 0 {
+                break false;
             }
-        }
 
-        if buffer[..read].windows(GITMODULES_PATH.len()).any(|window| window == GITMODULES_PATH) {
-            return true;
-        }
+            let boundary_match = if overlap_len == 0 {
+                false
+            } else {
+                let prefix_len = (GITMODULES_PATH.len() - 1).min(read);
+                let mut boundary = [0u8; GITMODULES_OVERLAP * 2 + 1];
+                boundary[..overlap_len].copy_from_slice(&overlap[..overlap_len]);
+                boundary[overlap_len..overlap_len + prefix_len].copy_from_slice(&buffer[..prefix_len]);
+                boundary[..overlap_len + prefix_len].windows(GITMODULES_PATH.len()).any(|window| window == GITMODULES_PATH)
+            };
 
-        let keep = GITMODULES_PATH.len().saturating_sub(1).min(read);
-        overlap[..keep].copy_from_slice(&buffer[read - keep..read]);
-        overlap_len = keep;
-    }
+            if boundary_match || buffer[..read].windows(GITMODULES_PATH.len()).any(|window| window == GITMODULES_PATH) {
+                break true;
+            }
+
+            let keep = GITMODULES_PATH.len().saturating_sub(1).min(read);
+            overlap[..keep].copy_from_slice(&buffer[read - keep..read]);
+            overlap_len = keep;
+        }
+    })
 }
 
 pub fn list_submodules(repo: &Repository) -> Result<Vec<SubmoduleEntry>, git2::Error> {
@@ -175,54 +140,51 @@ pub fn list_submodules_from_path(path: impl AsRef<Path>) -> Result<Vec<Submodule
 }
 
 fn list_submodules_from_gix_repo(gix_repo: &gix::Repository, workdir: PathBuf) -> Result<Vec<SubmoduleEntry>, git2::Error> {
-    let mut entries = Vec::new();
+    let mut entries = gix_repo
+        .submodules()
+        .map_err(gix_error)?
+        .into_iter()
+        .flatten()
+        .filter_map(|submodule| {
+            let path = gix::path::from_bstring(submodule.path().ok()?.into_owned());
+            let name = submodule.name().to_str().ok().map(str::to_string).unwrap_or_else(|| path.display().to_string());
+            let opened = submodule.open().ok().flatten();
+            let status = submodule.status(gix::submodule::config::Ignore::None, false).ok();
+            let state = status.as_ref().map(|status| status.state).unwrap_or_else(|| submodule.state().unwrap_or_default());
+            let branch = opened.as_ref().and_then(current_branch).or_else(|| configured_branch(submodule.branch().ok().flatten()));
+            let head = submodule.head_id().ok().flatten();
+            let index = submodule.index_id().ok().flatten();
+            let workdir_id = opened.as_ref().and_then(|repo| repo.head_id().ok().map(|id| id.detach()));
+            let absolute_path = workdir.join(&path);
 
-    let Some(submodules) = gix_repo.submodules().map_err(gix_error)? else {
-        return Ok(entries);
-    };
+            let (has_modified_content, has_untracked_content) = status.as_ref().and_then(|status| status.changes.as_ref().map(|changes| changed_content_flags(changes))).unwrap_or((false, false));
+            let is_index_modified = head != index;
+            let has_new_commits = workdir_id.zip(index).is_some_and(|(workdir, index)| workdir != index);
+            let is_workdir_modified = has_new_commits || has_modified_content || has_untracked_content;
 
-    for submodule in submodules {
-        let Ok(path) = submodule.path() else {
-            continue;
-        };
-        let path = gix::path::from_bstring(path.into_owned());
-        let name = submodule.name().to_str().ok().map(str::to_string).unwrap_or_else(|| path.display().to_string());
-        let opened = submodule.open().ok().flatten();
-        let status = submodule.status(gix::submodule::config::Ignore::None, false).ok();
-        let state = status.as_ref().map(|status| status.state).unwrap_or_else(|| submodule.state().unwrap_or_default());
-        let branch = opened.as_ref().and_then(current_branch).or_else(|| configured_branch(submodule.branch().ok().flatten()));
-        let head = submodule.head_id().ok().flatten();
-        let index = submodule.index_id().ok().flatten();
-        let workdir_id = opened.as_ref().and_then(|repo| repo.head_id().ok().map(|id| id.detach()));
-        let absolute_path = workdir.join(&path);
-
-        let (has_modified_content, has_untracked_content) = status.as_ref().and_then(|status| status.changes.as_ref().map(|changes| changed_content_flags(changes))).unwrap_or((false, false));
-        let is_index_modified = head != index;
-        let has_new_commits = workdir_id.zip(index).is_some_and(|(workdir, index)| workdir != index);
-        let is_workdir_modified = has_new_commits || has_modified_content || has_untracked_content;
-
-        entries.push(SubmoduleEntry {
-            name,
-            path,
-            absolute_path,
-            url: submodule.url().ok().map(|url| url.to_string()),
-            branch,
-            head,
-            index,
-            workdir: workdir_id,
-            is_open: opened.is_some(),
-            is_uninitialized: !state.repository_exists,
-            is_in_head: head.is_some(),
-            is_in_index: index.is_some(),
-            is_in_config: state.superproject_configuration,
-            is_in_workdir: state.worktree_checkout,
-            is_index_modified,
-            is_workdir_modified,
-            has_new_commits,
-            has_modified_content,
-            has_untracked_content,
-        });
-    }
+            Some(SubmoduleEntry {
+                name,
+                path,
+                absolute_path,
+                url: submodule.url().ok().map(|url| url.to_string()),
+                branch,
+                head,
+                index,
+                workdir: workdir_id,
+                is_open: opened.is_some(),
+                is_uninitialized: !state.repository_exists,
+                is_in_head: head.is_some(),
+                is_in_index: index.is_some(),
+                is_in_config: state.superproject_configuration,
+                is_in_workdir: state.worktree_checkout,
+                is_index_modified,
+                is_workdir_modified,
+                has_new_commits,
+                has_modified_content,
+                has_untracked_content,
+            })
+        })
+        .collect::<Vec<_>>();
 
     entries.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(entries)
