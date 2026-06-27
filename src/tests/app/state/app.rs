@@ -1,4 +1,5 @@
 use super::*;
+use crate::core::chunk::NONE;
 use crate::core::graph_service::{GraphCommand, GraphEvent, GraphFileHistoryRow, GraphLookupKind, GraphLookupResult, GraphPane, GraphRow};
 use crate::git::queries::helpers::{FileStatus, UncommittedChanges};
 use crate::git::test_support::{TestDir, commit_file, parent_with_submodule, stage_path, temp_repo, write_workdir_file};

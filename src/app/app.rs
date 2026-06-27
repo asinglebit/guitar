@@ -1271,7 +1271,9 @@ impl App {
                     self.graph.clear_graph_projection();
                     self.graph.requested_graph = None;
 
-                    self.graph_identity_at(self.graph_selected).into_iter().for_each(|identity| self.refresh_current_diff_for_identity_from_event(repo, identity));
+                    if self.graph_selected != 0 {
+                        self.graph_identity_at(self.graph_selected).into_iter().for_each(|identity| self.refresh_current_diff_for_identity_from_event(repo, identity));
+                    }
                 }
             },
             GraphEvent::PaneWindow { generation, version, pane, start, end, total, rows } if generation == self.graph.generation => {
