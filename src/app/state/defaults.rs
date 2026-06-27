@@ -239,6 +239,7 @@ impl Default for App {
 
             // Exit
             is_exit: false,
+            skip_workdir_status: false,
         }
     }
 }
