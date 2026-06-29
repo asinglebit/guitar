@@ -14,7 +14,7 @@ use crate::{
     helpers::{
         branch_visibility::{current_branch_names, load_branch_visibility, prune_hidden_branches, save_branch_visibility},
         heatmap::{DAYS, WEEKS, empty_heatmap},
-        keymap::{Command, KeyBinding, KeymapEditError, KeymapSelection},
+        keymap::{Command, KeyBinding, KeymapEditError, KeymapSelection, RepoCapability},
         layout::LayoutConfig,
         localisation::{Language, errors, load_language, load_language_from_path, modal, operations, save_language, save_language_to_path, set_active_language, settings},
         recent::{load_recent, save_recent, save_recent_to_path},
@@ -39,7 +39,7 @@ use crate::{
         actions::network::NetworkRequest,
         queries::{
             commits::get_git_user_info,
-            diffs::get_filenames_diff_at_workdir,
+            diffs::get_uncommitted_changes,
             helpers::{FileChange, UncommittedChanges},
         },
     },
@@ -77,6 +77,29 @@ pub enum Viewport {
     Viewer,
     Splash,
     Settings,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WorktreeState {
+    Available,
+    Unavailable,
+}
+
+impl WorktreeState {
+    pub fn from_repo(repo: &Repository) -> Self {
+        if repo.is_bare() || repo.workdir().is_none() { Self::Unavailable } else { Self::Available }
+    }
+
+    pub fn has_worktree(self) -> bool {
+        matches!(self, Self::Available)
+    }
+
+    pub(crate) fn supports(self, capability: RepoCapability) -> bool {
+        match self {
+            Self::Available => true,
+            Self::Unavailable => !capability.requires_worktree(),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -650,6 +673,8 @@ pub struct App {
 
     // Main loop shutdown flag.
     pub is_exit: bool,
+
+    pub worktree_state: WorktreeState,
 }
 
 impl App {
@@ -929,10 +954,12 @@ impl App {
         let absolute_path = absolute_path.display().to_string();
         self.path = Some(absolute_path.clone());
         self.repo = repo;
+        self.worktree_state = WorktreeState::Available;
         self.refresh_theme_assets();
 
         // Repository-specific state starts only after Repository::open succeeds.
         if let Some(repo) = &self.repo {
+            self.worktree_state = WorktreeState::from_repo(repo);
             let current_path = PathBuf::from(&absolute_path);
             self.worktrees = Worktrees::from_entries(list_worktrees(repo, Some(current_path.as_path())).unwrap_or_default());
             self.submodules = Submodules::from_entries(list_submodules(repo).unwrap_or_default());
@@ -968,10 +995,17 @@ impl App {
                 });
             }
 
-            // Commit actions require a concrete identity, so missing config is treated as fatal.
-            let (name, email) = get_git_user_info(repo).expect("Couldn't get user credentials");
-            self.name = name.unwrap();
-            self.email = email.unwrap();
+            match get_git_user_info(repo) {
+                Ok((Some(name), Some(email))) => {
+                    self.name = name;
+                    self.email = email;
+                },
+                Ok(_) => {
+                    self.name.clear();
+                    self.email.clear();
+                },
+                Err(error) => self.show_error(errors::with_error(errors::COMMIT(), error)),
+            }
 
             // The spinner reflects walker activity, not individual git network commands.
             self.spinner.start();
@@ -1035,10 +1069,9 @@ impl App {
                         self.viewport = Viewport::Graph;
                     }
 
-                    match get_filenames_diff_at_workdir(repo) {
-                        Ok(uncommitted) => {
-                            self.uncommitted = uncommitted;
-                        },
+                    match get_uncommitted_changes(repo) {
+                        Ok(Some(uncommitted)) => self.uncommitted = uncommitted,
+                        Ok(None) => self.uncommitted = UncommittedChanges::clean(),
                         Err(error) => {
                             self.uncommitted = UncommittedChanges::default();
                             self.show_error(errors::with_error(errors::FILE_DIFF(), error));

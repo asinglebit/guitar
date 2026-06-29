@@ -81,7 +81,7 @@ This README and the in-app settings/help view are the current source of truth fo
 ## Requirements
 
 - Rust and Cargo when building from source.
-- A non-bare Git repository. Bare repositories are not supported by the UI.
+- A Git repository. Bare repositories can be opened for history browsing.
 - `user.name` and `user.email` configured in Git before opening a repository. `guitar` reads these on repository load and uses them when creating commits.
 - Terminal mouse support for pane dragging and wheel scrolling.
 - SSH or HTTPS credentials for private remotes when using network operations.
@@ -141,7 +141,7 @@ guitar -v
 guitar --reset
 ```
 
-`--version` and `-v` print the version and exit. `--reset` deletes the saved `guitar` config directory, then starts the app with regenerated defaults.
+`--version` and `-v` print the version and exit. `--reset` deletes the saved `guitar` config directory, then starts the app with regenerated defaults. Bare repositories skip workdir status loading automatically. Worktree-changing commands, including checkout, reset, staging, committing, stash, cherry-pick, revert, rebase, and merge operations, remain unavailable when the current repository has no worktree.
 
 If the path cannot be opened as a Git repository, `guitar` falls back to the splash screen and shows saved recent repositories.
 

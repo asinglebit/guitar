@@ -7,7 +7,7 @@ use crate::{
 };
 use crate::{
     app::{
-        app::{App, AuthInputField, BranchModalAction, Focus, OperationKind, RemoteInputAction, SettingsTab, Viewport, WorktreeModalAction},
+        app::{App, AuthInputField, BranchModalAction, Focus, OperationKind, RemoteInputAction, SettingsTab, Viewport, WorktreeModalAction, WorktreeState},
         state::layout::Layout,
     },
     core::{branches::Branches, oids::Oids, tags::Tags},
@@ -239,6 +239,7 @@ impl Default for App {
 
             // Exit
             is_exit: false,
+            worktree_state: WorktreeState::Available,
         }
     }
 }

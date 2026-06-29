@@ -1,6 +1,7 @@
 use crate::{
     app::app::{App, Focus, Viewport},
     helpers::keymap::{Command, InputMode, KeyBinding, command_for_key_binding, load_or_init_keymaps},
+    helpers::localisation::errors,
 };
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -43,7 +44,16 @@ impl App {
         }
     }
 
+    pub(crate) fn command_is_available(&self, command: &Command) -> bool {
+        self.worktree_state.supports(command.required_capability())
+    }
+
     pub(crate) fn dispatch_command(&mut self, command: &Command) {
+        if !self.command_is_available(command) {
+            self.show_error(errors::BARE_REPO_WORKDIR_OPERATION());
+            return;
+        }
+
         match command {
             Command::WidenScope => self.on_widen_scope(),
             Command::NarrowScope => self.on_narrow_scope(),
