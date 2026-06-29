@@ -115,15 +115,12 @@ impl SeenCommits {
     }
 
     fn insert_graph_pos(&mut self, pos: gix::commitgraph::Position) -> bool {
-        let pos = pos.0 as usize;
-        let word = pos / u64::BITS as usize;
-        let mask = 1u64 << (pos % u64::BITS as usize);
-        let Some(word_bits) = self.graph_positions.get_mut(word) else {
-            return false;
-        };
-        let was_seen = *word_bits & mask != 0;
-        *word_bits |= mask;
-        !was_seen
+        let (word, mask) = bit_slot(pos.0 as usize);
+        self.graph_positions.get_mut(word).is_some_and(|word_bits| {
+            let was_missing = *word_bits & mask == 0;
+            *word_bits |= mask;
+            was_missing
+        })
     }
 
     fn insert_loose_oid(&mut self, oid: gix::ObjectId) -> bool {
@@ -133,6 +130,12 @@ impl SeenCommits {
 
 fn bit_words(bits: usize) -> usize {
     bits.div_ceil(u64::BITS as usize)
+}
+
+fn bit_slot(bit: usize) -> (usize, u64) {
+    let word = bit / u64::BITS as usize;
+    let mask = 1u64 << (bit % u64::BITS as usize);
+    (word, mask)
 }
 
 impl CommitCursor {

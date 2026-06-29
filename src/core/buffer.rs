@@ -376,25 +376,17 @@ impl Buffer {
     }
 
     pub fn window(&self, start: usize, end: usize) -> GraphHistory {
-        let mut history = GraphHistory::new();
-
-        // Start from the nearest checkpoint before the requested range.
         let checkpoint = self.checkpoints.get(self.checkpoints.partition_point(|checkpoint| checkpoint.idx <= start).saturating_sub(1));
-
+        let replay_start = checkpoint.map_or(0, |checkpoint| checkpoint.idx + 1);
+        let replay_end = end.min(self.deltas.len());
         let mut curr = checkpoint.map(|checkpoint| checkpoint.curr.clone()).unwrap_or_default();
 
-        // Replay only the deltas needed to produce the requested visible range.
-        let begin = checkpoint.map_or(0, |checkpoint| checkpoint.idx + 1);
-        let end = end.min(self.deltas.len());
-
-        for (idx, delta) in self.deltas.iter_range(begin, end) {
+        let rows = self.deltas.iter_range(replay_start, replay_end).filter_map(|(idx, delta)| {
             apply_delta(&mut curr, &delta);
-            if idx >= start {
-                history.push(curr.clone());
-            }
-        }
+            (idx >= start).then(|| curr.clone())
+        });
 
-        history
+        GraphHistory::from_rows(rows)
     }
 }
 
