@@ -1098,6 +1098,8 @@ fn settings_symbol_theme_selection_updates_persists_and_stays_in_settings() {
 
 #[test]
 fn settings_language_selection_updates_persists_and_stays_in_settings() {
+    let _guard = crate::git::test_support::language_test_guard();
+
     let path = temp_language_path("select");
     let mut app = App {
         viewport: Viewport::Settings,
@@ -1117,8 +1119,6 @@ fn settings_language_selection_updates_persists_and_stays_in_settings() {
     assert_eq!(app.settings_selected, 12);
     assert_eq!(app.settings_scroll.get(), 4);
     assert_eq!(fs::read_to_string(path).unwrap(), "\"spanish\"");
-
-    crate::helpers::localisation::set_active_language(Language::English);
 }
 
 #[test]

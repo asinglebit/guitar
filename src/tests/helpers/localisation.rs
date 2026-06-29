@@ -1,12 +1,9 @@
 use super::*;
-use std::{
-    fs,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use crate::git::test_support::language_test_guard;
+use std::fs;
 
 fn temp_language_path(name: &str) -> std::path::PathBuf {
-    let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-    std::env::temp_dir().join(format!("guitar-language-{name}-{id}.json"))
+    tempfile::Builder::new().prefix(&format!("guitar-language-{name}-")).suffix(".json").tempfile().unwrap().into_temp_path().keep().unwrap()
 }
 
 #[test]
@@ -41,6 +38,8 @@ fn invalid_language_file_falls_back_to_english() {
 
 #[test]
 fn active_language_changes_localised_text() {
+    let _guard = language_test_guard();
+
     set_active_language(Language::English);
     assert_eq!(menu::SETTINGS(), "Settings");
 
@@ -52,6 +51,8 @@ fn active_language_changes_localised_text() {
 
 #[test]
 fn settings_general_performance_lane_limit_text_is_localised() {
+    let _guard = language_test_guard();
+
     for (language, general, performance, lane_limit, prompt) in [
         (Language::English, "general", " performance:", " graph lane limit:", "Enter graph lane limit"),
         (Language::Spanish, "general", " rendimiento:", " límite de carriles del grafo:", "Introduce límite de carriles del grafo"),
@@ -73,6 +74,8 @@ fn settings_general_performance_lane_limit_text_is_localised() {
 fn graph_lane_limit_shortcut_command_labels_are_localised() {
     use crate::helpers::keymap::{Command, command_to_visual_string};
 
+    let _guard = language_test_guard();
+
     for (language, shrink, grow) in [
         (Language::English, "Shrink graph lane limit", "Grow graph lane limit"),
         (Language::Spanish, "Reducir límite de carriles del grafo", "Aumentar límite de carriles del grafo"),
@@ -90,6 +93,8 @@ fn graph_lane_limit_shortcut_command_labels_are_localised() {
 
 #[test]
 fn formatted_messages_keep_runtime_values() {
+    let _guard = language_test_guard();
+
     set_active_language(Language::Turkish);
     assert!(network::pushing("main", "origin").contains("main"));
     assert!(network::pushing("main", "origin").contains("origin"));

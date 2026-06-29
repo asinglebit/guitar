@@ -142,6 +142,8 @@ fn settings_active_tabs_render_their_grouped_sections_only() {
 
 #[test]
 fn settings_shortcuts_render_graph_lane_limit_shortcuts() {
+    let _guard = crate::git::test_support::language_test_guard();
+
     crate::helpers::localisation::set_active_language(Language::English);
     let (_path, repo) = temp_repo("lane-limit-shortcuts");
     let mut app = settings_app();

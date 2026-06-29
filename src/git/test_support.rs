@@ -1,9 +1,11 @@
 use crate::git::actions::worktrees::create_worktree;
-use git2::{Oid, Repository, Signature, Time, build::CheckoutBuilder};
+use crate::helpers::localisation::{Language, set_active_language};
+use git2::{Oid, Repository, RepositoryInitOptions, Signature, Time, build::CheckoutBuilder};
 use std::{
     fs,
     ops::Deref,
     path::{Path, PathBuf},
+    sync::{Mutex, MutexGuard, OnceLock},
 };
 
 pub struct TestDir {
@@ -16,6 +18,21 @@ pub struct LinkedWorktreeFixture {
     pub linked_path: PathBuf,
     pub linked_repo: Repository,
     pub base: Oid,
+}
+
+pub struct LanguageTestGuard {
+    _guard: MutexGuard<'static, ()>,
+}
+
+impl Drop for LanguageTestGuard {
+    fn drop(&mut self) {
+        set_active_language(Language::English);
+    }
+}
+
+pub fn language_test_guard() -> LanguageTestGuard {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LanguageTestGuard { _guard: LOCK.get_or_init(|| Mutex::new(())).lock().unwrap_or_else(|poisoned| poisoned.into_inner()) }
 }
 
 impl TestDir {
@@ -71,7 +88,9 @@ fn configure_user(repo: &Repository) {
 
 pub fn init_repo_at(path: &Path) -> Repository {
     fs::create_dir_all(path).unwrap();
-    let repo = Repository::init(path).unwrap();
+    let mut opts = RepositoryInitOptions::new();
+    opts.initial_head("master");
+    let repo = Repository::init_opts(path, &opts).unwrap();
     configure_user(&repo);
     repo
 }
