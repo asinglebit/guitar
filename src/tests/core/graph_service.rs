@@ -1,4 +1,5 @@
 use super::*;
+use crate::core::oids::git2_to_gix_oid;
 use crate::git::test_support::{commit_file, temp_repo};
 use crate::helpers::symbols::SymbolTheme;
 use git2::build::CheckoutBuilder;
@@ -146,7 +147,7 @@ fn graph_service_reports_progress_and_answers_visible_window() {
         name: "repo".to_string(),
         path,
         branch: Some("master".to_string()),
-        head: Some(two),
+        head: Some(git2_to_gix_oid(two)),
         alias: None,
         kind: crate::core::worktrees::WorktreeKind::Main,
         is_current: true,

@@ -371,7 +371,7 @@ fn create_branch_from_reflog_uses_reflog_commit_target() {
         new_oid: reflog_oid,
         new_alias: reflog_alias,
         message: "commit: reflog".to_string(),
-        time: git2::Time::new(1, 0),
+        time: gix::date::Time::new(1, 0),
     });
 
     app.on_create_branch();

@@ -1451,7 +1451,7 @@ fn reflog_selection_refreshes_current_diff() {
         new_oid: child_oid,
         new_alias: child_alias,
         message: "commit: child".to_string(),
-        time: git2::Time::new(1, 0),
+        time: gix::date::Time::new(1, 0),
     });
     app.graph_selected = 3;
     app.current_diff.clear();
