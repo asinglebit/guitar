@@ -18,6 +18,12 @@ pub struct UncommittedChanges {
     pub has_conflicts: bool,    // True when the index has unresolved conflicts.
 }
 
+impl UncommittedChanges {
+    pub fn clean() -> Self {
+        Self { is_clean: true, ..Default::default() }
+    }
+}
+
 // File buckets are kept separate so status actions can address a stable row group.
 #[derive(Debug, Default, Clone)]
 pub struct FileChanges {

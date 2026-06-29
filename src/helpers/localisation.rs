@@ -1826,6 +1826,9 @@ pub mod errors {
     pub fn CHECKOUT() -> &'static str {
         tr("Checkout failed")
     }
+    pub fn BARE_REPO_WORKDIR_OPERATION() -> &'static str {
+        tr("This operation requires a working tree")
+    }
     pub fn CHERRYPICK() -> &'static str {
         tr("Cherry-pick failed")
     }

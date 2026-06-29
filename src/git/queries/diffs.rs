@@ -1,18 +1,24 @@
 use crate::{
     git::queries::helpers::{ConflictFile, FileChange, FileStatus, Hunk, UncommittedChanges, deduplicate, diff_to_hunks, walk_tree},
-    helpers::text::{decode, sanitize},
+    helpers::{
+        localisation::errors,
+        text::{decode, sanitize},
+    },
 };
-use git2::{Delta, DiffOptions, Error, Oid, Repository, StatusOptions, Submodule, SubmoduleIgnore, SubmoduleStatus};
+use git2::{Delta, DiffOptions, Error, Oid, Repository, Status, StatusOptions, Submodule, SubmoduleIgnore, SubmoduleStatus};
 use std::path::Path;
 
 // Collect staged and unstaged changes separately so the status panes can act on each side.
 pub fn get_filenames_diff_at_workdir(repo: &Repository) -> Result<UncommittedChanges, Error> {
+    if repo.workdir().is_none() {
+        return Err(Error::from_str(&errors::BARE_REPO_WORKDIR_OPERATION()));
+    }
+
     let mut options = StatusOptions::new();
-    options.include_untracked(true).exclude_submodules(true).show(git2::StatusShow::IndexAndWorkdir).renames_head_to_index(false).renames_index_to_workdir(false);
+    options.include_untracked(true).recurse_untracked_dirs(true).exclude_submodules(true).show(git2::StatusShow::IndexAndWorkdir).renames_head_to_index(false).renames_index_to_workdir(false);
 
     let statuses = repo.statuses(Some(&mut options))?;
     let mut changes = UncommittedChanges::default();
-    let workdir = repo.workdir().expect("Bare repo not supported");
     let submodules = repo.submodules().unwrap_or_default();
     let submodule_paths = submodules.iter().map(|entry| entry.path().to_path_buf()).collect::<Vec<_>>();
 
@@ -22,44 +28,7 @@ pub fn get_filenames_diff_at_workdir(repo: &Repository) -> Result<UncommittedCha
             continue;
         }
 
-        let full_path = workdir.join(rel_path);
-
-        // Directory statuses are expanded so the UI can show actionable file rows.
-        let files = if full_path.is_dir() { collect_files_for_status(repo, workdir, rel_path) } else { vec![rel_path.to_string()] };
-
-        for file in files {
-            if is_submodule_status_path(&file, &submodule_paths) {
-                continue;
-            }
-
-            // Query each file after expansion to avoid applying directory status to children.
-            let file_status = repo.status_file(Path::new(&file))?;
-
-            if file_status.is_conflicted() {
-                push_unique(&mut changes.conflicts, file.clone());
-                continue;
-            }
-
-            if file_status.is_index_modified() {
-                changes.staged.modified.push(file.clone());
-            }
-            if file_status.is_index_new() {
-                changes.staged.added.push(file.clone());
-            }
-            if file_status.is_index_deleted() {
-                changes.staged.deleted.push(file.clone());
-            }
-
-            if file_status.is_wt_modified() {
-                changes.unstaged.modified.push(file.clone());
-            }
-            if file_status.is_wt_new() {
-                changes.unstaged.added.push(file.clone());
-            }
-            if file_status.is_wt_deleted() {
-                changes.unstaged.deleted.push(file.clone());
-            }
-        }
+        apply_file_status(rel_path, entry.status(), &mut changes);
     }
 
     if let Ok(index) = repo.index()
@@ -86,6 +55,41 @@ pub fn get_filenames_diff_at_workdir(repo: &Repository) -> Result<UncommittedCha
     changes.is_clean = !changes.is_staged && !changes.is_unstaged && !changes.has_conflicts;
 
     Ok(changes)
+}
+
+pub fn get_uncommitted_changes(repo: &Repository) -> Result<Option<UncommittedChanges>, Error> {
+    if repo.is_bare() || repo.workdir().is_none() {
+        return Ok(None);
+    }
+
+    get_filenames_diff_at_workdir(repo).map(Some)
+}
+
+fn apply_file_status(file: &str, file_status: Status, changes: &mut UncommittedChanges) {
+    if file_status.is_conflicted() {
+        push_unique(&mut changes.conflicts, file.to_string());
+        return;
+    }
+
+    if file_status.is_index_modified() {
+        changes.staged.modified.push(file.to_string());
+    }
+    if file_status.is_index_new() {
+        changes.staged.added.push(file.to_string());
+    }
+    if file_status.is_index_deleted() {
+        changes.staged.deleted.push(file.to_string());
+    }
+
+    if file_status.is_wt_modified() {
+        changes.unstaged.modified.push(file.to_string());
+    }
+    if file_status.is_wt_new() {
+        changes.unstaged.added.push(file.to_string());
+    }
+    if file_status.is_wt_deleted() {
+        changes.unstaged.deleted.push(file.to_string());
+    }
 }
 
 fn add_submodule_pointer_changes(repo: &Repository, submodules: &[Submodule<'_>], changes: &mut UncommittedChanges) {
@@ -139,42 +143,6 @@ fn push_unique(paths: &mut Vec<String>, path: String) {
     if !paths.iter().any(|existing| existing == &path) {
         paths.push(path);
     }
-}
-
-fn collect_files_for_status(repo: &Repository, workdir: &Path, rel_path: &str) -> Vec<String> {
-    let full_path = workdir.join(rel_path);
-
-    if full_path.exists() {
-        if full_path.is_file() {
-            return vec![rel_path.to_string()];
-        } else if full_path.is_dir() {
-            let mut result = Vec::new();
-            if let Ok(entries) = std::fs::read_dir(&full_path) {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    let child_rel = match path.strip_prefix(workdir) {
-                        Ok(p) => p.to_string_lossy().to_string(),
-                        Err(_) => continue,
-                    };
-
-                    // Respect gitignore while recursively expanding untracked directories.
-                    if repo.status_should_ignore(Path::new(&child_rel)).unwrap_or(false) {
-                        continue;
-                    }
-
-                    if path.is_file() {
-                        result.push(child_rel);
-                    } else if path.is_dir() {
-                        result.extend(collect_files_for_status(repo, workdir, &child_rel));
-                    }
-                }
-            }
-            return result;
-        }
-    }
-
-    // Deleted paths no longer exist on disk, but git still reports them by relative path.
-    vec![rel_path.to_string()]
 }
 
 // List files changed by a commit compared with its first parent.
