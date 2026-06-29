@@ -148,8 +148,9 @@ fn update_submodule_initializes_plain_clone_then_refreshes_checkout() {
     assert_eq!(submodule.workdir, parent_entry.head);
     assert_eq!(submodule_remote_url(&clone, "deps/child"), child_path.to_str().unwrap());
 
-    let advanced = commit_file(&Repository::open(&child_path).unwrap(), "file.txt", "changed\n", "advance child");
-    stage_submodule_to_oid(&Repository::open(&clone_path).unwrap(), "deps/child", advanced);
+    let advanced_git2 = commit_file(&Repository::open(&child_path).unwrap(), "file.txt", "changed\n", "advance child");
+    let advanced = git2_to_gix_oid(advanced_git2);
+    stage_submodule_to_oid(&Repository::open(&clone_path).unwrap(), "deps/child", advanced_git2);
 
     assert!(matches!(update_submodule_result(&clone_path, "deps/child"), NetworkResult::Success));
 
@@ -158,7 +159,7 @@ fn update_submodule_initializes_plain_clone_then_refreshes_checkout() {
     assert_eq!(submodule.index, Some(advanced));
     assert_eq!(submodule.workdir, Some(advanced));
     let sub_repo = Repository::open(clone.workdir().unwrap().join("deps/child")).unwrap();
-    assert_eq!(sub_repo.head().unwrap().peel_to_commit().unwrap().id(), advanced);
+    assert_eq!(sub_repo.head().unwrap().peel_to_commit().unwrap().id(), advanced_git2);
 }
 
 #[test]
