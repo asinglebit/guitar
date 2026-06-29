@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     app::{
-        app::{ContextMenuAction, SettingsSelection, SettingsSelectionKind, SettingsTab},
+        app::{ContextMenuAction, SettingsSelection, SettingsSelectionKind, SettingsTab, WorktreeState},
         state::defaults::ViewerMode,
         state::layout::Layout,
     },
@@ -252,6 +252,23 @@ fn graph_context_menu_includes_fetch_and_push_when_repo_is_loaded() {
     let labels = context_menu_labels(&app);
     assert!(labels.iter().any(|label| label == "Fetch"), "{labels:?}");
     assert!(labels.iter().any(|label| label == "Push"), "{labels:?}");
+}
+
+#[test]
+fn bare_repo_context_menu_disables_workdir_commands() {
+    let (_path, repo) = temp_repo("bare-context-menu");
+    let mut app = graph_app();
+    app.repo = Some(Rc::new(repo));
+    app.worktree_state = WorktreeState::Unavailable;
+    app.graph_scroll.set(2);
+
+    app.handle_mouse_event(right_down(1, 3));
+
+    let items = &app.context_menu.as_ref().unwrap().items;
+    let checkout = items.iter().find(|item| item.label == "Checkout").unwrap();
+    let fetch = items.iter().find(|item| item.label == "Fetch").unwrap();
+    assert!(!checkout.enabled);
+    assert!(fetch.enabled);
 }
 
 #[test]
