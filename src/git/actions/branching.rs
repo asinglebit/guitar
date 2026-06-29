@@ -73,15 +73,16 @@ fn rename_branch_refs(repo: &mut gix::Repository, old_ref_name: FullName, new_re
     repo.edit_references(branch_edits.into_iter().chain(head_edit)).map(drop).map_err(to_git2_error)
 }
 
+fn target_commit_oid(repo: &gix::Repository, target_oid: Oid) -> Result<gix::hash::ObjectId, Error> {
+    repo.find_commit(git2_to_gix_oid(target_oid)).map(|commit| commit.id).map_err(to_git2_error)
+}
+
 pub fn create_branch(repo: &Repository, branch_name: &str, target_oid: Oid) -> Result<(), Error> {
     // Branch creation is intentionally non-checkout; the graph stays on the current HEAD.
     let mut repo = open_repo(repo)?;
     let branch_ref_name = branch_ref_name(branch_name)?;
     ensure_branch_name_available(&repo, &branch_ref_name)?;
-    let target_oid = {
-        let target_commit = repo.find_commit(git2_to_gix_oid(target_oid)).map_err(to_git2_error)?;
-        target_commit.id
-    };
+    let target_oid = target_commit_oid(&repo, target_oid)?;
     repo.committer_or_set_generic_fallback().map_err(to_git2_error)?;
 
     repo.reference(branch_ref_name, target_oid, PreviousValue::MustNotExist, ref_log("branch create").message).map_err(to_git2_error)?;

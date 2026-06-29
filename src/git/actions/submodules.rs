@@ -47,12 +47,19 @@ fn update_repo_config(repo: &gix::Repository, update: impl FnOnce(&mut gix::conf
 }
 
 fn sync_superproject_submodule_url(repo: &gix::Repository, submodule: &gix::Submodule<'_>, url: &gix::bstr::BStr) -> Result<(), git2::Error> {
-    update_repo_config(repo, |config| config.set_raw_value_by("submodule", Some(submodule.name()), "url", url).map(drop).map_err(to_git2_error))
+    update_repo_config(repo, |config| {
+        let section = "submodule";
+        let subsection = Some(submodule.name());
+        config.set_raw_value_by(section, subsection, "url", url).map(drop).map_err(to_git2_error)
+    })
 }
 
 fn sync_checked_out_submodule_url(submodule: &gix::Repository, url: &gix::Url) -> Result<(), git2::Error> {
     let remote = submodule.find_fetch_remote(None).map_err(to_git2_error)?;
-    update_repo_config(submodule, |config| remote.with_url(url.clone()).map_err(to_git2_error)?.save_to(config).map_err(to_git2_error))
+    update_repo_config(submodule, |config| {
+        let remote = remote.with_url(url.clone()).map_err(to_git2_error)?;
+        remote.save_to(config).map_err(to_git2_error)
+    })
 }
 
 fn open_or_init_submodule_repo(submodule: &gix::Submodule<'_>) -> Result<(gix::Repository, bool), git2::Error> {

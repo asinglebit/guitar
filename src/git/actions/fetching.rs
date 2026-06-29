@@ -35,9 +35,10 @@ pub fn fetch_remote(repo_path: &str, remote_name: &str, auth_session: AuthSessio
     let remote_name = remote_name.to_string();
 
     thread::spawn(move || {
-        let attempt = AuthAttempt::new(auth_session, network::FETCH());
+        let operation = network::FETCH();
+        let attempt = AuthAttempt::new(auth_session, operation);
         let result = fetch_remote_result(&repo_path, &remote_name, &attempt);
-        network_result(network::FETCH(), &attempt, result)
+        network_result(operation, &attempt, result)
     })
 }
 
