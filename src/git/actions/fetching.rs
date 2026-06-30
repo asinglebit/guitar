@@ -5,17 +5,32 @@ use crate::{
 };
 use std::thread;
 
+const TAG_FETCH_REFSPEC: &str = "refs/tags/*:refs/tags/*";
+
+struct FetchRemoteJob {
+    repo_path: String,
+    remote_name: String,
+    auth_session: AuthSession,
+}
+
+impl FetchRemoteJob {
+    fn new(repo_path: &str, remote_name: &str, auth_session: AuthSession) -> Self {
+        Self { repo_path: repo_path.to_string(), remote_name: remote_name.to_string(), auth_session }
+    }
+
+    fn run(self) -> NetworkResult {
+        let operation = network::FETCH();
+        let attempt = AuthAttempt::new(self.auth_session, operation);
+        let result = fetch_remote_result(&self.repo_path, &self.remote_name, &attempt);
+        network_result(operation, &attempt, result)
+    }
+}
+
 fn fetch_remote_result(repo_path: &str, remote_name: &str, attempt: &AuthAttempt) -> Result<(), git2::Error> {
-    let mut repo = open_repo_path(repo_path)?;
-    repo.committer_or_set_generic_fallback().map_err(to_git2_error)?;
-
-    let mut remote = repo.find_remote(remote_name).map_err(to_git2_error)?;
+    let repo = prepare_fetch_repo(repo_path)?;
+    let remote = repo.find_remote(remote_name).map_err(to_git2_error)?;
+    let remote = configure_fetch_remote(remote, remote_name)?;
     let remote_url = remote.url(gix::remote::Direction::Fetch).ok_or_else(|| git2::Error::from_str("Remote URL is missing"))?.to_owned();
-
-    remote = remote.with_fetch_tags(gix::remote::fetch::Tags::All);
-    let heads = format!("+refs/heads/*:refs/remotes/{remote_name}/*");
-    remote = remote.with_refspecs(Some(heads.as_str()), gix::remote::Direction::Fetch).map_err(to_git2_error)?;
-    remote = remote.with_refspecs(Some("refs/tags/*:refs/tags/*"), gix::remote::Direction::Fetch).map_err(to_git2_error)?;
 
     let mut connection = remote.connect(gix::remote::Direction::Fetch).map_err(to_git2_error)?;
     let mut configured_credentials = connection.configured_credentials(remote_url).map_err(to_git2_error)?;
@@ -28,18 +43,25 @@ fn fetch_remote_result(repo_path: &str, remote_name: &str, attempt: &AuthAttempt
     pending_pack.receive(&mut progress, &should_interrupt).map(drop).map_err(to_git2_error)
 }
 
+fn prepare_fetch_repo(repo_path: &str) -> Result<gix::Repository, git2::Error> {
+    let mut repo = open_repo_path(repo_path)?;
+    repo.committer_or_set_generic_fallback().map_err(to_git2_error)?;
+    Ok(repo)
+}
+
+fn heads_fetch_refspec(remote_name: &str) -> String {
+    format!("+refs/heads/*:refs/remotes/{remote_name}/*")
+}
+
+fn configure_fetch_remote<'repo>(remote: gix::Remote<'repo>, remote_name: &str) -> Result<gix::Remote<'repo>, git2::Error> {
+    let heads = heads_fetch_refspec(remote_name);
+    remote.with_fetch_tags(gix::remote::fetch::Tags::All).with_refspecs([heads.as_str(), TAG_FETCH_REFSPEC], gix::remote::Direction::Fetch).map_err(to_git2_error)
+}
+
 // Run fetch on a worker thread so auth prompts and network latency stay outside the draw loop.
 pub fn fetch_remote(repo_path: &str, remote_name: &str, auth_session: AuthSession) -> thread::JoinHandle<NetworkResult> {
-    // Own the inputs before crossing the thread boundary.
-    let repo_path = repo_path.to_string();
-    let remote_name = remote_name.to_string();
-
-    thread::spawn(move || {
-        let operation = network::FETCH();
-        let attempt = AuthAttempt::new(auth_session, operation);
-        let result = fetch_remote_result(&repo_path, &remote_name, &attempt);
-        network_result(operation, &attempt, result)
-    })
+    let job = FetchRemoteJob::new(repo_path, remote_name, auth_session);
+    thread::spawn(move || job.run())
 }
 
 #[cfg(test)]
