@@ -4,7 +4,6 @@ use guitar::{App, VERSION};
 
 const RESET_CONFIG: &str = "--reset";
 const EXIT_WHEN_GRAPH_COMPLETE: &str = "--exit-when-graph-complete";
-const SKIP_WORKDIR_STATUS: &str = "--skip-workdir-status";
 const VERSION_LONG: &str = "--version";
 const VERSION_SHORT: &str = "-v";
 
@@ -44,12 +43,10 @@ fn main() -> io::Result<()> {
     }
 
     let exit_when_graph_complete = args.iter().any(|a| a == EXIT_WHEN_GRAPH_COMPLETE);
-    let skip_workdir_status = args.iter().any(|a| a == SKIP_WORKDIR_STATUS);
     let repo_path = repo_path_from_args(&args);
 
     if exit_when_graph_complete {
         let mut app = App::default();
-        app.skip_workdir_status = true;
         app.bootstrap(repo_path);
         let result = app.wait_until_graph_complete(std::time::Duration::from_secs(600));
         app.shutdown_background_tasks();
@@ -58,7 +55,6 @@ fn main() -> io::Result<()> {
     }
 
     let mut app = App::default();
-    app.skip_workdir_status = skip_workdir_status;
     if let Some(path) = repo_path {
         app.path = Some(path);
     }

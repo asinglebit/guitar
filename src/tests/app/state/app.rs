@@ -400,7 +400,6 @@ fn wait_until_graph_complete_returns_commit_count_when_graph_finishes() {
     let count = app.wait_until_graph_complete(std::time::Duration::from_secs(1)).unwrap();
 
     assert_eq!(count, 4);
-    assert!(app.skip_workdir_status);
     assert!(app.graph.is_complete);
 }
 
@@ -420,29 +419,6 @@ fn wait_until_graph_complete_returns_error_when_modal_error_is_set() {
     assert_eq!(error.kind(), io::ErrorKind::Other);
     assert!(error.to_string().contains("graph walk failed"));
 }
-
-#[test]
-fn skip_workdir_status_on_first_progress_leaves_modal_error_empty_on_bare_repo() {
-    let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-    let path = std::env::temp_dir().join(format!("guitar-app-state-bare-{id}"));
-    let bare = Repository::init_bare(&path).unwrap();
-    let repo = Rc::new(bare);
-    let (event_tx, event_rx) = std::sync::mpsc::channel();
-    let mut app = App { repo: Some(repo.clone()), graph_rx: Some(event_rx), viewport: Viewport::Splash, focus: Focus::Viewport, skip_workdir_status: true, ..Default::default() };
-    app.graph.generation = 13;
-
-    event_tx.send(GraphEvent::Progress { generation: 13, version: 1, total: 0, is_first: true, is_complete: false }).unwrap();
-    app.sync(&repo);
-
-    assert_eq!(app.viewport, Viewport::Graph);
-    assert!(app.is_uncommitted_loaded);
-    assert!(app.modal_error_message.is_empty());
-    assert!(app.uncommitted.unstaged.added.is_empty());
-    assert!(app.uncommitted.staged.added.is_empty());
-
-    let _ = fs::remove_dir_all(path);
-}
-
 #[test]
 fn wait_until_graph_complete_returns_error_before_success_when_both_are_set() {
     let (_path, repo) = temp_repo("graph-complete-error-wins");

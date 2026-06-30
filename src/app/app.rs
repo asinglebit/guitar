@@ -650,9 +650,6 @@ pub struct App {
 
     // Main loop shutdown flag.
     pub is_exit: bool,
-
-    // When set, skip the first workdir status scan (bare repos, case-colliding paths).
-    pub skip_workdir_status: bool,
 }
 
 impl App {
@@ -671,7 +668,6 @@ impl App {
     }
 
     pub fn wait_until_graph_complete(&mut self, timeout: Duration) -> io::Result<usize> {
-        self.skip_workdir_status = true;
         let repo = self.repo.as_ref().ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "repository not loaded"))?.clone();
 
         let started = Instant::now();
@@ -1091,18 +1087,14 @@ impl App {
                         self.viewport = Viewport::Graph;
                     }
 
-                    if self.skip_workdir_status {
-                        self.uncommitted = UncommittedChanges::default();
-                    } else {
-                        match get_filenames_diff_at_workdir(repo) {
-                            Ok(uncommitted) => {
-                                self.uncommitted = uncommitted;
-                            },
-                            Err(error) => {
-                                self.uncommitted = UncommittedChanges::default();
-                                self.show_error(errors::with_error(errors::FILE_DIFF(), error));
-                            },
-                        }
+                    match get_filenames_diff_at_workdir(repo) {
+                        Ok(uncommitted) => {
+                            self.uncommitted = uncommitted;
+                        },
+                        Err(error) => {
+                            self.uncommitted = UncommittedChanges::default();
+                            self.show_error(errors::with_error(errors::FILE_DIFF(), error));
+                        },
                     }
                     self.is_uncommitted_loaded = true;
                 }
