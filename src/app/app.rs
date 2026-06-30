@@ -772,7 +772,7 @@ impl App {
         loop {
             self.sync_lazy();
 
-            let result = match (self.modal_error_message.as_str(), self.graph.is_complete, self.graph_rx.is_none(), start.elapsed() >= timeout) {
+            let result = match (self.modal_error_message.as_str(), self.graph.is_complete, self.graph_rx.is_none(), started.elapsed() >= timeout) {
                 (message, _, _, _) if !message.is_empty() => Some(Err(io::Error::other(message.to_owned()))),
                 (_, true, _, _) => Some(Ok(self.graph_commit_count())),
                 (_, false, true, _) => Some(Err(io::Error::new(io::ErrorKind::BrokenPipe, "graph worker disconnected before completion"))),
@@ -1045,9 +1045,18 @@ impl App {
             }
 
             // Commit actions require a concrete identity, so missing config is treated as fatal.
-            let (name, email) = get_git_user_info_from_path(current_path.as_path()).expect("Couldn't get user credentials");
-            self.name = name.unwrap();
-            self.email = email.unwrap();
+            let (Some(name), Some(email)) = (match get_git_user_info_from_path(current_path.as_path()) {
+                Ok(identity) => identity,
+                Err(error) => {
+                    self.show_error(errors::with_error("Couldn't get user credentials", error.to_string()));
+                    return;
+                },
+            }) else {
+                self.show_error("Couldn't get user credentials".to_string());
+                return;
+            };
+            self.name = name;
+            self.email = email;
 
             // The spinner reflects walker activity, not individual git network commands.
             self.spinner.start();
@@ -1160,8 +1169,13 @@ impl App {
     }
 
     fn apply_uncommitted_details_result(&mut self, result: Result<UncommittedChanges, String>) {
-        self.apply_uncommitted_result(result);
-        self.is_uncommitted_detail_loaded = true;
+        match result {
+            Ok(uncommitted) => {
+                self.apply_uncommitted_result(Ok(uncommitted));
+                self.is_uncommitted_detail_loaded = true;
+            },
+            Err(error) => self.show_error(errors::with_error(errors::FILE_DIFF(), error)),
+        }
         self.is_uncommitted_detail_loading = false;
     }
 

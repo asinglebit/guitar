@@ -1,12 +1,12 @@
 use super::*;
 use crate::core::chunk::NONE;
 use crate::core::graph_service::{GraphCommand, GraphEvent, GraphFileHistoryRow, GraphLookupKind, GraphLookupResult, GraphPane, GraphRow};
-use crate::git::queries::helpers::{FileStatus, UncommittedChanges};
+use crate::git::queries::helpers::{FileChanges, FileStatus, UncommittedChanges};
 use crate::git::test_support::{TestDir, commit_file, parent_with_submodule, stage_path, temp_repo, write_workdir_file};
 use git2::Repository;
 use ratatui::{Terminal, backend::TestBackend, layout::Rect};
 use std::{
-    fs, io,
+    io,
     rc::Rc,
     sync::{
         Arc,
@@ -264,6 +264,28 @@ fn uncommitted_metadata_waits_for_complete_progress_then_selection_loads_details
     assert_eq!(app.uncommitted.unstaged.added, vec!["new.txt".to_string()]);
 }
 
+#[test]
+fn failed_uncommitted_details_keep_summary_and_remain_retryable() {
+    let (_dir, repo) = temp_repo("failed-uncommitted-details");
+    let repo = Rc::new(repo);
+    let (event_tx, event_rx) = std::sync::mpsc::channel();
+    let mut app = app_with_repo(repo.clone());
+    app.graph_rx = Some(event_rx);
+    app.graph.generation = 12;
+    app.is_uncommitted_loaded = true;
+    app.is_uncommitted_detail_loading = true;
+    app.uncommitted = UncommittedChanges { staged: FileChanges { added: vec!["staged.txt".to_string()], ..Default::default() }, ..Default::default() };
+
+    event_tx.send(GraphEvent::UncommittedDetails { generation: 12, result: Err("boom".to_string()) }).unwrap();
+    app.sync(&repo);
+
+    assert!(app.is_uncommitted_loaded);
+    assert!(!app.is_uncommitted_detail_loaded);
+    assert!(!app.is_uncommitted_detail_loading);
+    assert_eq!(app.uncommitted.staged.added, vec!["staged.txt".to_string()]);
+    assert!(app.modal_error_message.contains("boom"));
+}
+
 fn assert_restore_lookup_case(
     name: &str, initial_selected: usize, graph_total: usize, graph_is_complete: bool, selected_offset: usize, lookup_result: GraphLookupResult, expected_selected: usize, expected_scroll: usize,
 ) {
@@ -425,7 +447,7 @@ fn wait_until_graph_complete_returns_error_before_success_when_both_are_set() {
     let (_path, repo) = temp_repo("graph-complete-error-wins");
     let repo = Rc::new(repo);
     let (event_tx, event_rx) = std::sync::mpsc::channel();
-    let mut app = App { repo: Some(repo.clone()), graph_rx: Some(event_rx), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(repo.clone())), graph_rx: Some(event_rx), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
     app.graph.generation = 13;
 
     event_tx.send(GraphEvent::Progress { generation: 13, version: 1, total: 1, is_first: true, is_complete: true }).unwrap();
@@ -442,7 +464,7 @@ fn wait_until_graph_complete_returns_error_when_graph_worker_disconnects() {
     let (_path, repo) = temp_repo("graph-complete-disconnect");
     let repo = Rc::new(repo);
     let (event_tx, event_rx) = std::sync::mpsc::channel();
-    let mut app = App { repo: Some(repo.clone()), graph_rx: Some(event_rx), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+    let mut app = App { repo: Some(crate::app::app::RepoHandle::from_repo(repo.clone())), graph_rx: Some(event_rx), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
     app.graph.generation = 14;
 
     drop(event_tx);
