@@ -46,7 +46,7 @@ fn update_repo_config(repo: &gix::Repository, update: impl FnOnce(&mut gix::conf
     })
 }
 
-fn sync_superproject_submodule_url(repo: &gix::Repository, submodule: &gix::Submodule<'_>, url: &gix::bstr::BStr) -> Result<(), git2::Error> {
+fn write_superproject_submodule_url(repo: &gix::Repository, submodule: &gix::Submodule<'_>, url: &gix::bstr::BStr) -> Result<(), git2::Error> {
     update_repo_config(repo, |config| {
         let section = "submodule";
         let subsection = Some(submodule.name());
@@ -54,12 +54,22 @@ fn sync_superproject_submodule_url(repo: &gix::Repository, submodule: &gix::Subm
     })
 }
 
-fn sync_checked_out_submodule_url(submodule: &gix::Repository, url: &gix::Url) -> Result<(), git2::Error> {
-    let remote = submodule.find_fetch_remote(None).map_err(to_git2_error)?;
-    update_repo_config(submodule, |config| {
-        let remote = remote.with_url(url.clone()).map_err(to_git2_error)?;
-        remote.save_to(config).map_err(to_git2_error)
-    })
+fn save_fetch_remote_url(repo: &gix::Repository, url: &gix::Url) -> Result<(), git2::Error> {
+    let remote = repo.find_fetch_remote(None).map_err(to_git2_error)?;
+    update_repo_config(repo, |config| remote.with_url(url.clone()).map_err(to_git2_error)?.save_to(config).map_err(to_git2_error))
+}
+
+fn save_origin_fetch_remote(repo: &gix::Repository, mut remote: gix::Remote<'_>) -> Result<(), git2::Error> {
+    update_repo_config(repo, |config| remote.save_as_to("origin", config).map_err(to_git2_error))
+}
+
+fn configure_submodule_remote<'repo>(repo: &'repo gix::Repository, url: gix::Url) -> Result<gix::Remote<'repo>, git2::Error> {
+    let mut remote = repo.remote_at_without_url_rewrite(url).map_err(to_git2_error)?;
+    remote = remote.with_fetch_tags(gix::remote::fetch::Tags::All);
+    remote = remote.with_refspecs(Some("+refs/heads/*:refs/remotes/origin/*"), gix::remote::Direction::Fetch).map_err(to_git2_error)?;
+
+    save_origin_fetch_remote(repo, remote.clone())?;
+    Ok(remote)
 }
 
 fn open_or_init_submodule_repo(submodule: &gix::Submodule<'_>) -> Result<(gix::Repository, bool), git2::Error> {
@@ -73,15 +83,6 @@ fn open_or_init_submodule_repo(submodule: &gix::Submodule<'_>) -> Result<(gix::R
         .map_err(to_git2_error)?
         .to_thread_local();
     Ok((repo, true))
-}
-
-fn configure_submodule_remote<'repo>(repo: &'repo gix::Repository, url: gix::Url) -> Result<gix::Remote<'repo>, git2::Error> {
-    let mut remote = repo.remote_at_without_url_rewrite(url).map_err(to_git2_error)?;
-    remote = remote.with_fetch_tags(gix::remote::fetch::Tags::All);
-    remote = remote.with_refspecs(Some("+refs/heads/*:refs/remotes/origin/*"), gix::remote::Direction::Fetch).map_err(to_git2_error)?;
-
-    update_repo_config(repo, |config| remote.save_as_to("origin", config).map_err(to_git2_error))?;
-    Ok(remote)
 }
 
 fn checkout_submodule_commit(repo: &mut gix::Repository, target_oid: gix::ObjectId, newly_initialized: bool) -> Result<(), git2::Error> {
@@ -100,9 +101,9 @@ pub fn sync_submodule(repo: &Repository, name: &str) -> Result<(), git2::Error> 
     };
     let url = submodule_url_from_modules(&gix_repo, &submodule)?;
     let url_bstring = url.to_bstring();
-    sync_superproject_submodule_url(&gix_repo, &submodule, url_bstring.as_ref())?;
+    write_superproject_submodule_url(&gix_repo, &submodule, url_bstring.as_ref())?;
     if let Some(submodule_repo) = submodule.open().map_err(to_git2_error)? {
-        sync_checked_out_submodule_url(&submodule_repo, &url)?;
+        save_fetch_remote_url(&submodule_repo, &url)?;
     }
     Ok(())
 }

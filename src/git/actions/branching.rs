@@ -77,42 +77,82 @@ fn target_commit_oid(repo: &gix::Repository, target_oid: Oid) -> Result<gix::has
     repo.find_commit(git2_to_gix_oid(target_oid)).map(|commit| commit.id).map_err(to_git2_error)
 }
 
+struct BranchCreate {
+    ref_name: FullName,
+    target_oid: gix::hash::ObjectId,
+}
+
+impl BranchCreate {
+    fn prepare(repo: &gix::Repository, branch_name: &str, target_oid: Oid) -> Result<Self, Error> {
+        let ref_name = branch_ref_name(branch_name)?;
+        ensure_branch_name_available(repo, &ref_name)?;
+        let target_oid = target_commit_oid(repo, target_oid)?;
+        Ok(Self { ref_name, target_oid })
+    }
+
+    fn apply(self, repo: &mut gix::Repository) -> Result<(), Error> {
+        repo.committer_or_set_generic_fallback().map_err(to_git2_error)?;
+        repo.reference(self.ref_name, self.target_oid, PreviousValue::MustNotExist, ref_log("branch create").message).map(drop).map_err(to_git2_error)
+    }
+}
+
+struct BranchDelete {
+    ref_name: FullName,
+    target_oid: gix::hash::ObjectId,
+}
+
+impl BranchDelete {
+    fn prepare(repo: &gix::Repository, branch: &str) -> Result<Self, Error> {
+        let ref_name = branch_ref_name(branch)?;
+        let target_oid = branch_target(repo, &ref_name)?;
+        ensure_branch_is_not_current(repo, &ref_name)?;
+        Ok(Self { ref_name, target_oid })
+    }
+
+    fn apply(self, repo: &mut gix::Repository) -> Result<(), Error> {
+        delete_branch_ref(repo, self.ref_name, self.target_oid)
+    }
+}
+
+struct BranchRename<'name> {
+    old_name: &'name str,
+    new_name: &'name str,
+    old_ref_name: FullName,
+    new_ref_name: FullName,
+    target_oid: gix::hash::ObjectId,
+}
+
+impl<'name> BranchRename<'name> {
+    fn prepare(repo: &gix::Repository, old_name: &'name str, new_name: &'name str) -> Result<Self, Error> {
+        let new_name = normalize_renamed_branch(old_name, new_name)?;
+        let old_ref_name = branch_ref_name(old_name)?;
+        let new_ref_name = branch_ref_name(new_name)?;
+        ensure_branch_name_available(repo, &new_ref_name)?;
+        let target_oid = branch_target(repo, &old_ref_name)?;
+        Ok(Self { old_name, new_name, old_ref_name, new_ref_name, target_oid })
+    }
+
+    fn apply(self, repo: &mut gix::Repository) -> Result<(), Error> {
+        rename_branch_refs(repo, self.old_ref_name, self.new_ref_name, self.target_oid)?;
+        rename_branch_config(repo, self.old_name, self.new_name)
+    }
+}
+
 pub fn create_branch(repo: &Repository, branch_name: &str, target_oid: Oid) -> Result<(), Error> {
     // Branch creation is intentionally non-checkout; the graph stays on the current HEAD.
     let mut repo = open_repo(repo)?;
-    let branch_ref_name = branch_ref_name(branch_name)?;
-    ensure_branch_name_available(&repo, &branch_ref_name)?;
-    let target_oid = target_commit_oid(&repo, target_oid)?;
-    repo.committer_or_set_generic_fallback().map_err(to_git2_error)?;
-
-    repo.reference(branch_ref_name, target_oid, PreviousValue::MustNotExist, ref_log("branch create").message).map_err(to_git2_error)?;
-
-    Ok(())
+    BranchCreate::prepare(&repo, branch_name, target_oid)?.apply(&mut repo)
 }
 
 pub fn delete_branch(repo: &Repository, branch: &str) -> Result<(), git2::Error> {
     let mut repo = open_repo(repo)?;
-    let branch_ref_name = branch_ref_name(branch)?;
-    let target_oid = branch_target(&repo, &branch_ref_name)?;
-    ensure_branch_is_not_current(&repo, &branch_ref_name)?;
-
-    delete_branch_ref(&mut repo, branch_ref_name, target_oid)?;
-
+    BranchDelete::prepare(&repo, branch)?.apply(&mut repo)?;
     remove_branch_config(&repo, branch)
 }
 
 pub fn rename_branch(repo: &Repository, old_name: &str, new_name: &str) -> Result<(), Error> {
-    let new_name = normalize_renamed_branch(old_name, new_name)?;
     let mut repo = open_repo(repo)?;
-    let old_ref_name = branch_ref_name(old_name)?;
-    let new_ref_name = branch_ref_name(new_name)?;
-    ensure_branch_name_available(&repo, &new_ref_name)?;
-    let target_oid = branch_target(&repo, &old_ref_name)?;
-
-    rename_branch_refs(&mut repo, old_ref_name, new_ref_name, target_oid)?;
-
-    rename_branch_config(&repo, old_name, new_name)?;
-    Ok(())
+    BranchRename::prepare(&repo, old_name, new_name)?.apply(&mut repo)
 }
 
 #[cfg(test)]
