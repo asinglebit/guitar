@@ -175,6 +175,10 @@ impl App {
         let Some(action) = self.pending_operation_action.take() else {
             return;
         };
+        self.run_pending_workdir_operation_action(action);
+    }
+
+    fn run_pending_workdir_operation_action(&mut self, action: PendingOperationAction) {
         let Some(path) = self.repo.as_ref().map(|repo| repo.path().to_path_buf()) else {
             self.focus = Focus::Viewport;
             self.show_error(errors::GIT_OPERATION_NO_REPOSITORY());
@@ -360,68 +364,33 @@ impl App {
     }
 
     pub fn on_drop(&mut self) {
-        if self.repo.is_none() || self.viewport != Viewport::Graph {
-            return;
-        }
-
-        let oid = match self.focus {
-            Focus::Viewport => {
-                let Some(row) = self.graph_row_at(self.graph_selected) else {
-                    return;
-                };
-                if !row.is_stash {
-                    return;
-                }
-                row.oid
-            },
-            Focus::Stashes => {
-                let Some(alias) = self.stash_alias_at_pane_selection() else {
-                    return;
-                };
-                *self.oids.get_oid_by_alias(alias)
-            },
-            _ => return,
-        };
-
-        let Some(path) = self.repo.as_ref().map(|repo| repo.path().to_path_buf()) else {
-            return;
-        };
-        let mut repo = match Repository::open(path) {
-            Ok(repo) => repo,
-            Err(error) => {
-                self.show_error(errors::with_error(errors::OPEN_REPOSITORY(), error));
-                return;
-            },
-        };
-        match pop(&mut repo, &oid, false) {
-            Ok(_) => self.reload(None),
-            Err(error) => self.show_error(errors::with_error(errors::DROP_STASH(), error)),
-        }
+        self.apply_selected_stash(false, errors::DROP_STASH());
     }
 
     pub fn on_pop(&mut self) {
+        self.apply_selected_stash(true, errors::POP_STASH());
+    }
+
+    fn selected_stash_oid(&self) -> Option<git2::Oid> {
+        match self.focus {
+            Focus::Viewport => {
+                let row = self.graph_row_at(self.graph_selected)?;
+                row.is_stash.then_some(row.oid)
+            },
+            Focus::Stashes => {
+                let alias = self.stash_alias_at_pane_selection()?;
+                Some(*self.oids.get_oid_by_alias(alias))
+            },
+            _ => None,
+        }
+    }
+
+    fn apply_selected_stash(&mut self, reinstate_index: bool, error_title: &'static str) {
         if self.repo.is_none() || self.viewport != Viewport::Graph {
             return;
         }
 
-        let oid = match self.focus {
-            Focus::Viewport => {
-                let Some(row) = self.graph_row_at(self.graph_selected) else {
-                    return;
-                };
-                if !row.is_stash {
-                    return;
-                }
-                row.oid
-            },
-            Focus::Stashes => {
-                let Some(alias) = self.stash_alias_at_pane_selection() else {
-                    return;
-                };
-                *self.oids.get_oid_by_alias(alias)
-            },
-            _ => return,
-        };
+        let Some(oid) = self.selected_stash_oid() else { return };
 
         let Some(path) = self.repo.as_ref().map(|repo| repo.path().to_path_buf()) else {
             return;
@@ -433,9 +402,9 @@ impl App {
                 return;
             },
         };
-        match pop(&mut repo, &oid, true) {
+        match pop(&mut repo, &oid, reinstate_index) {
             Ok(_) => self.reload(None),
-            Err(error) => self.show_error(errors::with_error(errors::POP_STASH(), error)),
+            Err(error) => self.show_error(errors::with_error(error_title, error)),
         }
     }
 
@@ -747,11 +716,8 @@ impl App {
     pub fn on_commit(&mut self) {
         match self.viewport {
             Viewport::Settings | Viewport::Viewer => {},
-            _ => {
-                if self.uncommitted.is_staged {
-                    self.focus = Focus::ModalCommit;
-                }
-            },
+            _ if self.uncommitted.is_staged => self.focus = Focus::ModalCommit,
+            _ => {},
         }
     }
 
@@ -1159,28 +1125,30 @@ impl App {
 
     pub fn on_continue_operation(&mut self) {
         let Some(repo) = &self.repo else { return };
-        if matches!(self.viewport, Viewport::Settings | Viewport::Viewer) || self.focus != Focus::Viewport || Self::active_operation_kind(repo).is_none() {
+        if matches!(self.viewport, Viewport::Settings | Viewport::Viewer) || self.focus != Focus::Viewport {
             return;
         }
 
-        let kind = Self::active_operation_kind(repo).unwrap();
-        self.pending_operation_action = Some(PendingOperationAction::Continue);
-        self.modal_operation_kind = kind;
-        self.modal_operation_message = operations::continuing(kind.label());
-        self.focus = Focus::ModalOperationProgress;
+        if let Some(kind) = Self::active_operation_kind(repo) {
+            self.pending_operation_action = Some(PendingOperationAction::Continue);
+            self.modal_operation_kind = kind;
+            self.modal_operation_message = operations::continuing(kind.label());
+            self.focus = Focus::ModalOperationProgress;
+        }
     }
 
     pub fn on_abort_operation(&mut self) {
         let Some(repo) = &self.repo else { return };
-        if matches!(self.viewport, Viewport::Settings | Viewport::Viewer) || self.focus != Focus::Viewport || Self::active_operation_kind(repo).is_none() {
+        if matches!(self.viewport, Viewport::Settings | Viewport::Viewer) || self.focus != Focus::Viewport {
             return;
         }
 
-        let kind = Self::active_operation_kind(repo).unwrap();
-        self.pending_operation_action = Some(PendingOperationAction::Abort);
-        self.modal_operation_kind = kind;
-        self.modal_operation_message = operations::aborting(kind.label());
-        self.focus = Focus::ModalOperationProgress;
+        if let Some(kind) = Self::active_operation_kind(repo) {
+            self.pending_operation_action = Some(PendingOperationAction::Abort);
+            self.modal_operation_kind = kind;
+            self.modal_operation_message = operations::aborting(kind.label());
+            self.focus = Focus::ModalOperationProgress;
+        }
     }
 }
 

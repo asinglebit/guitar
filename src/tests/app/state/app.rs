@@ -64,6 +64,24 @@ fn commit_index(repo: &Repository, message: &str) -> git2::Oid {
     repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents).unwrap()
 }
 
+fn init_bare_repo_at(path: &Path) -> Repository {
+    fs::create_dir_all(path).unwrap();
+    let repo = Repository::init_bare(path).unwrap();
+
+    let tree_oid = {
+        let blob = repo.blob(b"initial\n").unwrap();
+        let mut builder = repo.treebuilder(None).unwrap();
+        builder.insert("file.txt", blob, 0o100644).unwrap();
+        builder.write().unwrap()
+    };
+    let tree = repo.find_tree(tree_oid).unwrap();
+    let sig = Signature::now("Test User", "test@example.com").unwrap();
+    repo.commit(Some("refs/heads/main"), &sig, &sig, "initial", &tree, &[]).unwrap();
+    repo.set_head("refs/heads/main").unwrap();
+    drop(tree);
+    repo
+}
+
 fn init_repo_at(path: &Path) -> Repository {
     fs::create_dir_all(path).unwrap();
     let repo = Repository::init(path).unwrap();
@@ -384,4 +402,81 @@ fn pane_window_request_reuses_cached_window_that_covers_range() {
         },
         other => panic!("expected pane window request, got {other:?}"),
     }
+}
+
+#[test]
+fn bare_repo_reload_reaches_graph_without_workdir_status_error() {
+    let dir = TestDir::new("bare-reload");
+    let bare_path = dir.path.join("repo.git");
+    drop(init_bare_repo_at(&bare_path));
+
+    let mut app = App { name: "stale".to_string(), email: "stale".to_string(), ..Default::default() };
+    app.layout_config.is_status = false;
+    app.reload(Some(bare_path.display().to_string()));
+    let repo = app.repo.clone().unwrap();
+
+    for _ in 0..100 {
+        app.sync(&repo);
+        if app.is_uncommitted_loaded {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+
+    assert!(repo.is_bare());
+    assert_eq!(app.viewport, Viewport::Graph);
+    assert!(app.is_uncommitted_loaded);
+    assert!(app.modal_error_message.is_empty());
+    assert!(app.uncommitted.is_clean);
+    assert!(app.worktrees.entries.is_empty());
+    assert!(app.submodules.entries.is_empty());
+
+    app.on_narrow_scope();
+    assert_eq!(app.focus, Focus::Viewport);
+    assert!(!app.layout_config.is_status);
+
+    stop_graph_service(&mut app);
+}
+
+#[test]
+fn bare_repo_reload_keeps_configured_identity() {
+    let dir = TestDir::new("bare-reload-identity");
+    let bare_path = dir.path.join("repo.git");
+    let repo = init_bare_repo_at(&bare_path);
+    {
+        let mut config = repo.config().unwrap();
+        config.set_str("user.name", "Bare User").unwrap();
+        config.set_str("user.email", "bare@example.com").unwrap();
+    }
+    drop(repo);
+
+    let mut app = App::default();
+    app.layout_config.is_status = false;
+    app.reload(Some(bare_path.display().to_string()));
+
+    assert_eq!(app.name, "Bare User");
+    assert_eq!(app.email, "bare@example.com");
+
+    stop_graph_service(&mut app);
+}
+
+#[test]
+fn reload_refreshes_worktree_state_for_new_repository() {
+    let dir = TestDir::new("worktree-state-refresh");
+    let bare_path = dir.path.join("repo.git");
+    drop(init_bare_repo_at(&bare_path));
+    let worktree_path = dir.path.join("repo");
+    drop(init_repo_at(&worktree_path));
+
+    let mut app = App::default();
+    app.reload(Some(bare_path.display().to_string()));
+    assert_eq!(app.worktree_state, WorktreeState::Unavailable);
+    stop_graph_service(&mut app);
+
+    app.reload(Some(worktree_path.display().to_string()));
+
+    assert_eq!(app.worktree_state, WorktreeState::Available);
+    assert!(app.command_is_available(&Command::Checkout));
+
+    stop_graph_service(&mut app);
 }

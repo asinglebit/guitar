@@ -43,6 +43,14 @@ fn temp_repo(name: &str) -> (PathBuf, Repository) {
     (path, repo)
 }
 
+fn temp_bare_repo(name: &str) -> (PathBuf, Repository) {
+    let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+    let path = std::env::temp_dir().join(format!("guitar-diff-{name}-{id}.git"));
+    fs::create_dir_all(&path).unwrap();
+    let repo = Repository::init_bare(&path).unwrap();
+    (path, repo)
+}
+
 fn write(path: &Path, file: &str, content: &str) {
     fs::write(path.join(file), content).unwrap();
 }
@@ -119,10 +127,11 @@ fn workdir_diff_marks_conflicted_paths() {
     let (path, repo) = temp_repo("conflict");
     write(&path, "file.txt", "base\n");
     commit(&repo, "file.txt", "base");
+    let default_branch = repo.head().unwrap().shorthand().unwrap().to_string();
     checkout_new_branch(&repo, "feature");
     write(&path, "file.txt", "feature\n");
     commit(&repo, "file.txt", "feature");
-    checkout_branch(&repo, "master");
+    checkout_branch(&repo, &default_branch);
     write(&path, "file.txt", "main\n");
     let main = commit(&repo, "file.txt", "main");
     checkout_branch(&repo, "feature");
@@ -147,6 +156,28 @@ fn workdir_diff_marks_conflicted_paths() {
 }
 
 #[test]
+fn workdir_diff_returns_error_for_bare_repo() {
+    let (path, repo) = temp_bare_repo("bare");
+
+    let error = get_filenames_diff_at_workdir(&repo).unwrap_err();
+
+    assert_eq!(error.message(), crate::helpers::localisation::errors::BARE_REPO_WORKDIR_OPERATION());
+
+    let _ = fs::remove_dir_all(path);
+}
+
+#[test]
+fn uncommitted_changes_are_absent_for_bare_repo() {
+    let (path, repo) = temp_bare_repo("bare-uncommitted");
+
+    let changes = get_uncommitted_changes(&repo).unwrap();
+
+    assert!(changes.is_none());
+
+    let _ = fs::remove_dir_all(path);
+}
+
+#[test]
 fn workdir_file_diff_emits_untracked_file_contents_as_added_lines() {
     let (path, repo) = temp_repo("untracked-added-lines");
     write(&path, "tracked.txt", "base\n");
@@ -159,6 +190,26 @@ fn workdir_file_diff_emits_untracked_file_contents_as_added_lines() {
     assert!(!content_lines.is_empty());
     assert_eq!(content_lines.iter().map(|line| line.origin).collect::<Vec<_>>(), vec!['+', '+']);
     assert_eq!(content_lines.iter().map(|line| line.content.as_str()).collect::<Vec<_>>(), vec!["alpha\n", "beta\n"]);
+
+    let _ = fs::remove_dir_all(path);
+}
+
+#[test]
+fn workdir_diff_lists_files_inside_untracked_directories() {
+    let (path, repo) = temp_repo("untracked-directory-files");
+    write(&path, "tracked.txt", "base\n");
+    commit(&repo, "tracked.txt", "initial");
+    fs::create_dir_all(path.join("scratch/nested")).unwrap();
+    write(&path, "scratch/nested/one.txt", "one\n");
+    write(&path, "scratch/nested/two.txt", "two\n");
+
+    let changes = get_filenames_diff_at_workdir(&repo).unwrap();
+
+    assert_eq!(changes.unstaged.added.len(), 2);
+    assert!(changes.unstaged.added.iter().any(|path| path == "scratch/nested/one.txt"));
+    assert!(changes.unstaged.added.iter().any(|path| path == "scratch/nested/two.txt"));
+    assert!(changes.is_unstaged);
+    assert!(!changes.is_clean);
 
     let _ = fs::remove_dir_all(path);
 }

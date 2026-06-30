@@ -125,7 +125,7 @@ impl App {
         let mut items = regular_items;
         Self::append_context_menu_section(&mut items, action_items);
         Self::append_context_menu_section(&mut items, navigation_items);
-        items
+        items.into_iter().map(|item| self.context_menu_item_with_availability(item)).collect()
     }
 
     fn append_context_menu_section(items: &mut Vec<ContextMenuItem>, section: Vec<ContextMenuItem>) {
@@ -162,6 +162,15 @@ impl App {
             ContextMenuAction::Command(command) | ContextMenuAction::GraphCommand(command) => self.command_is_action_mode_only(command),
             _ => false,
         }
+    }
+
+    fn context_menu_item_with_availability(&self, mut item: ContextMenuItem) -> ContextMenuItem {
+        if let ContextMenuAction::Command(command) | ContextMenuAction::GraphCommand(command) = &item.action
+            && !self.command_is_available(command)
+        {
+            item.enabled = false;
+        }
+        item
     }
 
     fn command_is_action_mode_only(&self, command: &Command) -> bool {

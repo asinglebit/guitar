@@ -1,4 +1,5 @@
 use super::*;
+use crate::app::app::WorktreeState;
 use crate::core::chunk::NONE;
 use crate::core::reflogs::HeadReflogAliasEntry;
 use crate::git::actions::merging::{MergeOutcome, start_merge};
@@ -144,6 +145,21 @@ fn file_search_modal_does_not_open_from_splash_or_settings() {
     let mut settings = App { repo: Some(repo), viewport: Viewport::Settings, focus: Focus::Viewport, ..Default::default() };
     settings.on_find_file();
     assert_eq!(settings.focus, Focus::Viewport);
+}
+
+#[test]
+fn unavailable_worktree_blocks_worktree_commands_before_dispatch() {
+    let mut app = App { worktree_state: WorktreeState::Unavailable, viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+
+    for command in [Command::Checkout, Command::HardReset, Command::Stage, Command::Commit, Command::Cherrypick, Command::Revert, Command::Rebase, Command::Merge] {
+        app.focus = Focus::Viewport;
+        app.modal_error_message.clear();
+
+        app.dispatch_command(&command);
+
+        assert_eq!(app.focus, Focus::ModalError);
+        assert_eq!(app.modal_error_message, crate::helpers::localisation::errors::BARE_REPO_WORKDIR_OPERATION());
+    }
 }
 
 #[test]

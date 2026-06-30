@@ -119,6 +119,41 @@ pub enum Command {
     ReloadAllBranches,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum RepoCapability {
+    History,
+    Worktree,
+}
+
+impl Command {
+    pub(crate) fn required_capability(&self) -> RepoCapability {
+        match self {
+            Self::Drop
+            | Self::Pop
+            | Self::Stash
+            | Self::Checkout
+            | Self::HardReset
+            | Self::MixedReset
+            | Self::Unstage
+            | Self::Stage
+            | Self::Commit
+            | Self::Cherrypick
+            | Self::Revert
+            | Self::Rebase
+            | Self::Merge
+            | Self::ContinueOperation
+            | Self::AbortOperation => RepoCapability::Worktree,
+            _ => RepoCapability::History,
+        }
+    }
+}
+
+impl RepoCapability {
+    pub(crate) fn requires_worktree(self) -> bool {
+        matches!(self, Self::Worktree)
+    }
+}
+
 pub type ModeKeymap = IndexMap<KeyBinding, Command>;
 pub type Keymaps = IndexMap<InputMode, ModeKeymap>;
 

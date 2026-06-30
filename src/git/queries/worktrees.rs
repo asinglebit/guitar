@@ -25,6 +25,10 @@ fn repo_head(repo: &Repository) -> Option<git2::Oid> {
 }
 
 fn main_worktree_path(repo: &Repository) -> Option<PathBuf> {
+    if repo.is_bare() {
+        return None;
+    }
+
     repo.commondir().parent().map(Path::to_path_buf)
 }
 
