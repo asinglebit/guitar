@@ -20,7 +20,7 @@ impl LaneRef {
 }
 
 // A lane entry points at the commit alias currently occupying that graph lane.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Chunk {
     pub alias: u32,
     pub parent_a: u32,

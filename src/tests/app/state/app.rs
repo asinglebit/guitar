@@ -4,7 +4,7 @@ use crate::git::queries::helpers::FileStatus;
 use git2::{Repository, Signature};
 use ratatui::{Terminal, backend::TestBackend, layout::Rect, style::Color};
 use std::{
-    fs,
+    fs, io,
     path::{Path, PathBuf},
     process,
     rc::Rc,
@@ -100,17 +100,18 @@ fn graph_row(index: usize, alias: u32, oid: git2::Oid) -> GraphRow {
         committer_name: String::new(),
         is_merge: false,
         has_any_branch: false,
-        branches: Vec::new(),
-        tags: Vec::new(),
+        branches: Default::default(),
+        tags: Default::default(),
         is_stash: false,
         stash_lane: None,
-        worktrees: Vec::new(),
+        worktrees: Default::default(),
+        has_current_worktree: false,
         reflog: None,
     }
 }
 
 fn history_row(index: usize, oid: git2::Oid) -> GraphFileHistoryRow {
-    GraphFileHistoryRow { graph_index: index, oid, short_oid: oid.to_string()[..8].to_string(), summary: "history".to_string(), status: FileStatus::Modified }
+    GraphFileHistoryRow { graph_index: index, oid, summary: "history".to_string(), status: FileStatus::Modified }
 }
 
 fn stop_graph_service(app: &mut App) {
@@ -384,4 +385,70 @@ fn pane_window_request_reuses_cached_window_that_covers_range() {
         },
         other => panic!("expected pane window request, got {other:?}"),
     }
+}
+
+#[test]
+fn wait_until_graph_complete_returns_commit_count_when_graph_finishes() {
+    let (_path, repo) = temp_repo("graph-complete-wait");
+    let repo = Rc::new(repo);
+    let (event_tx, event_rx) = std::sync::mpsc::channel();
+    let mut app = App { repo: Some(repo.clone()), graph_rx: Some(event_rx), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+    app.graph.generation = 11;
+
+    event_tx.send(GraphEvent::Progress { generation: 11, version: 1, total: 4, is_first: true, is_complete: false }).unwrap();
+    event_tx.send(GraphEvent::Progress { generation: 11, version: 2, total: 4, is_first: false, is_complete: true }).unwrap();
+
+    let count = app.wait_until_graph_complete(std::time::Duration::from_secs(1)).unwrap();
+
+    assert_eq!(count, 4);
+    assert!(app.graph.is_complete);
+}
+
+#[test]
+fn wait_until_graph_complete_returns_error_when_modal_error_is_set() {
+    let (_path, repo) = temp_repo("graph-complete-error");
+    let repo = Rc::new(repo);
+    let (event_tx, event_rx) = std::sync::mpsc::channel();
+    let mut app = App { repo: Some(repo.clone()), graph_rx: Some(event_rx), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+    app.graph.generation = 12;
+
+    event_tx.send(GraphEvent::Progress { generation: 12, version: 1, total: 1, is_first: true, is_complete: false }).unwrap();
+    app.modal_error_message = "graph walk failed".into();
+
+    let error = app.wait_until_graph_complete(std::time::Duration::from_secs(1)).unwrap_err();
+
+    assert_eq!(error.kind(), io::ErrorKind::Other);
+    assert!(error.to_string().contains("graph walk failed"));
+}
+#[test]
+fn wait_until_graph_complete_returns_error_before_success_when_both_are_set() {
+    let (_path, repo) = temp_repo("graph-complete-error-wins");
+    let repo = Rc::new(repo);
+    let (event_tx, event_rx) = std::sync::mpsc::channel();
+    let mut app = App { repo: Some(repo.clone()), graph_rx: Some(event_rx), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+    app.graph.generation = 13;
+
+    event_tx.send(GraphEvent::Progress { generation: 13, version: 1, total: 1, is_first: true, is_complete: true }).unwrap();
+    app.modal_error_message = "graph walk failed".into();
+
+    let error = app.wait_until_graph_complete(std::time::Duration::from_secs(1)).unwrap_err();
+
+    assert_eq!(error.kind(), io::ErrorKind::Other);
+    assert!(error.to_string().contains("graph walk failed"));
+}
+
+#[test]
+fn wait_until_graph_complete_returns_error_when_graph_worker_disconnects() {
+    let (_path, repo) = temp_repo("graph-complete-disconnect");
+    let repo = Rc::new(repo);
+    let (event_tx, event_rx) = std::sync::mpsc::channel();
+    let mut app = App { repo: Some(repo.clone()), graph_rx: Some(event_rx), viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+    app.graph.generation = 14;
+
+    drop(event_tx);
+
+    let error = app.wait_until_graph_complete(std::time::Duration::from_secs(1)).unwrap_err();
+
+    assert_eq!(error.kind(), io::ErrorKind::BrokenPipe);
+    assert!(error.to_string().contains("graph worker disconnected"));
 }

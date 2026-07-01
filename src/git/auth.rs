@@ -1,5 +1,10 @@
 use crate::helpers::localisation::{errors, modal, network};
 use git2::{Config, Cred, CredentialType, Error, ErrorClass, ErrorCode};
+use gix::credentials::{
+    helper::Action as GixCredentialAction,
+    protocol::{Context as GixCredentialContext, Outcome as GixCredentialOutcome, Result as GixCredentialResult},
+};
+use gix::sec::identity::Account as GixCredentialAccount;
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -186,6 +191,41 @@ impl AuthAttempt {
         }
     }
 
+    pub fn gix_credentials(&self, action: GixCredentialAction) -> GixCredentialResult {
+        self.gix_credentials_with(action, gix::credentials::builtin)
+    }
+
+    pub fn gix_credentials_with<F>(&self, action: GixCredentialAction, mut fallback: F) -> GixCredentialResult
+    where
+        F: FnMut(GixCredentialAction) -> GixCredentialResult,
+    {
+        self.gix_credentials_from_session(&action).map_or_else(|| fallback(action), |result| result)
+    }
+
+    fn gix_credentials_from_session(&self, action: &GixCredentialAction) -> Option<GixCredentialResult> {
+        action.context().and_then(|ctx| self.gix_credentials_for_context(ctx))
+    }
+
+    fn gix_credentials_for_context(&self, ctx: &GixCredentialContext) -> Option<GixCredentialResult> {
+        let url = gix_context_url(ctx)?;
+        let info = classify_remote_url(&url);
+        match info.protocol {
+            AuthProtocol::Https | AuthProtocol::Http => self.gix_http_credentials(ctx, url, info),
+            AuthProtocol::Ssh => self.gix_ssh_credentials(ctx, url, info),
+            AuthProtocol::Local | AuthProtocol::Other => None,
+        }
+    }
+
+    fn gix_http_credentials(&self, ctx: &GixCredentialContext, url: String, info: RemoteAuthInfo) -> Option<GixCredentialResult> {
+        let username_hint = ctx.username.clone().or(info.username);
+        self.session.https_secret(&url, username_hint.as_deref(), info.protocol).map(|(_, username, password)| gix_credentials_outcome(ctx, username, password))
+    }
+
+    fn gix_ssh_credentials(&self, ctx: &GixCredentialContext, url: String, info: RemoteAuthInfo) -> Option<GixCredentialResult> {
+        let username = ctx.username.clone().or(info.username).unwrap_or_else(|| "git".to_string());
+        default_ssh_private_key().and_then(|key_path| self.session.ssh_secret(&url, &username, key_path.as_path())).map(|(_, passphrase)| gix_credentials_outcome(ctx, username, passphrase))
+    }
+
     fn http_credentials(&self, config: &Config, url: &str, username_hint: Option<&str>, protocol: AuthProtocol, allowed: CredentialType) -> Result<Cred, Error> {
         let challenge = AuthChallenge { url: url.to_string(), username: username_hint.map(ToString::to_string), protocol, operation: self.operation.clone(), key_path: None };
         self.set_promptable(challenge.clone());
@@ -277,15 +317,20 @@ impl AuthAttempt {
 pub fn network_result(label: &str, attempt: &AuthAttempt, result: Result<(), Error>) -> NetworkResult {
     match result {
         Ok(_) => NetworkResult::Success,
-        Err(error) => match attempt.auth_required(&error) {
-            Some(auth) => NetworkResult::AuthRequired(auth),
-            None => NetworkResult::Failure(errors::operation_failed(label, error)),
-        },
+        Err(error) => attempt.auth_required(&error).map_or_else(|| NetworkResult::Failure(errors::operation_failed(label, error)), NetworkResult::AuthRequired),
     }
 }
 
 pub fn auth_required_error() -> Error {
     Error::new(ErrorCode::Auth, ErrorClass::Callback, AUTH_REQUIRED_MESSAGE)
+}
+
+fn gix_context_url(ctx: &GixCredentialContext) -> Option<String> {
+    ctx.url.as_ref().cloned().or_else(|| ctx.to_url()).map(|url| String::from_utf8_lossy(url.as_ref()).into_owned())
+}
+
+fn gix_credentials_outcome(ctx: &GixCredentialContext, username: String, password: String) -> GixCredentialResult {
+    Ok(Some(GixCredentialOutcome { identity: GixCredentialAccount { username, password, oauth_refresh_token: None }, next: ctx.clone().into() }))
 }
 
 pub fn classify_remote_url(url: &str) -> RemoteAuthInfo {
@@ -314,6 +359,10 @@ pub fn classify_remote_url(url: &str) -> RemoteAuthInfo {
 
 pub fn default_ssh_private_key() -> Option<PathBuf> {
     let home = dirs::home_dir()?;
+    default_ssh_private_key_in(&home)
+}
+
+fn default_ssh_private_key_in(home: &Path) -> Option<PathBuf> {
     ["id_ed25519", "id_ecdsa", "id_rsa"].into_iter().map(|name| home.join(".ssh").join(name)).find(|path| path.is_file())
 }
 

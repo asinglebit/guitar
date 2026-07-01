@@ -1,5 +1,9 @@
-use git2::{Error, Repository, ResetType, StatusOptions, Submodule, SubmoduleIgnore, SubmoduleStatus};
-use std::path::{Path, PathBuf};
+use crate::git::queries::submodules::list_submodules;
+use git2::{Error, Repository, ResetType, StatusOptions, SubmoduleIgnore, SubmoduleStatus};
+use std::path::Path;
+
+use crate::core::submodules::SubmoduleEntry;
+use crate::git::actions::submodules::stage_submodule_head;
 
 pub fn stage_all(repo: &Repository) -> Result<(), Error> {
     let mut index = repo.index()?;
@@ -8,64 +12,70 @@ pub fn stage_all(repo: &Repository) -> Result<(), Error> {
     opts.include_untracked(true).recurse_untracked_dirs(true).include_ignored(false).include_unmodified(false).exclude_submodules(true);
 
     let statuses = repo.statuses(Some(&mut opts))?;
-    let submodules = repo.submodules().unwrap_or_default();
-    let submodule_paths = submodules.iter().map(|entry| entry.path().to_path_buf()).collect::<Vec<_>>();
+    let submodules = list_submodules(repo).unwrap_or_default();
 
-    for entry in statuses.iter() {
-        if let Some(path) = entry.path() {
-            if is_submodule_status_path(path, &submodule_paths) {
-                continue;
-            }
-
-            let path = Path::new(path);
-
-            match entry.status() {
-                s if s.is_wt_deleted() || s.is_index_deleted() => {
-                    // A deleted tracked file is staged by removing its index entry.
-                    if index.get_path(path, 0).is_some() {
-                        index.remove_path(path)?;
-                    }
-                },
-                _ => {
-                    // New and modified files both enter the index through add_path.
-                    index.add_path(path)?;
-                },
-            }
-        }
-    }
+    statuses.iter().try_for_each(|entry| {
+        let Some(path) = entry.path().map(|path| Path::new(path.trim_end_matches('/'))).filter(|path| !is_submodule_status_path(path, &submodules)) else {
+            return Ok(());
+        };
+        stage_status_path(&mut index, path, entry.status())
+    })?;
 
     index.write()?;
     drop(index);
 
     for submodule in submodules {
-        stage_submodule_pointer_change(repo, submodule)?;
+        stage_submodule_pointer_change(repo, &submodule)?;
     }
 
     Ok(())
 }
 
-fn stage_submodule_pointer_change(repo: &Repository, mut submodule: Submodule<'_>) -> Result<(), Error> {
-    let path = submodule.path().to_path_buf();
-    let path_text = path.to_string_lossy().to_string();
-    let name = submodule.name().unwrap_or(path_text.as_str());
-    let status = submodule_status_for(repo, name, path.as_path());
-    let has_pointer_change =
-        status.is_wd_added() || status.is_wd_deleted() || status.is_wd_modified() || submodule.workdir_id().zip(submodule.index_id()).is_some_and(|(workdir, index)| workdir != index);
+fn stage_status_path(index: &mut git2::Index, path: &Path, status: git2::Status) -> Result<(), Error> {
+    match status {
+        s if s.is_wt_deleted() || s.is_index_deleted() => {
+            // A deleted tracked file is staged by removing its index entry.
+            if index.get_path(path, 0).is_some() {
+                index.remove_path(path)?;
+            }
+            Ok(())
+        },
+        _ => index.add_path(path),
+    }
+}
+
+fn stage_submodule_pointer_change(repo: &Repository, submodule: &SubmoduleEntry) -> Result<(), Error> {
+    let path = submodule.path.as_path();
+    let name = submodule.name.as_str();
+    match submodule_pointer_action(repo, submodule, path, name) {
+        SubmodulePointerAction::None => Ok(()),
+        SubmodulePointerAction::Remove => {
+            let mut index = repo.index()?;
+            if index.get_path(path, 0).is_some() {
+                index.remove_path(path)?;
+                index.write()?;
+            }
+            Ok(())
+        },
+        SubmodulePointerAction::StageHead => stage_submodule_head(repo, name),
+    }
+}
+
+enum SubmodulePointerAction {
+    None,
+    Remove,
+    StageHead,
+}
+
+fn submodule_pointer_action(repo: &Repository, submodule: &SubmoduleEntry, path: &Path, name: &str) -> SubmodulePointerAction {
+    let status = submodule_status_for(repo, name, path);
+    let has_pointer_change = status.is_wd_added() || status.is_wd_deleted() || status.is_wd_modified() || submodule.workdir.zip(submodule.index).is_some_and(|(workdir, index)| workdir != index);
 
     if !has_pointer_change {
-        return Ok(());
+        return SubmodulePointerAction::None;
     }
 
-    if status.is_wd_deleted() {
-        let mut index = repo.index()?;
-        if index.get_path(path.as_path(), 0).is_some() {
-            index.remove_path(path.as_path())?;
-            index.write()?;
-        }
-        return Ok(());
-    }
-
-    submodule.add_to_index(true)
+    if status.is_wd_deleted() { SubmodulePointerAction::Remove } else { SubmodulePointerAction::StageHead }
 }
 
 fn submodule_status_for(repo: &Repository, name: &str, path: &Path) -> SubmoduleStatus {
@@ -74,14 +84,8 @@ fn submodule_status_for(repo: &Repository, name: &str, path: &Path) -> Submodule
         .unwrap_or_else(|_| SubmoduleStatus::empty())
 }
 
-fn is_submodule_status_path(path: &str, submodule_paths: &[PathBuf]) -> bool {
-    if path.is_empty() {
-        return false;
-    }
-
-    let normalized = path.trim_end_matches('/');
-    let path = Path::new(normalized);
-    submodule_paths.iter().any(|submodule_path| path == submodule_path || path.starts_with(submodule_path))
+fn is_submodule_status_path(path: &Path, submodules: &[SubmoduleEntry]) -> bool {
+    submodules.iter().any(|submodule| path == submodule.path || path.starts_with(&submodule.path))
 }
 
 pub fn unstage_all(repo: &Repository) -> Result<(), git2::Error> {
