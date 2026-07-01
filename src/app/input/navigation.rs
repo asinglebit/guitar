@@ -1623,7 +1623,7 @@ impl App {
                     .enumerate()
                     .filter_map(|(idx, &alias)| {
                         let child_oid = self.oids.get_oid_by_alias(alias);
-                        let commit = repo.find_commit(*child_oid).ok()?;
+                        let commit = repo.find_commit(child_oid).ok()?;
                         if commit.parent_ids().any(|parent_oid| parent_oid == oid) { Some(idx) } else { None }
                     })
                     .collect();
@@ -1662,7 +1662,7 @@ impl App {
                     return;
                 };
                 self.graph.graph_window.as_ref().and_then(|window| window.rows.iter().find(|row| row.oid == parent_oid).map(|row| row.index)).or_else(|| {
-                    let parent_alias = self.oids.aliases.get(&parent_oid).copied()?;
+                    let parent_alias = self.oids.get_existing_alias(parent_oid)?;
                     self.oids.get_sorted_aliases().iter().position(|&alias| alias == parent_alias)
                 })
             };

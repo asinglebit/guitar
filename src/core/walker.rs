@@ -77,7 +77,7 @@ impl Walker {
         let stash_aliases: StdHashSet<u32> = oids.stashes.iter().copied().collect();
         let mut stash_parent_aliases = Vec::with_capacity(oids.stashes.len());
         for stash_alias in oids.stashes.clone() {
-            let parent_oid = repo.borrow().find_commit(*oids.get_oid_by_alias(stash_alias)).ok().and_then(|commit| commit.parent_ids().next());
+            let parent_oid = repo.borrow().find_commit(oids.get_oid_by_alias(stash_alias)).ok().and_then(|commit| commit.parent_ids().next());
             if let Some(parent_oid) = parent_oid {
                 let parent_alias = oids.get_alias_by_oid(parent_oid);
                 stash_parent_aliases.push((stash_alias, parent_alias));
@@ -153,7 +153,7 @@ impl Walker {
             let mut merger_alias: u32 = NONE;
             let mut transient_lane: Option<usize> = None;
             let oid = self.oids.get_oid_by_alias(alias);
-            let commit = repo.find_commit(*oid).unwrap();
+            let commit = repo.find_commit(oid).unwrap();
 
             // Only two parents are modeled because the renderer draws one merge edge.
             let mut parents_iter = commit.parent_ids();

@@ -7,7 +7,7 @@ use crate::{
     },
     git::queries::{file_history::changed_file_status_at_commit, helpers::FileStatus, reflogs::HeadReflogEntry},
     helpers::{
-        heatmap::{DAYS, WEEKS, build_heatmap},
+        heatmap::{DAYS, WEEKS, build_heatmap_from_sorted_aliases},
         localisation::{common, empty, errors, status as status_text},
         symbols::SymbolTheme,
         time::timestamp_to_utc_date_time,
@@ -218,7 +218,7 @@ fn run_graph_service(config: GraphServiceConfig, rx: Receiver<GraphCommand>, tx:
 
         if is_complete {
             let repo = walk_ctx.repo.borrow();
-            let heatmap = build_heatmap(&repo, &walk_ctx.oids.oids);
+            let heatmap = build_heatmap_from_sorted_aliases(&repo, &walk_ctx.oids);
             let _ = tx.send(GraphEvent::Heatmap { generation, heatmap });
 
             if let Some((request_id, path)) = pending_file_history.take() {
@@ -315,8 +315,8 @@ fn file_history_rows(walk_ctx: &Walker, path: &str, symbols: &SymbolTheme) -> Re
     let mut rows = Vec::new();
 
     for (graph_index, &alias) in walk_ctx.oids.get_sorted_aliases().iter().enumerate() {
-        let oid = *walk_ctx.oids.get_oid_by_alias(alias);
-        if walk_ctx.oids.is_zero(&oid) {
+        let oid = walk_ctx.oids.get_oid_by_alias(alias);
+        if oid.is_zero() {
             continue;
         }
 
@@ -343,8 +343,8 @@ fn graph_rows(walk_ctx: &Walker, worktrees: &Worktrees, hidden_branch_names: &Ha
 
     for index in start..end {
         let alias = walk_ctx.oids.get_sorted_aliases().get(index).copied().unwrap_or(NONE);
-        let oid = *walk_ctx.oids.get_oid_by_alias(alias);
-        let is_uncommitted = alias == NONE || walk_ctx.oids.is_zero(&oid);
+        let oid = walk_ctx.oids.get_oid_by_alias(alias);
+        let is_uncommitted = alias == NONE || oid.is_zero();
         let (summary, committer_date, committer_name, is_merge_commit) = if is_uncommitted {
             (String::new(), String::new(), String::new(), false)
         } else if let Ok(commit) = repo.find_commit(oid) {
@@ -418,7 +418,7 @@ fn pane_rows(pane: GraphPane, walk_ctx: &Walker) -> Vec<GraphPaneRow> {
                 .stashes
                 .iter()
                 .map(|&alias| {
-                    let oid = *walk_ctx.oids.get_oid_by_alias(alias);
+                    let oid = walk_ctx.oids.get_oid_by_alias(alias);
                     let summary = repo.find_commit(oid).ok().and_then(|commit| commit.summary().map(str::to_string)).unwrap_or_else(|| status_text::STASH().to_string());
                     GraphPaneRow::Stash { alias, summary, lane: walk_ctx.stashes_lanes.get(&alias).copied(), graph_index: index_map.get(&alias).copied() }
                 })
@@ -428,7 +428,7 @@ fn pane_rows(pane: GraphPane, walk_ctx: &Walker) -> Vec<GraphPaneRow> {
             .head_reflog_entries
             .iter()
             .filter_map(|entry| {
-                let alias = walk_ctx.oids.aliases.get(&entry.new_oid).copied()?;
+                let alias = walk_ctx.oids.get_existing_alias(entry.new_oid)?;
                 Some(GraphPaneRow::Reflog {
                     alias,
                     selector: entry.selector.clone(),
@@ -447,12 +447,11 @@ fn lookup(kind: GraphLookupKind, walk_ctx: &Walker, worktrees: &Worktrees, hidde
         GraphLookupKind::PaneRowAt { pane, index } => GraphLookupResult::PaneRow(pane_rows(pane, walk_ctx).get(index).cloned()),
         GraphLookupKind::BranchIndex { from, direction } => GraphLookupResult::Index(branch_index(walk_ctx, hidden_branch_names, from, direction)),
         GraphLookupKind::ShaPrefix { prefix } => {
-            let oid = walk_ctx.oids.oids.iter().find(|oid| oid.to_string().starts_with(&prefix)).copied();
-            let index = oid.and_then(|oid| walk_ctx.oids.aliases.get(&oid).copied()).and_then(|alias| walk_ctx.oids.get_sorted_aliases().iter().position(|&current| current == alias));
+            let index = walk_ctx.oids.get_alias_by_prefix(&prefix).and_then(|alias| walk_ctx.oids.get_sorted_aliases().iter().position(|&current| current == alias));
             GraphLookupResult::Index(index)
         },
         GraphLookupKind::Oid { oid } => {
-            let index = walk_ctx.oids.aliases.get(&oid).copied().and_then(|alias| walk_ctx.oids.get_sorted_aliases().iter().position(|&current| current == alias));
+            let index = walk_ctx.oids.get_existing_alias(oid).and_then(|alias| walk_ctx.oids.get_sorted_aliases().iter().position(|&current| current == alias));
             GraphLookupResult::Index(index)
         },
         GraphLookupKind::ParentIndex { index } => GraphLookupResult::Index(parent_index(walk_ctx, index)),
@@ -478,27 +477,27 @@ fn branch_index(walk_ctx: &Walker, hidden_branch_names: &HashSet<String>, from: 
 }
 
 fn parent_index(walk_ctx: &Walker, index: usize) -> Option<usize> {
-    let oid = walk_ctx.oids.get_sorted_aliases().get(index).map(|&alias| *walk_ctx.oids.get_oid_by_alias(alias))?;
-    if walk_ctx.oids.is_zero(&oid) {
+    let oid = walk_ctx.oids.get_sorted_aliases().get(index).map(|&alias| walk_ctx.oids.get_oid_by_alias(alias))?;
+    if oid.is_zero() {
         return Some(1).filter(|idx| *idx < walk_ctx.oids.get_commit_count());
     }
 
     let repo = walk_ctx.repo.borrow();
     let commit = repo.find_commit(oid).ok()?;
     let parent_oid = commit.parent_ids().next()?;
-    let parent_alias = walk_ctx.oids.aliases.get(&parent_oid).copied()?;
+    let parent_alias = walk_ctx.oids.get_existing_alias(parent_oid)?;
     walk_ctx.oids.get_sorted_aliases().iter().position(|&alias| alias == parent_alias)
 }
 
 fn child_index(walk_ctx: &Walker, index: usize) -> Option<usize> {
-    let oid = walk_ctx.oids.get_sorted_aliases().get(index).map(|&alias| *walk_ctx.oids.get_oid_by_alias(alias))?;
-    if walk_ctx.oids.is_zero(&oid) {
+    let oid = walk_ctx.oids.get_sorted_aliases().get(index).map(|&alias| walk_ctx.oids.get_oid_by_alias(alias))?;
+    if oid.is_zero() {
         return None;
     }
 
     let repo = walk_ctx.repo.borrow();
     walk_ctx.oids.get_sorted_aliases().iter().enumerate().take(index).find_map(|(idx, &alias)| {
-        let child_oid = *walk_ctx.oids.get_oid_by_alias(alias);
+        let child_oid = walk_ctx.oids.get_oid_by_alias(alias);
         let child = repo.find_commit(child_oid).ok()?;
         child.parent_ids().any(|parent_oid| parent_oid == oid).then_some(idx)
     })
@@ -506,7 +505,7 @@ fn child_index(walk_ctx: &Walker, index: usize) -> Option<usize> {
 
 fn head_alias(walk_ctx: &Walker) -> u32 {
     let repo = walk_ctx.repo.borrow();
-    repo.head().ok().and_then(|head| head.target()).and_then(|oid| walk_ctx.oids.aliases.get(&oid).copied()).unwrap_or(NONE)
+    repo.head().ok().and_then(|head| head.target()).and_then(|oid| walk_ctx.oids.get_existing_alias(oid)).unwrap_or(NONE)
 }
 
 fn alias_index_map(walk_ctx: &Walker) -> HashMap<u32, usize> {
@@ -516,7 +515,7 @@ fn alias_index_map(walk_ctx: &Walker) -> HashMap<u32, usize> {
 fn latest_reflogs_by_alias(walk_ctx: &Walker) -> HashMap<u32, HeadReflogAliasEntry> {
     let mut latest = HashMap::new();
     for entry in &walk_ctx.head_reflog_entries {
-        let Some(&new_alias) = walk_ctx.oids.aliases.get(&entry.new_oid) else {
+        let Some(new_alias) = walk_ctx.oids.get_existing_alias(entry.new_oid) else {
             continue;
         };
         let alias_entry = alias_reflog_entry(entry, new_alias);
@@ -534,7 +533,7 @@ fn worktrees_for_alias(worktrees: &Worktrees, walk_ctx: &Walker, alias: u32) -> 
         .entries
         .iter()
         .filter_map(|entry| {
-            let entry_alias = entry.head.and_then(|oid| walk_ctx.oids.aliases.get(&oid).copied());
+            let entry_alias = entry.head.and_then(|oid| walk_ctx.oids.get_existing_alias(oid));
             (entry_alias == Some(alias)).then(|| {
                 let mut entry = entry.clone();
                 entry.alias = Some(alias);

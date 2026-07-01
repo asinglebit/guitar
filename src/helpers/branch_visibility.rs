@@ -4,7 +4,11 @@ use im::HashSet;
 use std::{
     fs,
     path::{Path, PathBuf},
+    str,
 };
+
+const LOCAL_BRANCH_PREFIX: &[u8] = b"refs/heads/";
+const REMOTE_BRANCH_PREFIX: &[u8] = b"refs/remotes/";
 
 #[derive(Facet, Clone, Default)]
 pub struct RepositoryBranchVisibility {
@@ -50,6 +54,10 @@ pub fn current_branch_names(repo: &Repository) -> HashSet<String> {
     }
 
     names
+}
+
+pub(crate) fn branch_name_from_ref(name: &[u8]) -> Option<&str> {
+    name.strip_prefix(LOCAL_BRANCH_PREFIX).or_else(|| name.strip_prefix(REMOTE_BRANCH_PREFIX)).filter(|branch_name| !branch_name.is_empty()).and_then(|branch_name| str::from_utf8(branch_name).ok())
 }
 
 pub fn prune_hidden_branches(hidden: &mut HashSet<String>, current: &HashSet<String>) -> bool {
