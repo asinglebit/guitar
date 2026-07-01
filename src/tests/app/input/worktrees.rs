@@ -3,13 +3,12 @@ use crate::core::{
     submodules::SubmoduleStackEntry,
     worktrees::{WorktreeEntry, WorktreeKind, Worktrees},
 };
-use git2::Oid;
 
-fn test_oid(byte: u8) -> Oid {
-    Oid::from_bytes(&[byte; 20]).unwrap()
+fn test_oid(byte: u8) -> gix::ObjectId {
+    gix::ObjectId::from_bytes_or_panic(&[byte; 20])
 }
 
-fn worktree_entry(name: &str, head: Oid) -> WorktreeEntry {
+fn worktree_entry(name: &str, head: gix::ObjectId) -> WorktreeEntry {
     WorktreeEntry {
         name: name.into(),
         path: PathBuf::from(format!("/tmp/{name}")),

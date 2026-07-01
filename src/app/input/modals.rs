@@ -16,7 +16,6 @@ use crate::{
         localisation::{errors, operations},
     },
 };
-use git2::Oid;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::path::PathBuf;
 
@@ -616,10 +615,7 @@ impl App {
                             return true;
                         }
 
-                        let oid: Option<Oid> = self.oids.oids.iter().find(|oid| oid.to_string().starts_with(sha)).copied();
-
-                        if let Some(oid) = oid {
-                            let oid_alias = self.oids.get_alias_by_oid(oid);
+                        if let Some(oid_alias) = self.oids.get_alias_by_prefix(sha) {
                             let next = self.oids.get_sorted_aliases().iter().position(|&alias| alias == oid_alias).unwrap();
 
                             self.graph_selected = next;

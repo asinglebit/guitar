@@ -414,6 +414,10 @@ fn test_oid(byte: u8) -> Oid {
     Oid::from_bytes(&[byte; 20]).unwrap()
 }
 
+fn test_gix_oid(byte: u8) -> gix::ObjectId {
+    gix::ObjectId::from_bytes_or_panic(&[byte; 20])
+}
+
 fn commit_file(repo: &Repository, file: &str, message: &str) -> Oid {
     let workdir = repo.workdir().unwrap().to_path_buf();
     fs::write(workdir.join(file), format!("{message}\n")).unwrap();
@@ -434,7 +438,7 @@ fn worktree_entry(name: &str) -> WorktreeEntry {
         name: name.to_string(),
         path: PathBuf::from(format!("/tmp/{name}")),
         branch: Some(name.to_string()),
-        head: Some(test_oid(9)),
+        head: Some(test_gix_oid(9)),
         alias: None,
         kind: WorktreeKind::Linked,
         is_current: false,
@@ -658,7 +662,7 @@ fn mouse_click_selects_left_pane_rows() {
             new_oid: test_oid(2),
             new_alias: idx,
             message: format!("commit {idx}"),
-            time: git2::Time::new(idx as i64, 0),
+            time: gix::date::Time::new(idx as i64, 0),
         })
         .collect();
     app.worktrees.entries = (0..10).map(|idx| worktree_entry(&format!("worktree-{idx}"))).collect();
@@ -911,7 +915,7 @@ fn double_click_on_tag_stash_and_reflog_rows_act_like_enter() {
     let reflog_alias = reflog_app.oids.get_alias_by_oid(reflog_oid);
     reflog_app.oids.sorted_aliases = vec![NONE, reflog_alias];
     reflog_app.reflogs.entries =
-        vec![HeadReflogAliasEntry { selector: "HEAD@{0}".into(), old_oid: tag_oid, new_oid: reflog_oid, new_alias: reflog_alias, message: "commit reflog".into(), time: git2::Time::new(0, 0) }];
+        vec![HeadReflogAliasEntry { selector: "HEAD@{0}".into(), old_oid: tag_oid, new_oid: reflog_oid, new_alias: reflog_alias, message: "commit reflog".into(), time: gix::date::Time::new(0, 0) }];
 
     reflog_app.handle_mouse_event(left_down(1, 0));
     reflog_app.handle_mouse_event(left_down(1, 0));

@@ -1,79 +1,109 @@
 use super::*;
-use git2::{Oid, Repository, Signature};
-use std::{
-    fs,
-    path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
+use crate::{
+    core::oids::git2_to_gix_oid,
+    git::test_support::{commit_file, commit_index, stage_path, temp_repo, write_workdir_file},
 };
+use git2::Oid;
+use std::fs;
 
-fn temp_repo(name: &str) -> (PathBuf, Repository) {
-    let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-    let path = std::env::temp_dir().join(format!("guitar-file-history-{name}-{id}"));
-    fs::create_dir_all(&path).unwrap();
-    let repo = Repository::init(&path).unwrap();
-    {
-        let mut config = repo.config().unwrap();
-        config.set_str("user.name", "Test User").unwrap();
-        config.set_str("user.email", "test@example.com").unwrap();
-    }
-    (path, repo)
-}
-
-fn write_file(root: &Path, file: &str, content: &str) {
-    let path = root.join(file);
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).unwrap();
-    }
-    fs::write(path, content).unwrap();
-}
-
-fn commit_index(repo: &Repository, message: &str) -> Oid {
-    let mut index = repo.index().unwrap();
-    index.write().unwrap();
-    let tree_oid = index.write_tree().unwrap();
-    let tree = repo.find_tree(tree_oid).unwrap();
-    let sig = Signature::now("Test User", "test@example.com").unwrap();
-    let parent = repo.head().ok().and_then(|head| head.peel_to_commit().ok());
-    let parents: Vec<&git2::Commit<'_>> = parent.iter().collect();
-    repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents).unwrap()
-}
-
-fn commit_file(repo: &Repository, root: &Path, file: &str, content: &str, message: &str) -> Oid {
-    write_file(root, file, content);
-    let mut index = repo.index().unwrap();
-    index.add_path(Path::new(file)).unwrap();
-    commit_index(repo, message)
+fn file_status_from_repo(repo: &gix::Repository, oid: Oid, path: &str) -> Option<FileStatus> {
+    super::changed_file_status_at_commit_from_repo(repo, git2_to_gix_oid(oid), path).unwrap()
 }
 
 #[test]
 fn root_add_modify_delete_and_non_matching_commits_are_classified() {
-    let (path, repo) = temp_repo("statuses");
-    let root = commit_file(&repo, &path, "tracked.txt", "one\n", "root");
-    let other = commit_file(&repo, &path, "other.txt", "other\n", "other");
-    let modified = commit_file(&repo, &path, "tracked.txt", "two\n", "modify");
+    let (dir, repo) = temp_repo("statuses");
+    let path = dir.join("repo");
+    let root = commit_file(&repo, "tracked.txt", "one\n", "root");
+    let other = commit_file(&repo, "other.txt", "other\n", "other");
+    let modified = commit_file(&repo, "tracked.txt", "two\n", "modify");
 
     fs::remove_file(path.join("tracked.txt")).unwrap();
     let mut index = repo.index().unwrap();
-    index.remove_path(Path::new("tracked.txt")).unwrap();
+    index.remove_path(std::path::Path::new("tracked.txt")).unwrap();
+    index.write().unwrap();
     let deleted = commit_index(&repo, "delete");
+    let gix_repo = gix::open(&path).unwrap();
 
-    assert_eq!(changed_file_status_at_commit(&repo, root, "tracked.txt").unwrap(), Some(FileStatus::Added));
-    assert_eq!(changed_file_status_at_commit(&repo, other, "tracked.txt").unwrap(), None);
-    assert_eq!(changed_file_status_at_commit(&repo, modified, "tracked.txt").unwrap(), Some(FileStatus::Modified));
-    assert_eq!(changed_file_status_at_commit(&repo, deleted, "tracked.txt").unwrap(), Some(FileStatus::Deleted));
+    assert_eq!(file_status_from_repo(&gix_repo, root, "tracked.txt"), Some(FileStatus::Added));
+    assert_eq!(file_status_from_repo(&gix_repo, other, "tracked.txt"), None);
+    assert_eq!(file_status_from_repo(&gix_repo, modified, "tracked.txt"), Some(FileStatus::Modified));
+    assert_eq!(file_status_from_repo(&gix_repo, deleted, "tracked.txt"), Some(FileStatus::Deleted));
 }
 
 #[test]
 fn rename_matches_old_and_new_selected_path() {
-    let (path, repo) = temp_repo("rename");
-    commit_file(&repo, &path, "old.txt", "one\n", "root");
+    let (dir, repo) = temp_repo("rename");
+    let path = dir.join("repo");
+    commit_file(&repo, "old.txt", "one\n", "root");
 
     fs::rename(path.join("old.txt"), path.join("new.txt")).unwrap();
     let mut index = repo.index().unwrap();
-    index.remove_path(Path::new("old.txt")).unwrap();
-    index.add_path(Path::new("new.txt")).unwrap();
+    index.remove_path(std::path::Path::new("old.txt")).unwrap();
+    index.add_path(std::path::Path::new("new.txt")).unwrap();
+    index.write().unwrap();
     let renamed = commit_index(&repo, "rename");
+    let gix_repo = gix::open(&path).unwrap();
 
-    assert_eq!(changed_file_status_at_commit(&repo, renamed, "old.txt").unwrap(), Some(FileStatus::Renamed));
-    assert_eq!(changed_file_status_at_commit(&repo, renamed, "new.txt").unwrap(), Some(FileStatus::Renamed));
+    assert_eq!(file_status_from_repo(&gix_repo, renamed, "old.txt"), Some(FileStatus::Renamed));
+    assert_eq!(file_status_from_repo(&gix_repo, renamed, "new.txt"), Some(FileStatus::Renamed));
+}
+
+#[test]
+fn copied_file_stays_an_added_change_in_file_history() {
+    let (dir, repo) = temp_repo("copy");
+    let path = dir.join("repo");
+    commit_file(&repo, "source.txt", "one\n", "root");
+
+    write_workdir_file(&repo, "copy.txt", "one\n");
+    stage_path(&repo, "copy.txt");
+    let copied = commit_index(&repo, "copy");
+    let gix_repo = gix::open(&path).unwrap();
+
+    assert_eq!(file_status_from_repo(&gix_repo, copied, "copy.txt"), Some(FileStatus::Added));
+    assert_eq!(file_status_from_repo(&gix_repo, copied, "source.txt"), None);
+}
+
+#[cfg(unix)]
+#[test]
+fn typechange_is_reported_as_deleted_in_file_history() {
+    let (dir, repo) = temp_repo("typechange");
+    let path = dir.join("repo");
+    commit_file(&repo, "link.txt", "one\n", "root");
+
+    fs::remove_file(path.join("link.txt")).unwrap();
+    std::os::unix::fs::symlink("target.txt", path.join("link.txt")).unwrap();
+    stage_path(&repo, "link.txt");
+    let typechanged = commit_index(&repo, "typechange");
+    let gix_repo = gix::open(&path).unwrap();
+
+    assert_eq!(file_status_from_repo(&gix_repo, typechanged, "link.txt"), Some(FileStatus::Deleted));
+}
+
+#[test]
+fn directory_like_file_names_remain_file_history_entries() {
+    let (dir, repo) = temp_repo("directory-like");
+    let path = dir.join("repo");
+    commit_file(&repo, "docs/guide", "one\n", "root");
+
+    write_workdir_file(&repo, "docs/guide", "two\n");
+    stage_path(&repo, "docs/guide");
+    let updated = commit_index(&repo, "update");
+    let gix_repo = gix::open(&path).unwrap();
+
+    assert_eq!(file_status_from_repo(&gix_repo, updated, "docs/guide"), Some(FileStatus::Modified));
+}
+
+#[test]
+fn empty_and_normalized_paths_match_plain_inputs() {
+    let (dir, repo) = temp_repo("normalize");
+    let path = dir.join("repo");
+    let root = commit_file(&repo, "tracked.txt", "one\n", "root");
+    let gix_repo = gix::open(&path).unwrap();
+
+    assert_eq!(file_status_from_repo(&gix_repo, root, ""), None);
+
+    assert_eq!(file_status_from_repo(&gix_repo, root, "./tracked.txt"), Some(FileStatus::Added));
+
+    assert_eq!(file_status_from_repo(&gix_repo, root, r".\tracked.txt"), Some(FileStatus::Added));
 }

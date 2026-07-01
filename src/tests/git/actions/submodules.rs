@@ -1,5 +1,5 @@
 use super::*;
-use crate::{git::actions::staging::stage_all, git::auth::NetworkResult, git::queries::submodules::list_submodules};
+use crate::{core::oids::git2_to_gix_oid, git::actions::staging::stage_all, git::auth::NetworkResult, git::queries::submodules::list_submodules};
 use git2::{Repository, Signature};
 use std::{
     env, fs,
@@ -79,7 +79,7 @@ fn stages_and_unstages_submodule_pointer() {
     let sub_repo = Repository::open(parent.workdir().unwrap().join("deps/child")).unwrap();
     let original = list_submodules(&parent).unwrap()[0].index;
 
-    let advanced = commit_file(&sub_repo, "file.txt", "changed\n", "advance child");
+    let advanced = git2_to_gix_oid(commit_file(&sub_repo, "file.txt", "changed\n", "advance child"));
     stage_submodule_head(&parent, "deps/child").unwrap();
 
     let staged = list_submodules(&parent).unwrap()[0].clone();
@@ -96,7 +96,7 @@ fn stage_all_stages_submodule_pointer_without_staging_inner_content() {
     let (parent, _child_path) = parent_with_submodule(&dir);
     let sub_repo = Repository::open(parent.workdir().unwrap().join("deps/child")).unwrap();
 
-    let advanced = commit_file(&sub_repo, "file.txt", "changed\n", "advance child");
+    let advanced = git2_to_gix_oid(commit_file(&sub_repo, "file.txt", "changed\n", "advance child"));
     fs::write(sub_repo.workdir().unwrap().join("file.txt"), "dirty\n").unwrap();
 
     stage_all(&parent).unwrap();

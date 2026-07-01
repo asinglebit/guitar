@@ -5,7 +5,7 @@ use crate::{
         layout::scrollbar_content_length,
         localisation::{common, empty, inspector},
         text::{center_line, empty_state_top_padding, sanitize, truncate_with_ellipsis, wrap_words},
-        time::timestamp_to_utc,
+        time::{gix_timestamp_to_utc, timestamp_to_utc},
     },
 };
 use ratatui::Frame;
@@ -98,7 +98,7 @@ impl App {
                     lines.push(Line::default());
                     lines.push(Line::from(Span::styled(inspector::HEAD_REFLOG(), Style::default().fg(self.theme.COLOR_HIGHLIGHTED))));
                     lines.push(Line::from(Span::styled(truncate_with_ellipsis(&entry.selector, max_text_width), Style::default().fg(self.reflogs.get_color(alias).unwrap_or(self.theme.COLOR_TEXT)))));
-                    lines.push(Line::from(Span::styled(timestamp_to_utc(entry.time), Style::default().fg(self.theme.COLOR_TEXT))));
+                    lines.push(Line::from(Span::styled(gix_timestamp_to_utc(entry.time), Style::default().fg(self.theme.COLOR_TEXT))));
                     let wrapped = wrap_words(sanitize(entry.message.clone()), max_text_width);
                     for line in wrapped {
                         lines.push(Line::from(Span::styled(line, Style::default().fg(self.theme.COLOR_TEXT))));

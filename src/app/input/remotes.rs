@@ -146,7 +146,8 @@ impl App {
             return;
         };
 
-        let value = list_remotes(&repo)
+        let repo_path = repo.workdir().unwrap_or(repo.path());
+        let value = list_remotes(repo_path)
             .ok()
             .and_then(|remotes| remotes.into_iter().find(|remote| remote.name == target))
             .map(|remote| if push_url { remote.push_url.unwrap_or_default() } else { remote.url })

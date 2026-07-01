@@ -1,4 +1,3 @@
-use git2::Oid;
 use std::path::PathBuf;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -12,7 +11,7 @@ pub struct WorktreeEntry {
     pub name: String,
     pub path: PathBuf,
     pub branch: Option<String>,
-    pub head: Option<Oid>,
+    pub head: Option<gix::ObjectId>,
     pub alias: Option<u32>,
     pub kind: WorktreeKind,
     pub is_current: bool,

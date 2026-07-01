@@ -1,81 +1,111 @@
 use crate::{
-    git::queries::helpers::{ConflictFile, FileChange, FileStatus, Hunk, UncommittedChanges, deduplicate, diff_to_hunks, walk_tree},
+    core::submodules::SubmoduleEntry,
+    git::{
+        gix::gix_error,
+        queries::{
+            helpers::{ConflictFile, FileChange, FileStatus, Hunk, UncommittedChanges, deduplicate, diff_to_hunks, walk_tree},
+            submodules::list_submodules,
+        },
+    },
     helpers::text::{decode, sanitize},
 };
-use git2::{Delta, DiffOptions, Error, Oid, Repository, StatusOptions, Submodule, SubmoduleIgnore, SubmoduleStatus};
-use std::path::Path;
+use git2::{Delta, DiffOptions, Error, Oid, Repository, SubmoduleIgnore, SubmoduleStatus};
+use gix::bstr::{BStr, ByteSlice};
+use std::path::{Path, PathBuf};
 
 // Collect staged and unstaged changes separately so the status panes can act on each side.
 pub fn get_filenames_diff_at_workdir(repo: &Repository) -> Result<UncommittedChanges, Error> {
-    let mut options = StatusOptions::new();
-    options.include_untracked(true).exclude_submodules(true).show(git2::StatusShow::IndexAndWorkdir).renames_head_to_index(false).renames_index_to_workdir(false);
-
-    let statuses = repo.statuses(Some(&mut options))?;
+    let workdir = repo.workdir().ok_or_else(|| Error::from_str("bare repositories are not supported"))?;
+    let gix_repo = gix::open(workdir).map_err(gix_error)?;
+    let submodules = list_submodules(repo).unwrap_or_default();
+    let submodule_paths = submodules.iter().map(|entry| entry.path.clone()).collect::<Vec<_>>();
     let mut changes = UncommittedChanges::default();
-    let workdir = repo.workdir().expect("Bare repo not supported");
-    let submodules = repo.submodules().unwrap_or_default();
-    let submodule_paths = submodules.iter().map(|entry| entry.path().to_path_buf()).collect::<Vec<_>>();
+    let status = gix_repo
+        .status(gix::progress::Discard)
+        .map_err(gix_error)?
+        .untracked_files(gix::status::UntrackedFiles::Files)
+        .tree_index_track_renames(gix::status::tree_index::TrackRenames::Disabled)
+        .index_worktree_rewrites(None)
+        .index_worktree_submodules(gix::status::Submodule::AsConfigured { check_dirty: true });
 
-    for entry in statuses.iter() {
-        let rel_path = entry.path().unwrap_or("");
-        if is_submodule_status_path(rel_path, &submodule_paths) {
-            continue;
-        }
-
-        let full_path = workdir.join(rel_path);
-
-        // Directory statuses are expanded so the UI can show actionable file rows.
-        let files = if full_path.is_dir() { collect_files_for_status(repo, workdir, rel_path) } else { vec![rel_path.to_string()] };
-
-        for file in files {
-            if is_submodule_status_path(&file, &submodule_paths) {
-                continue;
-            }
-
-            // Query each file after expansion to avoid applying directory status to children.
-            let file_status = repo.status_file(Path::new(&file))?;
-
-            if file_status.is_conflicted() {
-                push_unique(&mut changes.conflicts, file.clone());
-                continue;
-            }
-
-            if file_status.is_index_modified() {
-                changes.staged.modified.push(file.clone());
-            }
-            if file_status.is_index_new() {
-                changes.staged.added.push(file.clone());
-            }
-            if file_status.is_index_deleted() {
-                changes.staged.deleted.push(file.clone());
-            }
-
-            if file_status.is_wt_modified() {
-                changes.unstaged.modified.push(file.clone());
-            }
-            if file_status.is_wt_new() {
-                changes.unstaged.added.push(file.clone());
-            }
-            if file_status.is_wt_deleted() {
-                changes.unstaged.deleted.push(file.clone());
-            }
+    for item in status.into_iter(Vec::new()).map_err(gix_error)? {
+        match item.map_err(gix_error)? {
+            gix::status::Item::TreeIndex(change) => {
+                let path = gix_path(change.location());
+                if is_submodule_status_path(&path, &submodule_paths) {
+                    continue;
+                }
+                match change {
+                    gix::diff::index::Change::Addition { .. } => push_unique(&mut changes.staged.added, path),
+                    gix::diff::index::Change::Deletion { .. } => push_unique(&mut changes.staged.deleted, path),
+                    gix::diff::index::Change::Modification { .. } | gix::diff::index::Change::Rewrite { .. } => {
+                        push_unique(&mut changes.staged.modified, path);
+                    },
+                }
+            },
+            gix::status::Item::IndexWorktree(item) => {
+                let path = gix_path(item.rela_path());
+                if is_submodule_status_path(&path, &submodule_paths) {
+                    continue;
+                }
+                match item.summary() {
+                    Some(gix::status::index_worktree::iter::Summary::Conflict) => push_unique(&mut changes.conflicts, path),
+                    Some(gix::status::index_worktree::iter::Summary::Removed) => push_unique(&mut changes.unstaged.deleted, path),
+                    Some(gix::status::index_worktree::iter::Summary::Added) | Some(gix::status::index_worktree::iter::Summary::IntentToAdd) => {
+                        push_unique(&mut changes.unstaged.added, path);
+                    },
+                    Some(
+                        gix::status::index_worktree::iter::Summary::Modified
+                        | gix::status::index_worktree::iter::Summary::TypeChange
+                        | gix::status::index_worktree::iter::Summary::Renamed
+                        | gix::status::index_worktree::iter::Summary::Copied,
+                    ) => push_unique(&mut changes.unstaged.modified, path),
+                    None => {},
+                }
+            },
         }
     }
 
-    if let Ok(index) = repo.index()
-        && let Ok(conflicts) = index.conflicts()
-    {
-        for conflict in conflicts.flatten() {
-            let path = conflict.our.as_ref().and_then(conflict_path).or_else(|| conflict.their.as_ref().and_then(conflict_path)).or_else(|| conflict.ancestor.as_ref().and_then(conflict_path));
-            if let Some(path) = path {
-                push_unique(&mut changes.conflicts, path);
+    add_submodule_pointer_changes(repo, &gix_repo, &submodules, &mut changes);
+    finalize_uncommitted_changes(&mut changes);
+
+    Ok(changes)
+}
+
+pub fn get_staged_filenames_diff(repo: &Repository) -> Result<UncommittedChanges, Error> {
+    let workdir = repo.workdir().ok_or_else(|| Error::from_str("bare repositories are not supported"))?;
+    get_staged_filenames_diff_from_path(workdir)
+}
+
+pub fn get_staged_filenames_diff_from_path(path: impl AsRef<Path>) -> Result<UncommittedChanges, Error> {
+    let gix_repo = gix::open(path.as_ref()).map_err(gix_error)?;
+    get_staged_filenames_diff_from_gix_repo(&gix_repo)
+}
+
+fn get_staged_filenames_diff_from_gix_repo(gix_repo: &gix::Repository) -> Result<UncommittedChanges, Error> {
+    let Ok(head_tree_id) = gix_repo.head_tree_id() else {
+        return Ok(UncommittedChanges::default());
+    };
+    let index = gix_repo.index_or_empty().map_err(gix_error)?;
+    let mut changes = UncommittedChanges::default();
+
+    gix_repo
+        .tree_index_status(&head_tree_id, &index, None, gix::status::tree_index::TrackRenames::Disabled, |change, _, _| {
+            let path = gix_path(change.location());
+            match change {
+                gix::diff::index::ChangeRef::Addition { .. } => push_unique(&mut changes.staged.added, path),
+                gix::diff::index::ChangeRef::Deletion { .. } => push_unique(&mut changes.staged.deleted, path),
+                gix::diff::index::ChangeRef::Modification { .. } | gix::diff::index::ChangeRef::Rewrite { .. } => push_unique(&mut changes.staged.modified, path),
             }
-        }
-    }
+            Ok::<_, std::convert::Infallible>(gix::diff::index::Action::Continue(()))
+        })
+        .map_err(gix_error)?;
 
-    add_submodule_pointer_changes(repo, &submodules, &mut changes);
+    finalize_uncommitted_changes(&mut changes);
+    Ok(changes)
+}
 
-    // Counts are deduplicated because the same path can be both staged and unstaged.
+fn finalize_uncommitted_changes(changes: &mut UncommittedChanges) {
     changes.modified_count = deduplicate(&changes.staged.modified, &changes.unstaged.modified);
     changes.added_count = deduplicate(&changes.staged.added, &changes.unstaged.added);
     changes.deleted_count = deduplicate(&changes.staged.deleted, &changes.unstaged.deleted);
@@ -84,24 +114,29 @@ pub fn get_filenames_diff_at_workdir(repo: &Repository) -> Result<UncommittedCha
     changes.is_staged = changes.has_conflicts || !changes.staged.modified.is_empty() || !changes.staged.added.is_empty() || !changes.staged.deleted.is_empty();
     changes.is_unstaged = changes.has_conflicts || !changes.unstaged.modified.is_empty() || !changes.unstaged.added.is_empty() || !changes.unstaged.deleted.is_empty();
     changes.is_clean = !changes.is_staged && !changes.is_unstaged && !changes.has_conflicts;
-
-    Ok(changes)
 }
 
-fn add_submodule_pointer_changes(repo: &Repository, submodules: &[Submodule<'_>], changes: &mut UncommittedChanges) {
-    for submodule in submodules {
-        let path = submodule.path();
-        let path_text = path.to_string_lossy().to_string();
-        let name = submodule.name().unwrap_or(path_text.as_str());
-        let status = submodule_status_for(repo, name, path);
+fn add_submodule_pointer_changes(repo: &Repository, gix_repo: &gix::Repository, submodules: &[SubmoduleEntry], changes: &mut UncommittedChanges) {
+    let mut index = repo.index().ok();
+    if let Some(index) = index.as_mut() {
+        let _ = index.read(true);
+    }
+    let head_tree = gix_repo.head_tree_id_or_empty().ok().and_then(|tree_id| gix_repo.find_tree(tree_id).ok());
 
-        if status.is_index_added() {
+    for submodule in submodules {
+        let path = submodule.path.as_path();
+        let path_text = path.to_string_lossy().to_string();
+        let status = submodule_status_for(repo, &submodule.name, path);
+        let index_entry = index.as_ref().and_then(|index| index.get_path(path, 0));
+        let head_entry = head_tree.as_ref().and_then(|tree| tree.lookup_entry_by_path(path).ok().flatten());
+
+        if status.is_index_added() || (head_entry.is_none() && index_entry.is_some()) {
             push_unique(&mut changes.staged.added, path_text.clone());
         }
-        if status.is_index_deleted() {
+        if status.is_index_deleted() || (head_entry.is_some() && index_entry.is_none()) {
             push_unique(&mut changes.staged.deleted, path_text.clone());
         }
-        if status.is_index_modified() {
+        if status.is_index_modified() || head_entry.zip(index_entry.as_ref()).is_some_and(|(head, index)| head.object_id().as_bytes() != index.id.as_bytes()) {
             push_unique(&mut changes.staged.modified, path_text.clone());
         }
 
@@ -109,7 +144,7 @@ fn add_submodule_pointer_changes(repo: &Repository, submodules: &[Submodule<'_>]
             push_unique(&mut changes.unstaged.added, path_text.clone());
         } else if status.is_wd_deleted() {
             push_unique(&mut changes.unstaged.deleted, path_text.clone());
-        } else if status.is_wd_modified() || submodule.workdir_id().zip(submodule.index_id()).is_some_and(|(workdir, index)| workdir != index) {
+        } else if submodule.has_new_commits {
             push_unique(&mut changes.unstaged.modified, path_text.clone());
         }
     }
@@ -121,7 +156,7 @@ fn submodule_status_for(repo: &Repository, name: &str, path: &Path) -> Submodule
         .unwrap_or_else(|_| SubmoduleStatus::empty())
 }
 
-fn is_submodule_status_path(path: &str, submodule_paths: &[std::path::PathBuf]) -> bool {
+fn is_submodule_status_path(path: &str, submodule_paths: &[PathBuf]) -> bool {
     if path.is_empty() {
         return false;
     }
@@ -131,50 +166,14 @@ fn is_submodule_status_path(path: &str, submodule_paths: &[std::path::PathBuf]) 
     submodule_paths.iter().any(|submodule_path| path == submodule_path || path.starts_with(submodule_path))
 }
 
-fn conflict_path(entry: &git2::IndexEntry) -> Option<String> {
-    std::str::from_utf8(&entry.path).ok().map(|path| path.to_string())
+fn gix_path(path: &BStr) -> String {
+    path.to_str_lossy().into_owned()
 }
 
 fn push_unique(paths: &mut Vec<String>, path: String) {
     if !paths.iter().any(|existing| existing == &path) {
         paths.push(path);
     }
-}
-
-fn collect_files_for_status(repo: &Repository, workdir: &Path, rel_path: &str) -> Vec<String> {
-    let full_path = workdir.join(rel_path);
-
-    if full_path.exists() {
-        if full_path.is_file() {
-            return vec![rel_path.to_string()];
-        } else if full_path.is_dir() {
-            let mut result = Vec::new();
-            if let Ok(entries) = std::fs::read_dir(&full_path) {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    let child_rel = match path.strip_prefix(workdir) {
-                        Ok(p) => p.to_string_lossy().to_string(),
-                        Err(_) => continue,
-                    };
-
-                    // Respect gitignore while recursively expanding untracked directories.
-                    if repo.status_should_ignore(Path::new(&child_rel)).unwrap_or(false) {
-                        continue;
-                    }
-
-                    if path.is_file() {
-                        result.push(child_rel);
-                    } else if path.is_dir() {
-                        result.extend(collect_files_for_status(repo, workdir, &child_rel));
-                    }
-                }
-            }
-            return result;
-        }
-    }
-
-    // Deleted paths no longer exist on disk, but git still reports them by relative path.
-    vec![rel_path.to_string()]
 }
 
 // List files changed by a commit compared with its first parent.
@@ -192,7 +191,7 @@ pub fn get_filenames_diff_at_oid(repo: &Repository, oid: Oid) -> Vec<FileChange>
     // Compare against the first parent, matching the normal `git show` view of merges.
     let parent_tree = commit.parent(0).unwrap().tree().unwrap();
     let mut opts = DiffOptions::new();
-    opts.include_untracked(false).recurse_untracked_dirs(false).include_typechange(false).ignore_submodules(false).show_binary(false).minimal(false).skip_binary_check(true);
+    opts.include_untracked(false).recurse_untracked_dirs(false).include_typechange(true).ignore_submodules(false).show_binary(false).minimal(false).skip_binary_check(true);
 
     let diff = repo.diff_tree_to_tree(Some(&parent_tree), Some(&tree), Some(&mut opts)).unwrap();
 
@@ -219,7 +218,46 @@ pub fn get_filenames_diff_at_oid(repo: &Repository, oid: Oid) -> Vec<FileChange>
         });
     }
 
+    // libgit2 does not consistently emit gitlink pointer changes here, so compare known
+    // submodule entries directly and upsert the expected row when the recorded commit moved.
+    add_committed_submodule_pointer_changes(repo, &parent_tree, &tree, &mut changes);
+
     changes
+}
+
+fn add_committed_submodule_pointer_changes(repo: &Repository, parent_tree: &git2::Tree, tree: &git2::Tree, changes: &mut Vec<FileChange>) {
+    let submodules = list_submodules(repo).unwrap_or_default();
+
+    for submodule in submodules {
+        let path = submodule.path.to_string_lossy().to_string();
+
+        let parent_entry = parent_tree.get_path(Path::new(&path)).ok();
+        let new_entry = tree.get_path(Path::new(&path)).ok();
+
+        let Some(status) = committed_submodule_change_status(parent_entry.as_ref(), new_entry.as_ref()) else {
+            continue;
+        };
+
+        upsert_change(changes, path, status);
+    }
+}
+
+fn committed_submodule_change_status(parent_entry: Option<&git2::TreeEntry<'_>>, new_entry: Option<&git2::TreeEntry<'_>>) -> Option<FileStatus> {
+    match (parent_entry, new_entry) {
+        (Some(old), Some(new)) if old.id() == new.id() => None,
+        (Some(_), Some(_)) => Some(FileStatus::Modified),
+        (Some(_), None) => Some(FileStatus::Deleted),
+        (None, Some(_)) => Some(FileStatus::Added),
+        (None, None) => None,
+    }
+}
+
+fn upsert_change(changes: &mut Vec<FileChange>, filename: String, status: FileStatus) {
+    if let Some(existing) = changes.iter_mut().find(|change| change.filename == filename) {
+        existing.status = status;
+    } else {
+        changes.push(FileChange { filename, status });
+    }
 }
 
 // Build structured hunks for a working tree file against HEAD and the index.
