@@ -179,11 +179,13 @@ Each lane says:
 - whether the lane is a flattened representative for lanes hidden behind the
   configured lane cap.
 
-The buffer prefers to replace a lane whose `parent_a` or `parent_b` equals the
-incoming commit alias. If none exists, the incoming commit starts a new
-rightmost lane. If the active lane count then exceeds the configured graph lane
-limit, the cap lane becomes a flattened representative and lanes to its right
-are truncated from the stored snapshot.
+The buffer prefers to replace a lane whose `parent_a` equals the incoming
+commit alias. Merge second parents are handled earlier by splitting the merge
+into a cloned lane where that second parent becomes `parent_a`. If no lane
+matches, the incoming commit starts a new rightmost lane. If the active lane
+count then exceeds the configured graph lane limit, the cap lane becomes a
+flattened representative and lanes to its right are truncated from the stored
+snapshot.
 
 ```text
 Before update with alias B:
@@ -274,9 +276,11 @@ GraphRow {
   has_any_branch,
   branches,
   tags,
+  is_merge,
   is_stash,
   stash_lane,
   worktrees,
+  has_current_worktree,
   reflog,
 }
 ```
@@ -627,8 +631,8 @@ creates a lane for the second parent so later rows can draw the merge edge.
 
 ### Rule: replace matching parent lane
 
-If an incoming commit alias matches an existing lane's `parent_a` or
-`parent_b`, that lane is replaced by the incoming commit:
+If an incoming commit alias matches an existing lane's `parent_a`, that lane is
+replaced by the incoming commit:
 
 ```text
 incoming: B -> C
