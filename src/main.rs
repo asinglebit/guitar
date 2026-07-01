@@ -3,8 +3,13 @@ use std::{env, fs, io, path::PathBuf};
 use guitar::{App, VERSION};
 
 const RESET_CONFIG: &str = "--reset";
+const EXIT_WHEN_GRAPH_COMPLETE: &str = "--exit-when-graph-complete";
 const VERSION_LONG: &str = "--version";
 const VERSION_SHORT: &str = "-v";
+
+fn repo_path_from_args(args: &[String]) -> Option<String> {
+    args.iter().skip(1).find(|arg| !arg.starts_with('-')).cloned()
+}
 
 fn guitar_config_dir() -> io::Result<PathBuf> {
     let mut path = dirs::config_dir().ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Could not find config directory"))?;
@@ -37,8 +42,25 @@ fn main() -> io::Result<()> {
         reset_saved_config()?;
     }
 
+    let exit_when_graph_complete = args.iter().any(|a| a == EXIT_WHEN_GRAPH_COMPLETE);
+    let repo_path = repo_path_from_args(&args);
+
+    if exit_when_graph_complete {
+        let mut app = App::default();
+        app.bootstrap(repo_path);
+        let result = app.wait_until_graph_complete(std::time::Duration::from_secs(600));
+        app.shutdown_background_tasks();
+        println!("{}", result?);
+        return Ok(());
+    }
+
+    let mut app = App::default();
+    if let Some(path) = repo_path {
+        app.path = Some(path);
+    }
+
     let mut terminal = ratatui::init();
-    let app_result = App::default().run(&mut terminal);
+    let app_result = app.run(&mut terminal);
     ratatui::restore();
     app_result
 }
