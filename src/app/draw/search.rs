@@ -89,7 +89,7 @@ impl App {
                 };
                 lines.push(Line::from(vec![
                     Span::styled(format!("{} ", status_marker(row.status, &self.symbols)), Style::default().fg(marker_color)),
-                    Span::styled(format!("{} ", row.short_oid), Style::default().fg(self.theme.COLOR_GREY_600)),
+                    Span::styled(format!("{:.8} ", row.oid), Style::default().fg(self.theme.COLOR_GREY_600)),
                     Span::styled(truncate_with_ellipsis(&row.summary, summary_width), Style::default().fg(self.theme.COLOR_TEXT)),
                 ]));
             }

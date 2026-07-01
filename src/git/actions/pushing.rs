@@ -111,3 +111,7 @@ pub fn delete_remote_branch(repo_path: &str, remote_name: &str, branch: &str, au
         network_result(network::DELETE_REMOTE_BRANCH(), &attempt, result)
     })
 }
+
+#[cfg(test)]
+#[path = "../../tests/git/actions/pushing.rs"]
+mod tests;

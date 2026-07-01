@@ -463,12 +463,14 @@ fn push_commit(buffer: &mut Buffer, rows: &mut Vec<GraphRow>, index: usize, alia
         summary,
         committer_date: "2026-06-20 12:34".to_string(),
         committer_name: "Benchmark Runner".to_string(),
+        is_merge: false,
         has_any_branch: false,
-        branches: Vec::new(),
-        tags: Vec::new(),
+        branches: Default::default(),
+        tags: Default::default(),
         is_stash: false,
         stash_lane: None,
-        worktrees: Vec::new(),
+        worktrees: Default::default(),
+        has_current_worktree: false,
         reflog: None,
     };
 

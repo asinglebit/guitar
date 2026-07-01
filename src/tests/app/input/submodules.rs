@@ -1,16 +1,20 @@
 use super::*;
+use crate::app::app::RepoHandle;
 use crate::core::submodules::{SubmoduleEntry, SubmoduleStackEntry, Submodules};
-use crate::git::{actions::network::NetworkRequest, auth::NetworkResult, queries::submodules::list_submodules};
+use crate::git::{
+    actions::network::NetworkRequest,
+    auth::NetworkResult,
+    queries::submodules::list_submodules,
+    test_support::{TestDir, commit_file, commit_index},
+};
 use crate::helpers::keymap::{Command, InputMode, KeyBinding};
-use git2::{Repository, Signature};
+use git2::Repository;
 use indexmap::IndexMap;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::{
-    env, fs,
+    fs,
     path::{Path, PathBuf},
-    process,
     rc::Rc,
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 fn entry(name: &str, open: bool) -> SubmoduleEntry {
@@ -37,23 +41,8 @@ fn entry(name: &str, open: bool) -> SubmoduleEntry {
     }
 }
 
-struct TestDir {
-    path: PathBuf,
-}
-
-impl TestDir {
-    fn new(name: &str) -> Self {
-        let suffix = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-        let path = env::temp_dir().join(format!("guitar-submodule-input-{name}-{}-{suffix}", process::id()));
-        fs::create_dir_all(&path).unwrap();
-        Self { path }
-    }
-}
-
-impl Drop for TestDir {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.path);
-    }
+fn repo_handle(repo: Repository) -> RepoHandle {
+    RepoHandle::from_repo(Rc::new(repo))
 }
 
 fn init_repo(path: &Path) -> Repository {
@@ -68,28 +57,9 @@ fn init_repo(path: &Path) -> Repository {
     repo
 }
 
-fn commit_file(repo: &Repository, file: &str, contents: &str, message: &str) -> git2::Oid {
-    let workdir = repo.workdir().unwrap().to_path_buf();
-    fs::write(workdir.join(file), contents).unwrap();
-    let mut index = repo.index().unwrap();
-    index.add_path(Path::new(file)).unwrap();
-    index.write().unwrap();
-    commit_index(repo, message)
-}
-
-fn commit_index(repo: &Repository, message: &str) -> git2::Oid {
-    let mut index = repo.index().unwrap();
-    let tree_id = index.write_tree().unwrap();
-    let tree = repo.find_tree(tree_id).unwrap();
-    let sig = Signature::now("Test User", "test@example.com").unwrap();
-    let parent = repo.head().ok().and_then(|head| head.peel_to_commit().ok());
-    let parents: Vec<&git2::Commit<'_>> = parent.iter().collect();
-    repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents).unwrap()
-}
-
 fn parent_with_submodule(dir: &TestDir) -> Repository {
-    let child_path = dir.path.join("child");
-    let parent_path = dir.path.join("parent");
+    let child_path = dir.join("child");
+    let parent_path = dir.join("parent");
     let child = init_repo(&child_path);
     drop(child);
     let parent = init_repo(&parent_path);
@@ -140,11 +110,11 @@ fn opening_checked_out_submodule_pushes_stack_entry_and_reloads_submodule() {
     let child_path = fs::canonicalize(entries[0].absolute_path.clone()).unwrap();
     let mut app = App {
         path: Some(parent_path.display().to_string()),
-        repo: Some(Rc::new(parent)),
+        repo: Some(repo_handle(parent)),
         viewport: Viewport::Graph,
         focus: Focus::Submodules,
         submodules: Submodules::from_entries(entries),
-        recent_save_path: Some(dir.path.join("recent-open.json")),
+        recent_save_path: Some(dir.join("recent-open.json")),
         ..Default::default()
     };
 
@@ -162,9 +132,9 @@ fn opening_checked_out_submodule_pushes_stack_entry_and_reloads_submodule() {
 #[test]
 fn opening_nested_submodule_appends_to_existing_stack() {
     let dir = TestDir::new("nested-stack");
-    let root_path = dir.path.join("root");
-    let child_path = dir.path.join("child");
-    let grandchild_path = dir.path.join("grandchild");
+    let root_path = dir.join("root");
+    let child_path = dir.join("child");
+    let grandchild_path = dir.join("grandchild");
     let child = init_repo(&child_path);
     let grandchild = init_repo(&grandchild_path);
     drop(grandchild);
@@ -173,12 +143,12 @@ fn opening_nested_submodule_appends_to_existing_stack() {
     nested.absolute_path = grandchild_path.clone();
     let mut app = App {
         path: Some(child_path.display().to_string()),
-        repo: Some(Rc::new(child)),
+        repo: Some(repo_handle(child)),
         viewport: Viewport::Graph,
         focus: Focus::Submodules,
         submodules: Submodules::from_entries(vec![nested]),
         submodule_stack: vec![SubmoduleStackEntry::new(root_path.clone(), PathBuf::from("deps/child"), "deps/child".into())],
-        recent_save_path: Some(dir.path.join("recent-nested.json")),
+        recent_save_path: Some(dir.join("recent-nested.json")),
         ..Default::default()
     };
 
@@ -194,18 +164,18 @@ fn opening_nested_submodule_appends_to_existing_stack() {
 #[test]
 fn return_to_parent_repository_pops_one_stack_entry_and_reloads_parent() {
     let dir = TestDir::new("return-parent");
-    let parent = init_repo(&dir.path.join("parent"));
-    let child = init_repo(&dir.path.join("child"));
+    let parent = init_repo(&dir.join("parent"));
+    let child = init_repo(&dir.join("child"));
     let parent_path = fs::canonicalize(parent.workdir().unwrap()).unwrap();
     let child_path = fs::canonicalize(child.workdir().unwrap()).unwrap();
     drop(parent);
     let mut app = App {
         path: Some(child_path.display().to_string()),
-        repo: Some(Rc::new(child)),
+        repo: Some(repo_handle(child)),
         viewport: Viewport::Graph,
         focus: Focus::Submodules,
         submodule_stack: vec![SubmoduleStackEntry::new(parent_path.clone(), PathBuf::from("deps/child"), "deps/child".into())],
-        recent_save_path: Some(dir.path.join("recent-return.json")),
+        recent_save_path: Some(dir.join("recent-return.json")),
         ..Default::default()
     };
 
@@ -237,7 +207,7 @@ fn action_keys_dispatch_update_and_sync_submodule() {
 
     let mut update_app = App {
         path: Some(parent_path.clone()),
-        repo: Some(Rc::new(parent)),
+        repo: Some(repo_handle(parent)),
         viewport: Viewport::Graph,
         focus: Focus::Submodules,
         submodules: Submodules::from_entries(entries),
@@ -260,12 +230,12 @@ fn action_keys_dispatch_update_and_sync_submodule() {
     let entries = list_submodules(&parent).unwrap();
     let mut sync_app = App {
         path: Some(parent_path),
-        repo: Some(Rc::new(parent)),
+        repo: Some(repo_handle(parent)),
         viewport: Viewport::Graph,
         focus: Focus::Submodules,
         submodules: Submodules::from_entries(entries),
         keymaps: submodule_action_keymaps(),
-        recent_save_path: Some(dir.path.join("recent.json")),
+        recent_save_path: Some(dir.join("recent.json")),
         ..Default::default()
     };
 

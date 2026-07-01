@@ -68,7 +68,7 @@ impl App {
         } else if self.graph_tx.is_none() {
             for stash_alias in &self.oids.stashes {
                 let oid = self.oids.get_oid_by_alias(*stash_alias);
-                let commit = repo.find_commit(*oid).unwrap();
+                let commit = repo.find_commit(oid).unwrap();
                 let message = commit.summary().unwrap_or(empty::NO_MESSAGE()).to_string();
 
                 let truncated = truncate_with_ellipsis(message.as_str(), max_text_width.saturating_sub(1));

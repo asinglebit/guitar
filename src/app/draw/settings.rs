@@ -304,7 +304,8 @@ impl App {
         lines.push(self.settings_filled_line(settings_text::ACTIONS(), settings_text::REMOTES_ACTIONS_DETAIL(), width, Style::default().fg(self.theme.COLOR_TEXT)));
         lines.push(Line::default());
 
-        match list_remotes(repo) {
+        let repo_path = repo.workdir().unwrap_or(repo.path());
+        match list_remotes(repo_path) {
             Ok(remotes) if remotes.is_empty() => {
                 lines.push(self.settings_filled_line(settings_text::DEFAULT_REMOTE(), format!(" {} ", common::NONE()).as_str(), width, Style::default().fg(self.theme.COLOR_TEXT)));
                 lines.push(Line::default());
@@ -318,7 +319,7 @@ impl App {
                 lines.push(self.settings_filled_line(&format!(" {}", empty::NO_REMOTES()), "", width, Style::default().fg(self.theme.COLOR_TEXT)));
             },
             Ok(remotes) => {
-                let default_remote = effective_default_remote(repo);
+                let default_remote = effective_default_remote(repo_path);
                 let default_label = default_remote.as_deref().unwrap_or(common::NONE());
                 lines.push(self.settings_filled_line(settings_text::DEFAULT_REMOTE(), format!(" {default_label} ").as_str(), width, Style::default().fg(self.theme.COLOR_GRASS)));
                 lines.push(Line::default());

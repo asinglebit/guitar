@@ -59,6 +59,13 @@ impl App {
         self.splash_selected = Self::clamp_selection(self.splash_selected, self.recent.len());
     }
 
+    fn open_status_viewer(&mut self) {
+        if let Some(repo) = self.git2_repo() {
+            self.open_viewer(&repo);
+            self.focus = Focus::Viewport;
+        }
+    }
+
     fn selected_settings_recent_repository(&self) -> Option<(usize, usize)> {
         self.settings_selections.iter().find(|selection| selection.line == self.settings_selected).and_then(|selection| match &selection.kind {
             SettingsSelectionKind::RecentRepository(index) => Some((selection.line, *index)),
@@ -166,7 +173,10 @@ impl App {
             let Some(identity) = self.graph_identity_at(self.graph_selected) else {
                 return;
             };
-            self.current_diff = get_filenames_diff_at_oid(&repo, identity.oid);
+            let Some(oid) = self.graph_oid_for_identity(identity) else {
+                return;
+            };
+            self.current_diff = get_filenames_diff_at_oid(&repo, oid);
             self.current_diff_identity = Some(identity);
         }
     }
@@ -174,6 +184,9 @@ impl App {
     pub(crate) fn select_graph_index(&mut self, idx: usize) {
         self.graph.pending_selection_restore = None;
         self.graph_selected = Self::clamp_selection(idx, self.graph_commit_count());
+        if self.graph_selected == 0 {
+            self.ensure_uncommitted_details_loaded();
+        }
         self.refresh_current_diff_for_graph_selection();
     }
 
@@ -650,12 +663,7 @@ impl App {
             Focus::ModalRemoteDelete => {
                 self.confirm_delete_remote();
             },
-            Focus::StatusTop | Focus::StatusBottom => {
-                if let Some(repo) = &self.repo.clone() {
-                    self.open_viewer(repo);
-                    self.focus = Focus::Viewport;
-                }
-            },
+            Focus::StatusTop | Focus::StatusBottom => self.open_status_viewer(),
             Focus::ModalCheckout => {
                 if let Some(repo) = &self.repo {
                     let Some(alias) = self.graph_alias_at(self.graph_selected) else {
@@ -856,12 +864,7 @@ impl App {
             Focus::Search => {
                 self.open_search_result();
             },
-            Focus::StatusTop | Focus::StatusBottom => {
-                if let Some(repo) = &self.repo.clone() {
-                    self.open_viewer(repo);
-                    self.focus = Focus::Viewport;
-                }
-            },
+            Focus::StatusTop | Focus::StatusBottom => self.open_status_viewer(),
             _ => {},
         }
         self.save_layout();
@@ -1229,12 +1232,12 @@ impl App {
                 }
             },
             Focus::ModalDeleteBranch => {
-                if let Some(repo) = &self.repo {
-                    if let Some(alias) = self.graph_alias_at(self.graph_selected) {
-                        let current = get_current_branch(repo);
-                        let branch_names = self.graph_deletable_branch_choices(alias, current.as_deref());
-                        Self::wrap_modal_selection(&mut self.modal_delete_branch_selected, branch_names.len(), Direction::Up);
-                    }
+                if let Some(repo) = &self.repo
+                    && let Some(alias) = self.graph_alias_at(self.graph_selected)
+                {
+                    let current = get_current_branch(repo);
+                    let branch_names = self.graph_deletable_branch_choices(alias, current.as_deref());
+                    Self::wrap_modal_selection(&mut self.modal_delete_branch_selected, branch_names.len(), Direction::Up);
                 }
             },
             Focus::ModalDeleteTag => {
@@ -1319,12 +1322,12 @@ impl App {
                 }
             },
             Focus::ModalDeleteBranch => {
-                if let Some(repo) = &self.repo {
-                    if let Some(alias) = self.graph_alias_at(self.graph_selected) {
-                        let current = get_current_branch(repo);
-                        let branch_names = self.graph_deletable_branch_choices(alias, current.as_deref());
-                        Self::wrap_modal_selection(&mut self.modal_delete_branch_selected, branch_names.len(), Direction::Down);
-                    }
+                if let Some(repo) = &self.repo
+                    && let Some(alias) = self.graph_alias_at(self.graph_selected)
+                {
+                    let current = get_current_branch(repo);
+                    let branch_names = self.graph_deletable_branch_choices(alias, current.as_deref());
+                    Self::wrap_modal_selection(&mut self.modal_delete_branch_selected, branch_names.len(), Direction::Down);
                 }
             },
             Focus::ModalDeleteTag => {
@@ -1623,7 +1626,7 @@ impl App {
                     .enumerate()
                     .filter_map(|(idx, &alias)| {
                         let child_oid = self.oids.get_oid_by_alias(alias);
-                        let commit = repo.find_commit(*child_oid).ok()?;
+                        let commit = repo.find_commit(child_oid).ok()?;
                         if commit.parent_ids().any(|parent_oid| parent_oid == oid) { Some(idx) } else { None }
                     })
                     .collect();
@@ -1662,7 +1665,7 @@ impl App {
                     return;
                 };
                 self.graph.graph_window.as_ref().and_then(|window| window.rows.iter().find(|row| row.oid == parent_oid).map(|row| row.index)).or_else(|| {
-                    let parent_alias = self.oids.aliases.get(&parent_oid).copied()?;
+                    let parent_alias = self.oids.get_existing_alias(parent_oid)?;
                     self.oids.get_sorted_aliases().iter().position(|&alias| alias == parent_alias)
                 })
             };

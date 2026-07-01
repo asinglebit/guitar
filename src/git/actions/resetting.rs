@@ -40,3 +40,7 @@ pub fn reset_file(repo: &Repository, path: &Path) -> Result<(), Error> {
 
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "../../tests/git/actions/resetting.rs"]
+mod tests;
