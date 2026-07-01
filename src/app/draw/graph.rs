@@ -236,7 +236,7 @@ fn graph_preload_window(start: usize, end: usize, total_lines: usize, visible_he
     (start.saturating_sub(visible_height), end.saturating_add(visible_height).min(total_lines))
 }
 
-fn align_projection(lines: &[Line<'static>], cached_start: usize, target_start: usize, target_end: usize) -> Vec<Line<'static>> {
+fn align_projection<'a>(lines: &[Line<'a>], cached_start: usize, target_start: usize, target_end: usize) -> Vec<Line<'a>> {
     (target_start..target_end)
         .map(|index| {
             if index < cached_start {

@@ -46,11 +46,12 @@ fn graph_row(index: usize, alias: u32, oid: Oid) -> GraphRow {
         committer_name: String::new(),
         is_merge: false,
         has_any_branch: false,
-        branches: Vec::new(),
-        tags: Vec::new(),
+        branches: Default::default(),
+        tags: Default::default(),
         is_stash: false,
         stash_lane: None,
-        worktrees: Vec::new(),
+        worktrees: Default::default(),
+        has_current_worktree: false,
         reflog: None,
     }
 }

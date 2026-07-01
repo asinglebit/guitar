@@ -69,12 +69,7 @@ fn temp_repo(name: &str) -> (std::path::PathBuf, Repository) {
     let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
     let path = std::env::temp_dir().join(format!("guitar-input-navigation-{name}-{id}"));
     fs::create_dir_all(&path).unwrap();
-    let repo = Repository::init(&path).unwrap();
-    {
-        let mut config = repo.config().unwrap();
-        config.set_str("user.name", "Test User").unwrap();
-        config.set_str("user.email", "test@example.com").unwrap();
-    }
+    let repo = crate::git::test_support::init_repo_at(&path);
     (path, repo)
 }
 
@@ -122,7 +117,7 @@ fn stop_graph_service(app: &mut App) {
 }
 
 fn search_history_row(graph_index: usize, oid: git2::Oid) -> GraphFileHistoryRow {
-    GraphFileHistoryRow { graph_index, oid, short_oid: oid.to_string()[..8].to_string(), summary: "history".to_string(), status: FileStatus::Modified }
+    GraphFileHistoryRow { graph_index, oid, summary: "history".to_string(), status: FileStatus::Modified }
 }
 
 fn branch_app() -> App {
@@ -366,10 +361,10 @@ fn graph_toggle_multiple_branch_commit_opens_toggle_modal() {
 fn branch_toggle_uses_git_branch_universe_when_pane_window_is_partial() {
     let (path, repo) = temp_repo("branch-window-toggle");
     let oid = commit_file(&repo, "main.txt", "main");
+    let current_branch = repo.head().unwrap().shorthand().unwrap().to_string();
     {
         let commit = repo.find_commit(oid).unwrap();
         repo.branch("feature", &commit, false).unwrap();
-        repo.branch("main", &commit, false).unwrap();
     }
 
     let mut app = App {
@@ -382,11 +377,11 @@ fn branch_toggle_uses_git_branch_universe_when_pane_window_is_partial() {
         ..Default::default()
     };
     app.graph.branches_window =
-        Some(PaneWindowCache { version: 1, start: 1, end: 2, total: 3, rows: vec![GraphPaneRow::Branch { alias: 1, name: "main".to_string(), is_local: true, lane: None, graph_index: Some(1) }] });
+        Some(PaneWindowCache { version: 1, start: 1, end: 2, total: 3, rows: vec![GraphPaneRow::Branch { alias: 1, name: current_branch.clone(), is_local: true, lane: None, graph_index: Some(1) }] });
 
     app.on_toggle_branch();
 
-    assert_eq!(hidden_branches(&app), vec!["main"]);
+    assert_eq!(hidden_branches(&app), vec![current_branch]);
 }
 
 #[test]
@@ -823,11 +818,12 @@ fn zen_graph_narrow_promotes_cached_window_row_before_opening_inspector() {
             committer_name: String::new(),
             is_merge: false,
             has_any_branch: false,
-            branches: Vec::new(),
-            tags: Vec::new(),
+            branches: Default::default(),
+            tags: Default::default(),
             is_stash: false,
             stash_lane: None,
-            worktrees: Vec::new(),
+            worktrees: Default::default(),
+            has_current_worktree: false,
             reflog: None,
         }],
         history: Default::default(),
@@ -869,11 +865,12 @@ fn graph_row_lookup_result_opens_inspector_with_reflog() {
                 committer_name: String::new(),
                 is_merge: false,
                 has_any_branch: false,
-                branches: Vec::new(),
-                tags: Vec::new(),
+                branches: Default::default(),
+                tags: Default::default(),
                 is_stash: false,
                 stash_lane: None,
-                worktrees: Vec::new(),
+                worktrees: Default::default(),
+                has_current_worktree: false,
                 reflog: Some(GraphReflogLabel { selector: "HEAD@{0}".to_string(), message: "commit: commit".to_string(), lane: Some(LaneRef::new(2, false)) }),
             })),
         })
@@ -1103,6 +1100,8 @@ fn settings_symbol_theme_selection_updates_persists_and_stays_in_settings() {
 
 #[test]
 fn settings_language_selection_updates_persists_and_stays_in_settings() {
+    let _guard = crate::git::test_support::language_test_guard();
+
     let path = temp_language_path("select");
     let mut app = App {
         viewport: Viewport::Settings,
@@ -1122,8 +1121,6 @@ fn settings_language_selection_updates_persists_and_stays_in_settings() {
     assert_eq!(app.settings_selected, 12);
     assert_eq!(app.settings_scroll.get(), 4);
     assert_eq!(fs::read_to_string(path).unwrap(), "\"spanish\"");
-
-    crate::helpers::localisation::set_active_language(Language::English);
 }
 
 #[test]

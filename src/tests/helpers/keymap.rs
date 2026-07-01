@@ -552,6 +552,8 @@ fn keymaps_round_trip_through_disk() {
 
 #[test]
 fn keymap_config_serialization_stays_english_while_visual_labels_localise() {
+    let _guard = crate::git::test_support::language_test_guard();
+
     crate::helpers::localisation::set_active_language(crate::helpers::localisation::Language::Spanish);
     assert_eq!(command_to_visual_string(&Command::ScrollDown), "Desplazar abajo");
 
@@ -568,6 +570,4 @@ fn keymap_config_serialization_stays_english_while_visual_labels_localise() {
 
     assert!(contents.contains("\"command\": \"ScrollDown\""), "{contents}");
     assert!(!contents.contains("Desplazar"), "{contents}");
-
-    crate::helpers::localisation::set_active_language(crate::helpers::localisation::Language::English);
 }

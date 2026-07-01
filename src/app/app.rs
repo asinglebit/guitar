@@ -653,6 +653,53 @@ pub struct App {
 }
 
 impl App {
+    pub fn shutdown_background_tasks(&mut self) {
+        self.graph_tx.take().into_iter().for_each(|tx| {
+            let _ = tx.send(GraphCommand::Shutdown);
+        });
+        self.graph_rx = None;
+
+        self.walker_cancel.take().into_iter().for_each(|cancel| {
+            cancel.store(true, std::sync::atomic::Ordering::SeqCst);
+        });
+        self.walker_handle.take().into_iter().for_each(|handle| {
+            let _ = handle.join();
+        });
+    }
+
+    pub fn wait_until_graph_complete(&mut self, timeout: Duration) -> io::Result<usize> {
+        let repo = self.repo.as_ref().ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "repository not loaded"))?.clone();
+
+        let started = Instant::now();
+        loop {
+            self.sync(&repo);
+
+            let result = match (self.modal_error_message.as_str(), self.graph.is_complete, self.graph_rx.is_none(), started.elapsed() >= timeout) {
+                (message, _, _, _) if !message.is_empty() => Some(Err(io::Error::other(message.to_owned()))),
+                (_, true, _, _) => Some(Ok(self.graph_commit_count())),
+                (_, false, true, _) => Some(Err(io::Error::new(io::ErrorKind::BrokenPipe, "graph worker disconnected before completion"))),
+                (_, false, false, true) => Some(Err(io::Error::new(io::ErrorKind::TimedOut, "timed out waiting for graph completion"))),
+                (_, false, false, false) => None,
+            };
+
+            if let Some(result) = result {
+                break result;
+            }
+
+            std::thread::sleep(Duration::from_millis(25));
+        }
+    }
+
+    pub fn bootstrap(&mut self, repo_path: Option<String>) {
+        self.load_language_config();
+        self.load_recent();
+        self.load_layout();
+        self.load_theme_config();
+        self.load_symbol_theme_config();
+        self.load_keymap();
+        self.reload(repo_path);
+    }
+
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
         // Ask supported terminals to distinguish Esc from modified key sequences.
         enable_raw_mode()?;
@@ -665,13 +712,7 @@ impl App {
 
         let run_result = (|| {
             // Load persisted state before the first repository scan.
-            self.load_language_config();
-            self.load_recent();
-            self.load_layout();
-            self.load_theme_config();
-            self.load_symbol_theme_config();
-            self.load_keymap();
-            self.reload(None);
+            self.bootstrap(None);
 
             while !self.is_exit {
                 if event::poll(Duration::from_millis(50)).unwrap_or(false) {
@@ -1009,10 +1050,21 @@ impl App {
 
     pub fn sync(&mut self, repo: &git2::Repository) {
         let mut events = Vec::new();
+        let mut is_disconnected = false;
         if let Some(rx) = &self.graph_rx {
-            while let Ok(event) = rx.try_recv() {
-                events.push(event);
+            loop {
+                match rx.try_recv() {
+                    Ok(event) => events.push(event),
+                    Err(std::sync::mpsc::TryRecvError::Empty) => break,
+                    Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                        is_disconnected = true;
+                        break;
+                    },
+                }
             }
+        }
+        if is_disconnected {
+            self.graph_rx = None;
         }
 
         for event in events {
@@ -1161,6 +1213,12 @@ impl App {
                     self.heatmap = heatmap;
                 }
             },
+            GraphEvent::Worktrees { generation, version, worktrees } => {
+                if generation == self.graph.generation {
+                    self.graph.version = self.graph.version.max(version);
+                    self.worktrees.entries = worktrees;
+                }
+            },
             GraphEvent::Error { generation, message } => {
                 if generation == self.graph.generation {
                     self.show_error(message);
@@ -1199,7 +1257,7 @@ impl App {
             return None;
         }
 
-        self.oids.get_sorted_aliases().get(index).map(|&alias| GraphIndexIdentity { index, alias, oid: *self.oids.get_oid_by_alias(alias) })
+        self.oids.get_sorted_aliases().get(index).map(|&alias| GraphIndexIdentity { index, alias, oid: self.oids.get_oid_by_alias(alias) })
     }
 
     pub(crate) fn graph_alias_at(&self, index: usize) -> Option<u32> {

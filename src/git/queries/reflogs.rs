@@ -1,27 +1,31 @@
-use git2::{Oid, Repository, Time};
+use crate::git::gix::gix_error;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HeadReflogEntry {
     pub selector: String,
-    pub old_oid: Oid,
-    pub new_oid: Oid,
+    pub old_oid: gix::ObjectId,
+    pub new_oid: gix::ObjectId,
     pub message: String,
-    pub time: Time,
+    pub time: gix::date::Time,
 }
 
-pub fn get_head_reflog_entries(repo: &Repository) -> Result<Vec<HeadReflogEntry>, git2::Error> {
-    let reflog = repo.reflog("HEAD")?;
+pub fn get_head_reflog_entries(repo: &gix::Repository) -> Result<Vec<HeadReflogEntry>, git2::Error> {
+    let head = repo.head().map_err(gix_error)?;
+    let mut log_iter = head.log_iter();
+    let Some(reflog) = log_iter.rev().map_err(gix_error)? else {
+        return Err(git2::Error::from_str("HEAD reflog not found"));
+    };
+
     let mut entries = Vec::new();
 
-    for (idx, entry) in reflog.iter().enumerate() {
-        let new_oid = entry.id_new();
-        if new_oid.is_zero() || repo.find_commit(new_oid).is_err() {
+    for (idx, entry) in reflog.enumerate() {
+        let entry = entry.map_err(gix_error)?;
+        if entry.new_oid.is_null() || repo.find_commit(entry.new_oid).is_err() {
             continue;
         }
 
-        let message = entry.message().map(str::to_string).or_else(|| entry.message_bytes().map(|bytes| String::from_utf8_lossy(bytes).to_string())).unwrap_or_else(|| "reflog".to_string());
-
-        entries.push(HeadReflogEntry { selector: format!("HEAD@{{{idx}}}"), old_oid: entry.id_old(), new_oid, message, time: entry.committer().when() });
+        let message = if entry.message.is_empty() { "reflog".to_string() } else { String::from_utf8_lossy(entry.message.as_ref()).to_string() };
+        entries.push(HeadReflogEntry { selector: format!("HEAD@{{{idx}}}"), old_oid: entry.previous_oid, new_oid: entry.new_oid, message, time: entry.signature.time });
     }
 
     Ok(entries)
