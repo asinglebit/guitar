@@ -2,6 +2,7 @@ use super::*;
 use crate::git::queries::commits::get_current_branch;
 use crate::git::test_support::{commit_file, temp_repo};
 use git2::BranchType;
+use std::fs;
 
 fn set_branch_upstream(repo: &Repository, branch: &str, remote: &str, target: git2::Oid) {
     repo.remote(remote, "https://example.com/origin.git").unwrap();
@@ -69,6 +70,7 @@ fn renames_current_branch_and_preserves_upstream_config() {
     assert_eq!(config.get_string(&format!("branch.{renamed}.merge")).unwrap(), format!("refs/heads/{current_branch}"));
     assert!(config.get_string(&format!("branch.{current_branch}.remote")).is_err());
     assert!(config.get_string(&format!("branch.{current_branch}.merge")).is_err());
+    assert!(!fs::read_to_string(repo.path().join("config")).unwrap().starts_with('\n'));
     let expected_upstream = format!("refs/remotes/origin/{current_branch}");
     assert_eq!(repo.find_branch(renamed, BranchType::Local).unwrap().upstream().unwrap().get().name(), Some(expected_upstream.as_str()));
 }

@@ -3,7 +3,9 @@ use crate::{
     git::auth::{AuthAttempt, AuthSession, NetworkResult, network_result},
     helpers::localisation::network,
 };
-use std::thread;
+use git2::Repository;
+use gix::bstr::ByteSlice;
+use std::{collections::HashSet, thread};
 
 const TAG_FETCH_REFSPEC: &str = "refs/tags/*:refs/tags/*";
 
@@ -40,7 +42,8 @@ fn fetch_remote_result(repo_path: &str, remote_name: &str, attempt: &AuthAttempt
     let mut progress = gix::progress::Discard;
     let pending_pack = connection.prepare_fetch(&mut progress, Default::default()).map_err(to_git2_error)?;
     let should_interrupt = std::sync::atomic::AtomicBool::new(false);
-    pending_pack.receive(&mut progress, &should_interrupt).map(drop).map_err(to_git2_error)
+    let outcome = pending_pack.receive(&mut progress, &should_interrupt).map_err(to_git2_error)?;
+    prune_stale_remote_tracking_refs(repo_path, remote_name, &outcome.ref_map)
 }
 
 fn prepare_fetch_repo(repo_path: &str) -> Result<gix::Repository, git2::Error> {
@@ -56,6 +59,27 @@ fn heads_fetch_refspec(remote_name: &str) -> String {
 fn configure_fetch_remote<'repo>(remote: gix::Remote<'repo>, remote_name: &str) -> Result<gix::Remote<'repo>, git2::Error> {
     let heads = heads_fetch_refspec(remote_name);
     remote.with_fetch_tags(gix::remote::fetch::Tags::All).with_refspecs([heads.as_str(), TAG_FETCH_REFSPEC], gix::remote::Direction::Fetch).map_err(to_git2_error)
+}
+
+fn prune_stale_remote_tracking_refs(repo_path: &str, remote_name: &str, ref_map: &gix::remote::fetch::RefMap) -> Result<(), git2::Error> {
+    let prefix = format!("refs/remotes/{remote_name}/");
+    let remote_head = format!("{prefix}HEAD");
+    let advertised: HashSet<String> = ref_map.mappings.iter().filter_map(|mapping| mapping.local.as_ref()?.to_str().ok()).filter(|name| name.starts_with(&prefix)).map(str::to_owned).collect();
+    let repo = Repository::open(repo_path)?;
+    let stale_refs = repo
+        .references()?
+        .filter_map(Result::ok)
+        .filter_map(|reference| reference.name().map(str::to_owned))
+        .filter(|name| name.starts_with(&prefix) && name != &remote_head && !advertised.contains(name))
+        .collect::<Vec<_>>();
+
+    for name in stale_refs {
+        if let Ok(mut reference) = repo.find_reference(&name) {
+            reference.delete()?;
+        }
+    }
+
+    Ok(())
 }
 
 // Run fetch on a worker thread so auth prompts and network latency stay outside the draw loop.

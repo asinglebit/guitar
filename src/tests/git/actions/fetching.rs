@@ -21,11 +21,14 @@ fn fetch_reports_failures_and_populates_refs_tags_and_linked_worktrees() {
     assert!(matches!(handle.join().unwrap(), NetworkResult::Failure(_)));
 
     add_remote_path(&consumer, "origin", &remote_path);
+    let stale_commit = commit_file(&consumer, "stale.txt", "stale\n", "stale");
+    consumer.reference("refs/remotes/origin/stale", stale_commit, true, "test stale tracking ref").unwrap();
 
     let handle = fetch_remote(consumer.workdir().unwrap().to_str().unwrap(), "origin", AuthSession::default());
     assert!(matches!(handle.join().unwrap(), NetworkResult::Success));
 
     assert_eq!(consumer.find_reference("refs/remotes/origin/feature").unwrap().target(), Some(commit));
+    assert!(consumer.find_reference("refs/remotes/origin/stale").is_err());
     assert!(consumer.find_reference("refs/tags/v1.0.0").is_ok());
 
     let worktree_owner = init_repo_at(&dir.join("worktree-owner"));

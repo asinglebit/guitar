@@ -4,7 +4,6 @@ use gix::refs::transaction::{Change, LogChange, PreviousValue, RefEdit, RefLog};
 use gix::refs::{FullName, Target};
 use std::{
     fs::OpenOptions,
-    io::Write,
     path::{Path, PathBuf},
     sync::atomic::AtomicBool,
 };
@@ -60,7 +59,6 @@ pub(crate) fn edit_config_file(path: PathBuf, source: gix::config::Source, updat
         let path = config.meta().path.as_deref().ok_or_else(|| Error::from_str("Configuration path is missing"))?;
         let mut file = OpenOptions::new().create(false).write(true).truncate(true).open(path).map_err(to_git2_error)?;
 
-        file.write_all(config.detect_newline_style()).map_err(to_git2_error)?;
         config.write_to_filter(&mut file, |section| section.meta().source == source).map_err(to_git2_error)?;
     }
     Ok(())
