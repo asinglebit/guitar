@@ -1,4 +1,3 @@
-use git2::Oid;
 use std::path::PathBuf;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -21,9 +20,9 @@ pub struct SubmoduleEntry {
     pub absolute_path: PathBuf,
     pub url: Option<String>,
     pub branch: Option<String>,
-    pub head: Option<Oid>,
-    pub index: Option<Oid>,
-    pub workdir: Option<Oid>,
+    pub head: Option<gix::ObjectId>,
+    pub index: Option<gix::ObjectId>,
+    pub workdir: Option<gix::ObjectId>,
     pub is_open: bool,
     pub is_uninitialized: bool,
     pub is_in_head: bool,

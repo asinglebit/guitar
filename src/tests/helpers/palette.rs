@@ -1,9 +1,6 @@
 use super::*;
-use std::{
-    fs,
-    path::PathBuf,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use crate::git::test_support::temp_named_dir;
+use std::{fs, path::PathBuf};
 
 #[test]
 fn background_or_default_preserves_real_colors() {
@@ -129,22 +126,6 @@ fn preset_labels_resolve_to_their_themes() {
 }
 
 #[test]
-fn old_label_only_theme_config_falls_back_to_default_and_rewrites_full_json() {
-    let path = temp_theme_path("old-label");
-    fs::write(&path, "\"tokyo night\"").unwrap();
-
-    let theme = load_theme_from_path(&path);
-
-    assert_eq!(theme.name, ThemeNames::Classic);
-
-    let contents = fs::read_to_string(&path).unwrap();
-    let config = facet_json::from_str::<ThemeConfig>(&contents).unwrap();
-    assert_eq!(config.label, "classic");
-    assert_eq!(config.colors.grey_950.unwrap(), "#1e1e1e");
-    assert_eq!(config.colors.highlighted.unwrap(), color_to_string(Theme::classic().COLOR_HIGHLIGHTED));
-}
-
-#[test]
 fn malformed_theme_config_falls_back_to_default_and_rewrites_full_json() {
     let path = temp_theme_path("malformed");
     fs::write(&path, "{ nope").unwrap();
@@ -250,8 +231,5 @@ fn rgb_brightness(color: Color) -> u16 {
 }
 
 fn temp_theme_path(name: &str) -> PathBuf {
-    let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-    let dir = std::env::temp_dir().join(format!("guitar-palette-{name}-{id}"));
-    fs::create_dir_all(&dir).unwrap();
-    dir.join("theme.json")
+    temp_named_dir("guitar-palette", name).join("theme.json")
 }

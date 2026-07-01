@@ -1,40 +1,6 @@
 use super::*;
-use git2::{Repository, Signature};
-use std::{
-    env, fs,
-    path::{Path, PathBuf},
-    process,
-    time::{SystemTime, UNIX_EPOCH},
-};
-
-struct TestDir {
-    path: PathBuf,
-}
-
-impl TestDir {
-    fn new(name: &str) -> Self {
-        let suffix = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-        let path = env::temp_dir().join(format!("guitar-files-{name}-{}-{suffix}", process::id()));
-        fs::create_dir_all(&path).unwrap();
-        Self { path }
-    }
-}
-
-impl Drop for TestDir {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.path);
-    }
-}
-
-fn init_repo(path: &Path) -> Repository {
-    let repo = Repository::init(path).unwrap();
-    {
-        let mut config = repo.config().unwrap();
-        config.set_str("user.name", "Test User").unwrap();
-        config.set_str("user.email", "test@example.com").unwrap();
-    }
-    repo
-}
+use crate::git::test_support::{TestDir, commit_named_files as commit_files, init_repo_at};
+use std::{fs, path::Path};
 
 fn write_file(root: &Path, path: &str, content: &str) {
     let full_path = root.join(path);
@@ -44,20 +10,6 @@ fn write_file(root: &Path, path: &str, content: &str) {
     fs::write(full_path, content).unwrap();
 }
 
-fn commit_files(repo: &Repository, files: &[&str], message: &str) {
-    let mut index = repo.index().unwrap();
-    for file in files {
-        index.add_path(Path::new(file)).unwrap();
-    }
-    index.write().unwrap();
-    let tree_oid = index.write_tree().unwrap();
-    let tree = repo.find_tree(tree_oid).unwrap();
-    let sig = Signature::now("Test User", "test@example.com").unwrap();
-    let parent = repo.head().ok().and_then(|head| head.peel_to_commit().ok());
-    let parents: Vec<&git2::Commit<'_>> = parent.iter().collect();
-    repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents).unwrap();
-}
-
 fn result_paths(results: &[FileSearchResult]) -> Vec<String> {
     results.iter().map(|result| result.path.clone()).collect()
 }
@@ -65,9 +17,9 @@ fn result_paths(results: &[FileSearchResult]) -> Vec<String> {
 #[test]
 fn committed_index_files_are_searchable() {
     let dir = TestDir::new("committed");
-    let repo = init_repo(&dir.path);
-    write_file(&dir.path, "src/app/draw/search.rs", "search\n");
-    write_file(&dir.path, "README.md", "readme\n");
+    let repo = init_repo_at(dir.path());
+    write_file(dir.path(), "src/app/draw/search.rs", "search\n");
+    write_file(dir.path(), "README.md", "readme\n");
     commit_files(&repo, &["src/app/draw/search.rs", "README.md"], "initial");
 
     let results = search_tracked_files(&repo, "search", 10).unwrap();
@@ -79,11 +31,11 @@ fn committed_index_files_are_searchable() {
 #[test]
 fn staged_added_files_are_searchable_once_indexed() {
     let dir = TestDir::new("staged-added");
-    let repo = init_repo(&dir.path);
-    write_file(&dir.path, "README.md", "readme\n");
+    let repo = init_repo_at(dir.path());
+    write_file(dir.path(), "README.md", "readme\n");
     commit_files(&repo, &["README.md"], "initial");
 
-    write_file(&dir.path, "src/git/queries/files.rs", "files\n");
+    write_file(dir.path(), "src/git/queries/files.rs", "files\n");
     let mut index = repo.index().unwrap();
     index.add_path(Path::new("src/git/queries/files.rs")).unwrap();
     index.write().unwrap();
@@ -96,20 +48,43 @@ fn staged_added_files_are_searchable_once_indexed() {
 #[test]
 fn untracked_and_deleted_files_are_excluded() {
     let dir = TestDir::new("excluded");
-    let repo = init_repo(&dir.path);
-    write_file(&dir.path, "kept.rs", "kept\n");
-    write_file(&dir.path, "gone.rs", "gone\n");
+    let repo = init_repo_at(dir.path());
+    write_file(dir.path(), "kept.rs", "kept\n");
+    write_file(dir.path(), "gone.rs", "gone\n");
     commit_files(&repo, &["kept.rs", "gone.rs"], "initial");
 
-    fs::remove_file(dir.path.join("gone.rs")).unwrap();
-    write_file(&dir.path, "target.rs", "untracked\n");
-    write_file(&dir.path, ".gitignore", "*.log\n");
-    write_file(&dir.path, "ignored.log", "ignored\n");
+    fs::remove_file(dir.join("gone.rs")).unwrap();
+    write_file(dir.path(), "target.rs", "untracked\n");
+    write_file(dir.path(), ".gitignore", "*.log\n");
+    write_file(dir.path(), "ignored.log", "ignored\n");
 
     assert_eq!(result_paths(&search_tracked_files(&repo, "kept", 10).unwrap()), vec!["kept.rs".to_string()]);
     assert!(search_tracked_files(&repo, "gone", 10).unwrap().is_empty());
     assert!(search_tracked_files(&repo, "target", 10).unwrap().is_empty());
     assert!(search_tracked_files(&repo, "ignored", 10).unwrap().is_empty());
+}
+
+#[test]
+fn tracked_file_enumeration_includes_staged_files_and_excludes_deleted_files() {
+    let dir = TestDir::new("tracked-enumeration");
+    let repo = init_repo_at(dir.path());
+    write_file(dir.path(), "tracked.rs", "tracked\n");
+    write_file(dir.path(), "kept.rs", "kept\n");
+    commit_files(&repo, &["tracked.rs", "kept.rs"], "initial");
+
+    write_file(dir.path(), "staged.rs", "staged\n");
+    let mut index = repo.index().unwrap();
+    index.add_path(Path::new("staged.rs")).unwrap();
+    index.write().unwrap();
+
+    fs::remove_file(dir.join("kept.rs")).unwrap();
+    write_file(dir.path(), ".gitignore", "*.log\n");
+    write_file(dir.path(), "ignored.log", "ignored\n");
+
+    let mut paths = result_paths(&search_tracked_files(&repo, ".rs", 10).unwrap());
+    paths.sort();
+
+    assert_eq!(paths, vec!["staged.rs".to_string(), "tracked.rs".to_string()]);
 }
 
 #[test]

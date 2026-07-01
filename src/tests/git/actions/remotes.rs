@@ -1,22 +1,10 @@
 use super::*;
 use crate::git::queries::remotes::{GUITAR_DEFAULT_REMOTE_CONFIG, PUSH_DEFAULT_CONFIG};
-use git2::Repository;
-use std::{
-    fs,
-    time::{SystemTime, UNIX_EPOCH},
-};
-
-fn temp_repo(name: &str) -> (std::path::PathBuf, Repository) {
-    let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-    let path = std::env::temp_dir().join(format!("guitar-remote-action-{name}-{id}"));
-    fs::create_dir_all(&path).unwrap();
-    let repo = Repository::init(&path).unwrap();
-    (path, repo)
-}
+use crate::git::test_support::temp_repo;
 
 #[test]
 fn add_remote_creates_remote_with_url() {
-    let (_path, repo) = temp_repo("add");
+    let (_dir, repo) = temp_repo("add");
 
     add_remote(&repo, "origin", "https://example.com/repo.git").unwrap();
 
@@ -25,7 +13,7 @@ fn add_remote_creates_remote_with_url() {
 
 #[test]
 fn add_remote_rejects_invalid_duplicate_and_empty_values() {
-    let (_path, repo) = temp_repo("invalid-add");
+    let (_dir, repo) = temp_repo("invalid-add");
     add_remote(&repo, "origin", "https://example.com/repo.git").unwrap();
 
     assert!(add_remote(&repo, "", "https://example.com/other.git").is_err());
@@ -36,7 +24,7 @@ fn add_remote_rejects_invalid_duplicate_and_empty_values() {
 
 #[test]
 fn rename_remote_updates_remote_name() {
-    let (_path, repo) = temp_repo("rename");
+    let (_dir, repo) = temp_repo("rename");
     add_remote(&repo, "origin", "https://example.com/repo.git").unwrap();
 
     rename_remote(&repo, "origin", "upstream").unwrap();
@@ -47,7 +35,7 @@ fn rename_remote_updates_remote_name() {
 
 #[test]
 fn rename_remote_rejects_invalid_same_duplicate_and_missing_values() {
-    let (_path, repo) = temp_repo("invalid-rename");
+    let (_dir, repo) = temp_repo("invalid-rename");
     add_remote(&repo, "origin", "https://example.com/repo.git").unwrap();
     add_remote(&repo, "upstream", "https://example.com/upstream.git").unwrap();
 
@@ -59,7 +47,7 @@ fn rename_remote_rejects_invalid_same_duplicate_and_missing_values() {
 
 #[test]
 fn edit_fetch_and_push_urls() {
-    let (_path, repo) = temp_repo("edit-url");
+    let (_dir, repo) = temp_repo("edit-url");
     add_remote(&repo, "origin", "https://example.com/repo.git").unwrap();
 
     set_remote_url(&repo, "origin", "https://example.com/renamed.git").unwrap();
@@ -72,7 +60,7 @@ fn edit_fetch_and_push_urls() {
 
 #[test]
 fn edit_urls_reject_invalid_missing_and_empty_values() {
-    let (_path, repo) = temp_repo("invalid-edit");
+    let (_dir, repo) = temp_repo("invalid-edit");
     add_remote(&repo, "origin", "https://example.com/repo.git").unwrap();
 
     assert!(set_remote_url(&repo, "origin", "").is_err());
@@ -82,7 +70,7 @@ fn edit_urls_reject_invalid_missing_and_empty_values() {
 
 #[test]
 fn empty_push_url_clears_dedicated_push_url() {
-    let (_path, repo) = temp_repo("clear-push");
+    let (_dir, repo) = temp_repo("clear-push");
     add_remote(&repo, "origin", "https://example.com/repo.git").unwrap();
     set_remote_push_url(&repo, "origin", Some("ssh://example.com/repo.git")).unwrap();
 
@@ -93,7 +81,7 @@ fn empty_push_url_clears_dedicated_push_url() {
 
 #[test]
 fn set_default_remote_writes_guitar_and_push_default_config() {
-    let (_path, repo) = temp_repo("set-default");
+    let (_dir, repo) = temp_repo("set-default");
     add_remote(&repo, "upstream", "https://example.com/repo.git").unwrap();
 
     set_default_remote(&repo, "upstream").unwrap();
@@ -105,14 +93,14 @@ fn set_default_remote_writes_guitar_and_push_default_config() {
 
 #[test]
 fn set_default_remote_rejects_missing_remote() {
-    let (_path, repo) = temp_repo("set-default-missing");
+    let (_dir, repo) = temp_repo("set-default-missing");
 
     assert!(set_default_remote(&repo, "missing").is_err());
 }
 
 #[test]
 fn rename_remote_preserves_matching_default_config() {
-    let (_path, repo) = temp_repo("rename-default");
+    let (_dir, repo) = temp_repo("rename-default");
     add_remote(&repo, "origin", "https://example.com/repo.git").unwrap();
     set_default_remote(&repo, "origin").unwrap();
 
@@ -125,7 +113,7 @@ fn rename_remote_preserves_matching_default_config() {
 
 #[test]
 fn delete_remote_removes_remote() {
-    let (_path, repo) = temp_repo("delete");
+    let (_dir, repo) = temp_repo("delete");
     add_remote(&repo, "origin", "https://example.com/repo.git").unwrap();
 
     delete_remote(&repo, "origin").unwrap();
@@ -135,7 +123,7 @@ fn delete_remote_removes_remote() {
 
 #[test]
 fn delete_remote_clears_matching_default_config() {
-    let (_path, repo) = temp_repo("delete-default");
+    let (_dir, repo) = temp_repo("delete-default");
     add_remote(&repo, "origin", "https://example.com/repo.git").unwrap();
     set_default_remote(&repo, "origin").unwrap();
 
@@ -148,7 +136,7 @@ fn delete_remote_clears_matching_default_config() {
 
 #[test]
 fn delete_remote_rejects_invalid_and_missing_names() {
-    let (_path, repo) = temp_repo("invalid-delete");
+    let (_dir, repo) = temp_repo("invalid-delete");
 
     assert!(delete_remote(&repo, "").is_err());
     assert!(delete_remote(&repo, "bad\nname").is_err());

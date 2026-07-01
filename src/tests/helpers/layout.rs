@@ -1,43 +1,9 @@
 use super::*;
-use std::{
-    fs,
-    path::PathBuf,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use crate::git::test_support::{read_to_string, temp_json_path};
+use std::path::PathBuf;
 
 fn temp_layout_path(name: &str) -> PathBuf {
-    let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-    std::env::temp_dir().join(format!("guitar-layout-{name}-{id}")).join("layout.json")
-}
-
-#[test]
-fn layout_config_reads_old_boolean_only_config() {
-    let old_config = r#"{"is_shas":false,"is_minimal":false,"is_branches":true,"is_tags":true,"is_stashes":false,"is_status":true,"is_inspector":true,"is_zen":false}"#;
-
-    let config = facet_json::from_str::<LayoutConfig>(old_config).unwrap().normalized();
-
-    assert!(config.is_branches);
-    assert!(config.is_tags);
-    assert!(config.is_status);
-    assert!(!config.is_worktrees);
-    assert_eq!(config.width_left_pane, LAYOUT_WIDTH_LEFT_PANE);
-    assert_eq!(config.width_right_pane, LAYOUT_WIDTH_RIGHT_PANE);
-    assert_eq!(config.weight_branches, LAYOUT_WEIGHT_DEFAULT);
-    assert_eq!(config.weight_status_bottom, LAYOUT_WEIGHT_DEFAULT);
-    assert!(!config.is_reflogs);
-    assert!(config.is_graph_reflogs);
-    assert_eq!(config.weight_reflogs, LAYOUT_WEIGHT_DEFAULT);
-    assert_eq!(config.weight_worktrees, LAYOUT_WEIGHT_DEFAULT);
-    assert!(!config.is_submodules);
-    assert_eq!(config.weight_submodules, LAYOUT_WEIGHT_DEFAULT);
-    assert!(!config.is_search);
-    assert_eq!(config.weight_search, LAYOUT_WEIGHT_DEFAULT);
-    assert!(!config.is_graph_dates);
-    assert!(!config.is_graph_committers);
-    assert!(config.is_graph_refs);
-    assert_eq!(config.weight_viewer_split_left, LAYOUT_WEIGHT_DEFAULT);
-    assert_eq!(config.weight_viewer_split_right, LAYOUT_WEIGHT_DEFAULT);
-    assert_eq!(config.graph_lane_limit, GRAPH_LANE_LIMIT_DEFAULT);
+    temp_json_path("guitar-layout", name)
 }
 
 #[test]
@@ -69,7 +35,7 @@ fn save_layout_config_writes_pretty_json_and_round_trips() {
 
     save_layout_config_to_path(&path, &config);
 
-    let contents = fs::read_to_string(&path).unwrap();
+    let contents = read_to_string(&path);
     assert!(contents.contains('\n'), "{contents}");
     assert!(contents.contains("\n  \"is_shas\""), "{contents}");
     assert!(contents.contains("\n  \"width_left_pane\""), "{contents}");

@@ -2,39 +2,16 @@ use super::*;
 use crate::{
     app::state::{defaults::ViewerMode, layout::Layout},
     git::queries::helpers::FileChanges,
+    git::test_support::{TestDir, commit_named_file as commit},
     helpers::symbols::status as status_symbol,
 };
-use git2::{Repository, Signature};
+use git2::Repository;
 use ratatui::{Terminal, backend::TestBackend, buffer::Buffer, layout::Rect};
-use std::{
-    fs,
-    path::{Path, PathBuf},
-    process,
-    time::{SystemTime, UNIX_EPOCH},
-};
-
-struct TestDir {
-    path: PathBuf,
-}
-
-impl TestDir {
-    fn new(name: &str) -> Self {
-        let suffix = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-        let path = std::env::temp_dir().join(format!("guitar-viewer-{name}-{}-{suffix}", process::id()));
-        fs::create_dir_all(&path).unwrap();
-        Self { path }
-    }
-}
-
-impl Drop for TestDir {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.path);
-    }
-}
+use std::{fs, path::Path};
 
 fn temp_repo(name: &str) -> (TestDir, Repository) {
     let dir = TestDir::new(name);
-    let repo = Repository::init(&dir.path).unwrap();
+    let repo = Repository::init(dir.path()).unwrap();
     {
         let mut config = repo.config().unwrap();
         config.set_str("user.name", "Test User").unwrap();
@@ -45,18 +22,6 @@ fn temp_repo(name: &str) -> (TestDir, Repository) {
 
 fn write(path: &Path, file: &str, content: &str) {
     fs::write(path.join(file), content).unwrap();
-}
-
-fn commit(repo: &Repository, file: &str, message: &str) {
-    let mut index = repo.index().unwrap();
-    index.add_path(Path::new(file)).unwrap();
-    index.write().unwrap();
-    let tree_oid = index.write_tree().unwrap();
-    let tree = repo.find_tree(tree_oid).unwrap();
-    let sig = Signature::now("Test User", "test@example.com").unwrap();
-    let parent = repo.head().ok().and_then(|head| head.peel_to_commit().ok());
-    let parents: Vec<&git2::Commit<'_>> = parent.iter().collect();
-    repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents).unwrap();
 }
 
 fn viewer_app() -> App {
@@ -113,9 +78,9 @@ fn selected_status_file_helpers_match_rendered_group_order() {
 #[test]
 fn unstaged_added_file_viewer_renders_added_lines() {
     let (dir, repo) = temp_repo("unstaged-added");
-    write(&dir.path, "tracked.txt", "base\n");
+    write(dir.path(), "tracked.txt", "base\n");
     commit(&repo, "tracked.txt", "initial");
-    write(&dir.path, "new.txt", "alpha\nbeta\n");
+    write(dir.path(), "new.txt", "alpha\nbeta\n");
 
     let mut app = viewer_app();
     app.update_viewer(Oid::zero(), &repo);

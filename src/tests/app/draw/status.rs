@@ -46,11 +46,12 @@ fn graph_row(index: usize, alias: u32, oid: Oid) -> GraphRow {
         committer_name: String::new(),
         is_merge: false,
         has_any_branch: false,
-        branches: Vec::new(),
-        tags: Vec::new(),
+        branches: Default::default(),
+        tags: Default::default(),
         is_stash: false,
         stash_lane: None,
-        worktrees: Vec::new(),
+        worktrees: Default::default(),
+        has_current_worktree: false,
         reflog: None,
     }
 }
@@ -170,9 +171,11 @@ fn status_shows_loading_instead_of_stale_commit_diff() {
 #[test]
 fn status_preserves_known_empty_commit_diff_state() {
     let mut app = status_app();
-    let identity = GraphIndexIdentity { index: 1, alias: 1, oid: Oid::zero() };
+    let oid = Oid::zero();
+    let alias = app.oids.get_alias_by_oid(oid);
+    let identity = GraphIndexIdentity { index: 1, alias, oid };
     app.graph_selected = 1;
-    app.graph.index_rows.insert(1, graph_row(1, 1, identity.oid));
+    app.graph.index_rows.insert(1, graph_row(1, alias, oid));
     app.current_diff_identity = Some(identity);
 
     let backend = TestBackend::new(48, 10);

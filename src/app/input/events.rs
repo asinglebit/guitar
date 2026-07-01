@@ -104,15 +104,11 @@ impl App {
                     self.finish_mouse_drag();
                 }
             },
-            MouseEventKind::ScrollUp => {
-                if self.context_menu.is_none() {
-                    self.handle_mouse_scroll(mouse_event.column, mouse_event.row, Direction::Up);
-                }
+            MouseEventKind::ScrollUp if self.context_menu.is_none() => {
+                self.handle_mouse_scroll(mouse_event.column, mouse_event.row, Direction::Up);
             },
-            MouseEventKind::ScrollDown => {
-                if self.context_menu.is_none() {
-                    self.handle_mouse_scroll(mouse_event.column, mouse_event.row, Direction::Down);
-                }
+            MouseEventKind::ScrollDown if self.context_menu.is_none() => {
+                self.handle_mouse_scroll(mouse_event.column, mouse_event.row, Direction::Down);
             },
             _ => {},
         }
@@ -389,9 +385,11 @@ impl App {
     }
 
     fn left_pane_mouse_target_at(&self, column: u16, row: u16) -> Option<MouseSelectionTarget> {
+        let hit = |rect, visible_height, scroll, total| self.scrolled_row_index(rect, column, row, visible_height, self.layout_config.is_zen, scroll, total);
+
         if self.layout_config.is_branches {
             let visible_height = self.layout.branches.height.saturating_sub(2) as usize;
-            if let Some(index) = self.scrolled_row_index(self.layout.branches, column, row, visible_height, self.layout_config.is_zen, self.branches_scroll.get(), self.branch_clickable_count()) {
+            if let Some(index) = hit(self.layout.branches, visible_height, self.branches_scroll.get(), self.branch_clickable_count()) {
                 return self.graph_pane_clickable(index, GraphPaneClickKind::Branches).then_some(MouseSelectionTarget::Branches(index));
             }
         }
@@ -402,7 +400,7 @@ impl App {
             } else {
                 self.layout.tags.height.saturating_sub(if self.layout_config.is_branches { 1 } else { 2 }) as usize
             };
-            if let Some(index) = self.scrolled_row_index(self.layout.tags, column, row, visible_height, self.layout_config.is_zen, self.tags_scroll.get(), self.tag_clickable_count()) {
+            if let Some(index) = hit(self.layout.tags, visible_height, self.tags_scroll.get(), self.tag_clickable_count()) {
                 return self.graph_pane_clickable(index, GraphPaneClickKind::Tags).then_some(MouseSelectionTarget::Tags(index));
             }
         }
@@ -413,7 +411,7 @@ impl App {
             } else {
                 self.layout.stashes.height.saturating_sub(if self.layout_config.is_branches || self.layout_config.is_tags { 1 } else { 2 }) as usize
             };
-            if let Some(index) = self.scrolled_row_index(self.layout.stashes, column, row, visible_height, self.layout_config.is_zen, self.stashes_scroll.get(), self.stash_clickable_count()) {
+            if let Some(index) = hit(self.layout.stashes, visible_height, self.stashes_scroll.get(), self.stash_clickable_count()) {
                 return self.graph_pane_clickable(index, GraphPaneClickKind::Stashes).then_some(MouseSelectionTarget::Stashes(index));
             }
         }
@@ -422,7 +420,7 @@ impl App {
             let has_previous = self.layout_config.is_branches || self.layout_config.is_tags || self.layout_config.is_stashes;
             let visible_height =
                 if self.layout_config.is_zen { self.layout.reflogs.height.saturating_sub(2) as usize } else { self.layout.reflogs.height.saturating_sub(if has_previous { 1 } else { 2 }) as usize };
-            if let Some(index) = self.scrolled_row_index(self.layout.reflogs, column, row, visible_height, self.layout_config.is_zen, self.reflogs_scroll.get(), self.reflog_clickable_count()) {
+            if let Some(index) = hit(self.layout.reflogs, visible_height, self.reflogs_scroll.get(), self.reflog_clickable_count()) {
                 return self.graph_pane_clickable(index, GraphPaneClickKind::Reflogs).then_some(MouseSelectionTarget::Reflogs(index));
             }
         }
@@ -434,7 +432,7 @@ impl App {
             } else {
                 self.layout.worktrees.height.saturating_sub(if has_previous { 1 } else { 2 }) as usize
             };
-            if let Some(index) = self.scrolled_row_index(self.layout.worktrees, column, row, visible_height, self.layout_config.is_zen, self.worktrees_scroll.get(), self.worktrees.entries.len()) {
+            if let Some(index) = hit(self.layout.worktrees, visible_height, self.worktrees_scroll.get(), self.worktrees.entries.len()) {
                 return Some(MouseSelectionTarget::Worktrees(index));
             }
         }
@@ -446,7 +444,7 @@ impl App {
             } else {
                 self.layout.submodules.height.saturating_sub(if has_previous { 1 } else { 2 }) as usize
             };
-            if let Some(index) = self.scrolled_row_index(self.layout.submodules, column, row, visible_height, self.layout_config.is_zen, self.submodules_scroll.get(), self.submodules.entries.len()) {
+            if let Some(index) = hit(self.layout.submodules, visible_height, self.submodules_scroll.get(), self.submodules.entries.len()) {
                 return Some(MouseSelectionTarget::Submodules(index));
             }
         }
@@ -460,7 +458,7 @@ impl App {
                 || self.layout_config.is_submodules;
             let visible_height =
                 if self.layout_config.is_zen { self.layout.search.height.saturating_sub(2) as usize } else { self.layout.search.height.saturating_sub(if has_previous { 1 } else { 2 }) as usize };
-            if let Some(index) = self.scrolled_row_index(self.layout.search, column, row, visible_height, self.layout_config.is_zen, self.search_scroll.get(), self.search_clickable_count()) {
+            if let Some(index) = hit(self.layout.search, visible_height, self.search_scroll.get(), self.search_clickable_count()) {
                 return Some(MouseSelectionTarget::Search(index));
             }
         }
@@ -614,7 +612,7 @@ impl App {
     }
 
     fn status_bottom_clickable_count(&self) -> usize {
-        if self.graph_selected != 0 || !self.is_uncommitted_loaded || !self.uncommitted.is_unstaged {
+        if self.graph_selected != 0 || !self.is_uncommitted_loaded || !self.is_uncommitted_detail_loaded || !self.uncommitted.is_unstaged {
             return 0;
         }
         self.uncommitted.conflicts.len() + self.uncommitted.unstaged.modified.len() + self.uncommitted.unstaged.added.len() + self.uncommitted.unstaged.deleted.len()
@@ -765,7 +763,10 @@ impl App {
     }
 
     fn rounding_divide(numerator: usize, denominator: usize) -> usize {
-        if denominator == 0 { 0 } else { numerator.saturating_add(denominator / 2) / denominator }
+        if denominator == 0 {
+            return 0;
+        }
+        numerator.saturating_add(denominator / 2).checked_div(denominator).unwrap_or(0)
     }
 
     fn apply_scrollbar_drag(&mut self, drag: ScrollbarDrag, row: u16) {
@@ -1004,7 +1005,10 @@ impl App {
         let Some(identity) = self.graph_identity_at(self.graph_selected) else {
             return empty_state_top_padding(visible_height).saturating_add(1);
         };
-        let Ok(commit) = repo.find_commit(identity.oid) else {
+        let Some(oid) = self.graph_oid_for_identity(identity) else {
+            return empty_state_top_padding(visible_height).saturating_add(1);
+        };
+        let Ok(commit) = repo.find_commit(oid) else {
             return empty_state_top_padding(visible_height).saturating_add(1);
         };
 

@@ -17,6 +17,9 @@ pub mod core {
 }
 pub mod git {
     pub mod auth;
+    pub mod gix;
+    #[cfg(test)]
+    pub mod test_support;
     pub mod actions {
         pub mod branching;
         pub mod checkout;
@@ -24,6 +27,7 @@ pub mod git {
         pub mod committing;
         pub mod conflicts;
         pub mod fetching;
+        pub mod gix_support;
         pub mod merging;
         pub mod network;
         pub mod pushing;

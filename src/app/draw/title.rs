@@ -17,7 +17,7 @@ impl App {
         {
             match &self.path {
                 Some(base) => format!("{}/{}", base, file_name),
-                None => file_name.clone(),
+                None => file_name,
             }
         } else {
             self.path.clone().unwrap_or_else(|| ".".to_string())

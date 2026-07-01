@@ -9,37 +9,39 @@ impl App {
         self.keymaps = load_or_init_keymaps();
     }
 
+    fn handle_settings_escape(&mut self, key_event: KeyEvent) -> bool {
+        let is_settings_escape = key_event.code == KeyCode::Esc && key_event.modifiers == KeyModifiers::NONE && self.viewport == Viewport::Settings && self.focus == Focus::Viewport;
+        if is_settings_escape {
+            self.on_back();
+        }
+        is_settings_escape
+    }
+
+    fn consume_priority_key_event(&mut self, key_event: KeyEvent) -> bool {
+        self.handle_settings_escape(key_event) || self.handle_modal_key_event(key_event) || self.handle_context_menu_key_event(key_event)
+    }
+
+    fn keymap_command_for(&self, key_binding: &KeyBinding) -> Option<Command> {
+        self.keymaps.get(&self.mode).and_then(|mode_map| command_for_key_binding(mode_map, key_binding))
+    }
+
     pub fn handle_key_event(&mut self, key_event: KeyEvent) {
         let key_binding = KeyBinding::new(key_event.code, key_event.modifiers);
         let current_mode = self.mode;
+        let consumed = self.consume_priority_key_event(key_event);
+        let command = (!consumed).then(|| self.keymap_command_for(&key_binding)).flatten();
 
-        if key_event.code == KeyCode::Esc && key_event.modifiers == KeyModifiers::NONE && self.viewport == Viewport::Settings && self.focus == Focus::Viewport {
-            self.on_back();
+        command.into_iter().for_each(|command| self.dispatch_keymap_command(&command));
+
+        if consumed || current_mode == InputMode::Action {
             self.mode = InputMode::Normal;
-            return;
         }
+    }
 
-        if self.handle_modal_key_event(key_event) {
-            self.mode = InputMode::Normal;
-            return;
-        }
-
-        if self.handle_context_menu_key_event(key_event) {
-            self.mode = InputMode::Normal;
-            return;
-        }
-
-        let command = self.keymaps.get(&self.mode).and_then(|mode_map| command_for_key_binding(mode_map, &key_binding));
-        if let Some(command) = command {
-            if self.viewport == Viewport::Splash && self.focus == Focus::Viewport {
-                self.dispatch_splash_command(&command);
-            } else {
-                self.dispatch_command(&command);
-            }
-        }
-
-        if current_mode == InputMode::Action {
-            self.mode = InputMode::Normal;
+    fn dispatch_keymap_command(&mut self, command: &Command) {
+        match self.viewport == Viewport::Splash && self.focus == Focus::Viewport {
+            true => self.dispatch_splash_command(command),
+            false => self.dispatch_command(command),
         }
     }
 
