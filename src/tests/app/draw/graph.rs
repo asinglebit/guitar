@@ -6,42 +6,18 @@ use crate::{
     },
     core::{
         chunk::NONE,
-        graph_service::{GraphCommand, GraphFileHistoryRow, GraphHistory, GraphRow, GraphSnapshot},
+        graph_service::{GraphCommand, GraphFileHistoryRow, GraphHistory, GraphRow},
     },
     git::queries::helpers::FileStatus,
+    git::test_support::{temp_named_dir, temp_repo_with_commit},
     helpers::symbols::SymbolTheme,
 };
-use git2::{Oid, Repository, Signature};
-use im::Vector;
+use git2::{Oid, Repository};
 use ratatui::{Terminal, backend::TestBackend, layout::Rect};
-use std::{
-    fs,
-    path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
-};
-
-fn temp_repo(name: &str) -> (PathBuf, Repository, Oid) {
-    let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-    let path = std::env::temp_dir().join(format!("guitar-graph-draw-{name}-{id}"));
-    fs::create_dir_all(&path).unwrap();
-    let repo = Repository::init(&path).unwrap();
-    fs::write(path.join("file.txt"), "content\n").unwrap();
-
-    let mut index = repo.index().unwrap();
-    index.add_path(Path::new("file.txt")).unwrap();
-    index.write().unwrap();
-    let tree_oid = index.write_tree().unwrap();
-    let tree = repo.find_tree(tree_oid).unwrap();
-    let sig = Signature::now("Test User", "test@example.com").unwrap();
-    let oid = repo.commit(Some("HEAD"), &sig, &sig, "commit", &tree, &[]).unwrap();
-    drop(tree);
-    (path, repo, oid)
-}
+use std::path::PathBuf;
 
 fn temp_unborn_repo(name: &str) -> (PathBuf, Repository) {
-    let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-    let path = std::env::temp_dir().join(format!("guitar-graph-draw-{name}-{id}"));
-    fs::create_dir_all(&path).unwrap();
+    let path = temp_named_dir("guitar-graph-draw", name);
     let repo = Repository::init(&path).unwrap();
     (path, repo)
 }
@@ -56,17 +32,18 @@ fn graph_row(index: usize, alias: u32, oid: Oid, summary: &str) -> GraphRow {
         committer_name: String::new(),
         is_merge: false,
         has_any_branch: false,
-        branches: Vec::new(),
-        tags: Vec::new(),
+        branches: Default::default(),
+        tags: Default::default(),
         is_stash: false,
         stash_lane: None,
-        worktrees: Vec::new(),
+        worktrees: Default::default(),
+        has_current_worktree: false,
         reflog: None,
     }
 }
 
 fn history_row(graph_index: usize, oid: Oid) -> GraphFileHistoryRow {
-    GraphFileHistoryRow { graph_index, oid, short_oid: oid.to_string()[..8].to_string(), summary: "history".to_string(), status: FileStatus::Modified }
+    GraphFileHistoryRow { graph_index, oid, summary: "history".to_string(), status: FileStatus::Modified }
 }
 
 fn app_with_cached_window(start: usize, summaries: &[&str], oid: Oid) -> App {
@@ -91,11 +68,7 @@ fn app_with_cached_window(start: usize, summaries: &[&str], oid: Oid) -> App {
 }
 
 fn graph_history(len: usize) -> GraphHistory {
-    let mut history = Vector::new();
-    for _ in 0..len {
-        history.push_back(GraphSnapshot::default());
-    }
-    history
+    GraphHistory::from_rows((0..len).map(|_| Vec::new()))
 }
 
 fn app_with_uncommitted_window(window_end: usize, history_len: usize, oid: Oid) -> App {
@@ -125,9 +98,17 @@ fn rendered_lines(terminal: &Terminal<TestBackend>) -> Vec<String> {
     (0..buffer.area.height).map(|y| (0..buffer.area.width).map(|x| buffer[(x, y)].symbol()).collect::<String>()).collect()
 }
 
+fn draw_graph_once(app: &mut App, repo: &Repository, terminal: &mut Terminal<TestBackend>) {
+    terminal
+        .draw(|frame| {
+            app.draw_graph(frame, Some(repo));
+        })
+        .unwrap();
+}
+
 #[test]
 fn graph_highlights_file_history_rows_when_search_pane_is_open() {
-    let (_path, repo, oid) = temp_repo("file-search-highlight");
+    let (_dir, repo, oid) = temp_repo_with_commit("file-search-highlight");
     let mut app = app_with_cached_window(0, &["uncommitted", "touch searched file", "other commit"], oid);
     app.focus = Focus::Search;
     app.layout_config.is_search = true;
@@ -139,7 +120,7 @@ fn graph_highlights_file_history_rows_when_search_pane_is_open() {
     let mut terminal = Terminal::new(backend).unwrap();
     terminal
         .draw(|frame| {
-            app.draw_graph(frame, &repo);
+            app.draw_graph(frame, Some(&repo));
         })
         .unwrap();
 
@@ -151,7 +132,7 @@ fn graph_highlights_file_history_rows_when_search_pane_is_open() {
 
 #[test]
 fn graph_does_not_highlight_file_history_rows_when_search_pane_is_closed() {
-    let (_path, repo, oid) = temp_repo("file-search-highlight-closed");
+    let (_dir, repo, oid) = temp_repo_with_commit("file-search-highlight-closed");
     let mut app = app_with_cached_window(0, &["uncommitted", "touch searched file", "other commit"], oid);
     app.focus = Focus::Search;
     app.layout_config.is_search = false;
@@ -163,7 +144,7 @@ fn graph_does_not_highlight_file_history_rows_when_search_pane_is_closed() {
     let mut terminal = Terminal::new(backend).unwrap();
     terminal
         .draw(|frame| {
-            app.draw_graph(frame, &repo);
+            app.draw_graph(frame, Some(&repo));
         })
         .unwrap();
 
@@ -174,7 +155,7 @@ fn graph_does_not_highlight_file_history_rows_when_search_pane_is_closed() {
 
 #[test]
 fn graph_cached_rows_shift_up_when_requested_window_moves_down() {
-    let (_path, repo, oid) = temp_repo("shift-down");
+    let (_dir, repo, oid) = temp_repo_with_commit("shift-down");
     let mut app = app_with_cached_window(0, &["row0", "row1", "row2"], oid);
     app.graph_selected = 1;
     app.graph_scroll.set(1);
@@ -183,7 +164,7 @@ fn graph_cached_rows_shift_up_when_requested_window_moves_down() {
     let mut terminal = Terminal::new(backend).unwrap();
     terminal
         .draw(|frame| {
-            app.draw_graph(frame, &repo);
+            app.draw_graph(frame, Some(&repo));
         })
         .unwrap();
 
@@ -196,7 +177,7 @@ fn graph_cached_rows_shift_up_when_requested_window_moves_down() {
 
 #[test]
 fn graph_cached_rows_shift_down_when_requested_window_moves_up() {
-    let (_path, repo, oid) = temp_repo("shift-up");
+    let (_dir, repo, oid) = temp_repo_with_commit("shift-up");
     let mut app = app_with_cached_window(1, &["row1", "row2", "row3"], oid);
     app.graph_selected = 0;
     app.graph_scroll.set(0);
@@ -205,7 +186,7 @@ fn graph_cached_rows_shift_down_when_requested_window_moves_up() {
     let mut terminal = Terminal::new(backend).unwrap();
     terminal
         .draw(|frame| {
-            app.draw_graph(frame, &repo);
+            app.draw_graph(frame, Some(&repo));
         })
         .unwrap();
 
@@ -218,7 +199,7 @@ fn graph_cached_rows_shift_down_when_requested_window_moves_up() {
 
 #[test]
 fn graph_short_page_stripes_blank_tail_rows() {
-    let (_path, repo, oid) = temp_repo("blank-tail");
+    let (_dir, repo, oid) = temp_repo_with_commit("blank-tail");
     let mut app = app_with_cached_window(0, &["row0"], oid);
     app.graph.total = 1;
     app.graph_selected = 0;
@@ -229,7 +210,7 @@ fn graph_short_page_stripes_blank_tail_rows() {
     let mut terminal = Terminal::new(backend).unwrap();
     terminal
         .draw(|frame| {
-            app.draw_graph(frame, &repo);
+            app.draw_graph(frame, Some(&repo));
         })
         .unwrap();
 
@@ -241,16 +222,34 @@ fn graph_short_page_stripes_blank_tail_rows() {
 
 #[test]
 fn graph_ascii_symbol_theme_renders_ascii_only_output() {
-    let (_path, repo, oid) = temp_repo("ascii-theme");
+    let (_dir, repo, oid) = temp_repo_with_commit("ascii-theme");
     let mut app = app_with_cached_window(0, &["row0", "row1"], oid);
     app.symbols = SymbolTheme::ascii();
 
     let backend = TestBackend::new(80, 3);
     let mut terminal = Terminal::new(backend).unwrap();
-    terminal.draw(|frame| app.draw_graph(frame, &repo)).unwrap();
+    terminal.draw(|frame| app.draw_graph(frame, Some(&repo))).unwrap();
 
     let rendered = rendered_lines(&terminal).join("");
     assert!(rendered.is_ascii(), "{rendered:?}");
+}
+
+#[test]
+fn graph_truncates_long_committer_names() {
+    let (_dir, repo, oid) = temp_repo_with_commit("long-committer");
+    let mut app = app_with_cached_window(0, &["row0", "row1"], oid);
+    app.layout_config.is_graph_committers = true;
+    if let Some(window) = app.graph.graph_window.as_mut() {
+        window.rows[0].committer_name = "Very Long Committer Name".to_string();
+    }
+
+    let backend = TestBackend::new(100, 3);
+    let mut terminal = Terminal::new(backend).unwrap();
+    draw_graph_once(&mut app, &repo, &mut terminal);
+
+    let lines = rendered_lines(&terminal);
+    assert!(lines[0].contains("Very Long Commi..."), "{lines:?}");
+    assert!(lines[0].contains("row0"), "{lines:?}");
 }
 
 #[test]
@@ -263,13 +262,14 @@ fn graph_empty_state_stripes_backdrop() {
         ..Default::default()
     };
     app.layout_config.is_zen = false;
+    app.graph.is_complete = true;
     let zebra = app.theme.background_or_default(app.theme.COLOR_GREY_900);
 
     let backend = TestBackend::new(80, 3);
     let mut terminal = Terminal::new(backend).unwrap();
     terminal
         .draw(|frame| {
-            app.draw_graph(frame, &repo);
+            app.draw_graph(frame, Some(&repo));
         })
         .unwrap();
 
@@ -280,7 +280,7 @@ fn graph_empty_state_stripes_backdrop() {
 
 #[test]
 fn uncommitted_row_waits_for_visible_page_before_rendering() {
-    let (_path, repo, oid) = temp_repo("uncommitted-waits");
+    let (_dir, repo, oid) = temp_repo_with_commit("uncommitted-waits");
     let mut app = app_with_uncommitted_window(2, 2, oid);
     app.graph_selected = 0;
     app.graph_scroll.set(0);
@@ -289,7 +289,7 @@ fn uncommitted_row_waits_for_visible_page_before_rendering() {
     let mut terminal = Terminal::new(backend).unwrap();
     terminal
         .draw(|frame| {
-            app.draw_graph(frame, &repo);
+            app.draw_graph(frame, Some(&repo));
         })
         .unwrap();
 
@@ -300,7 +300,7 @@ fn uncommitted_row_waits_for_visible_page_before_rendering() {
 
 #[test]
 fn uncommitted_row_renders_when_visible_page_is_ready() {
-    let (_path, repo, oid) = temp_repo("uncommitted-ready");
+    let (_dir, repo, oid) = temp_repo_with_commit("uncommitted-ready");
     let mut app = app_with_uncommitted_window(3, 3, oid);
     app.graph_selected = 0;
     app.graph_scroll.set(0);
@@ -309,7 +309,7 @@ fn uncommitted_row_renders_when_visible_page_is_ready() {
     let mut terminal = Terminal::new(backend).unwrap();
     terminal
         .draw(|frame| {
-            app.draw_graph(frame, &repo);
+            app.draw_graph(frame, Some(&repo));
         })
         .unwrap();
 
@@ -320,7 +320,7 @@ fn uncommitted_row_renders_when_visible_page_is_ready() {
 
 #[test]
 fn graph_draw_prefetches_one_screen_before_and_after_visible_window() {
-    let (_path, repo, _oid) = temp_repo("prefetch-window");
+    let (_dir, repo, _oid) = temp_repo_with_commit("prefetch-window");
     let (tx, rx) = std::sync::mpsc::channel();
     let mut app = App {
         viewport: Viewport::Graph,
@@ -340,7 +340,7 @@ fn graph_draw_prefetches_one_screen_before_and_after_visible_window() {
     let mut terminal = Terminal::new(backend).unwrap();
     terminal
         .draw(|frame| {
-            app.draw_graph(frame, &repo);
+            app.draw_graph(frame, Some(&repo));
         })
         .unwrap();
 
@@ -356,7 +356,7 @@ fn graph_draw_prefetches_one_screen_before_and_after_visible_window() {
 
 #[test]
 fn graph_draw_keeps_prefetched_rows_out_of_visible_table() {
-    let (_path, repo, oid) = temp_repo("prefetch-render");
+    let (_dir, repo, oid) = temp_repo_with_commit("prefetch-render");
     let mut app = app_with_cached_window(2, &["row2", "row3", "row4", "row5", "row6", "row7", "row8", "row9", "row10"], oid);
     app.graph.total = 20;
     app.graph_selected = 5;
@@ -366,7 +366,7 @@ fn graph_draw_keeps_prefetched_rows_out_of_visible_table() {
     let mut terminal = Terminal::new(backend).unwrap();
     terminal
         .draw(|frame| {
-            app.draw_graph(frame, &repo);
+            app.draw_graph(frame, Some(&repo));
         })
         .unwrap();
 
@@ -380,7 +380,7 @@ fn graph_draw_keeps_prefetched_rows_out_of_visible_table() {
 
 #[test]
 fn zero_sized_graph_draw_does_not_request_empty_window() {
-    let (_path, repo, oid) = temp_repo("zero-graph");
+    let (_dir, repo, oid) = temp_repo_with_commit("zero-graph");
     let mut app = app_with_cached_window(0, &["row0"], oid);
     let (tx, rx) = std::sync::mpsc::channel();
     app.graph_tx = Some(tx);
@@ -392,9 +392,44 @@ fn zero_sized_graph_draw_does_not_request_empty_window() {
     let mut terminal = Terminal::new(backend).unwrap();
     terminal
         .draw(|frame| {
-            app.draw_graph(frame, &repo);
+            app.draw_graph(frame, Some(&repo));
         })
         .unwrap();
 
     assert!(rx.try_recv().is_err());
+}
+
+#[test]
+fn graph_projection_cache_reuses_stable_window_between_draws() {
+    let (_dir, repo, oid) = temp_repo_with_commit("projection-cache-reuse");
+    let mut app = app_with_cached_window(0, &["row0", "row1", "row2"], oid);
+    app.layout.graph = Rect::new(0, 0, 80, 3);
+    let backend = TestBackend::new(80, 3);
+    let mut terminal = Terminal::new(backend).unwrap();
+
+    draw_graph_once(&mut app, &repo, &mut terminal);
+    let first_key = app.graph.graph_projection.key;
+    let first_message_ptr = app.graph.graph_projection.message_lines.as_ptr();
+
+    draw_graph_once(&mut app, &repo, &mut terminal);
+
+    assert_eq!(app.graph.graph_projection.key, first_key);
+    assert_eq!(app.graph.graph_projection.message_lines.as_ptr(), first_message_ptr);
+}
+
+#[test]
+fn graph_projection_cache_key_tracks_ref_visibility() {
+    let (_dir, repo, oid) = temp_repo_with_commit("projection-cache-refs");
+    let mut app = app_with_cached_window(0, &["row0", "row1", "row2"], oid);
+    app.layout_config.is_graph_refs = true;
+    let backend = TestBackend::new(80, 3);
+    let mut terminal = Terminal::new(backend).unwrap();
+
+    draw_graph_once(&mut app, &repo, &mut terminal);
+    assert!(app.graph.graph_projection.key.unwrap().show_ref_labels);
+
+    app.layout_config.is_graph_refs = false;
+    draw_graph_once(&mut app, &repo, &mut terminal);
+
+    assert!(!app.graph.graph_projection.key.unwrap().show_ref_labels);
 }

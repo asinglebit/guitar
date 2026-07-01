@@ -1,31 +1,8 @@
 use super::*;
 use crate::git::queries::worktrees::list_worktrees;
+use crate::git::test_support::TestDir;
 use git2::{Repository, Signature};
-use std::{
-    env, fs,
-    path::{Path, PathBuf},
-    process,
-    time::{SystemTime, UNIX_EPOCH},
-};
-
-struct TestDir {
-    path: PathBuf,
-}
-
-impl TestDir {
-    fn new(name: &str) -> Self {
-        let suffix = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-        let path = env::temp_dir().join(format!("guitar-{name}-{}-{suffix}", process::id()));
-        fs::create_dir_all(&path).unwrap();
-        Self { path }
-    }
-}
-
-impl Drop for TestDir {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.path);
-    }
-}
+use std::{fs, path::Path};
 
 fn init_repo(path: &Path) -> Repository {
     let repo = Repository::init(path).unwrap();
@@ -52,8 +29,8 @@ fn validates_v1_worktree_names() {
 #[test]
 fn creates_locks_unlocks_and_removes_worktree() {
     let dir = TestDir::new("worktree-actions");
-    let repo_path = dir.path.join("repo");
-    let worktree_path = dir.path.join("repo-feature");
+    let repo_path = dir.join("repo");
+    let worktree_path = dir.join("repo-feature");
     fs::create_dir_all(&repo_path).unwrap();
     let repo = init_repo(&repo_path);
     let oid = repo.head().unwrap().target().unwrap();
@@ -77,8 +54,8 @@ fn creates_locks_unlocks_and_removes_worktree() {
 #[test]
 fn prunes_invalid_worktree_metadata() {
     let dir = TestDir::new("worktree-prune");
-    let repo_path = dir.path.join("repo");
-    let worktree_path = dir.path.join("repo-feature");
+    let repo_path = dir.join("repo");
+    let worktree_path = dir.join("repo-feature");
     fs::create_dir_all(&repo_path).unwrap();
     let repo = init_repo(&repo_path);
     let oid = repo.head().unwrap().target().unwrap();
@@ -97,9 +74,9 @@ fn prunes_invalid_worktree_metadata() {
 #[test]
 fn creates_worktree_from_linked_worktree_repository() {
     let dir = TestDir::new("worktree-from-linked");
-    let repo_path = dir.path.join("repo");
-    let first_path = dir.path.join("repo-feature");
-    let second_path = dir.path.join("repo-second");
+    let repo_path = dir.join("repo");
+    let first_path = dir.join("repo-feature");
+    let second_path = dir.join("repo-second");
     fs::create_dir_all(&repo_path).unwrap();
     let repo = init_repo(&repo_path);
     let oid = repo.head().unwrap().target().unwrap();

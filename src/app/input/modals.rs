@@ -16,7 +16,6 @@ use crate::{
         localisation::{errors, operations},
     },
 };
-use git2::Oid;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::path::PathBuf;
 
@@ -56,7 +55,7 @@ impl App {
     }
 
     fn save_keymaps_for_app(&self, keymaps: &crate::helpers::keymap::Keymaps) -> Result<(), Box<dyn std::error::Error>> {
-        if let Some(path) = &self.keymap_save_path { save_keymaps_to_path(path.as_path(), keymaps) } else { save_keymaps(keymaps) }
+        self.keymap_save_path.as_ref().map_or_else(|| save_keymaps(keymaps), |path| save_keymaps_to_path(path.as_path(), keymaps))
     }
 
     fn confirm_key_capture(&mut self) {
@@ -616,10 +615,7 @@ impl App {
                             return true;
                         }
 
-                        let oid: Option<Oid> = self.oids.oids.iter().find(|oid| oid.to_string().starts_with(sha)).copied();
-
-                        if let Some(oid) = oid {
-                            let oid_alias = self.oids.get_alias_by_oid(oid);
+                        if let Some(oid_alias) = self.oids.get_alias_by_prefix(sha) {
                             let next = self.oids.get_sorted_aliases().iter().position(|&alias| alias == oid_alias).unwrap();
 
                             self.graph_selected = next;
@@ -627,8 +623,9 @@ impl App {
                             self.current_diff_identity = None;
                             if let Some(repo) = self.repo.clone()
                                 && let Some(identity) = self.graph_identity_at(self.graph_selected)
+                                && let Some(oid) = self.graph_oid_for_identity(identity)
                             {
-                                self.current_diff = get_filenames_diff_at_oid(&repo, identity.oid);
+                                self.current_diff = get_filenames_diff_at_oid(&repo, oid);
                                 self.current_diff_identity = Some(identity);
                             }
                             self.modal_input.clear();

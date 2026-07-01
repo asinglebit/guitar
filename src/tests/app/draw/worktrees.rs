@@ -5,7 +5,6 @@ use crate::{
     },
     core::worktrees::{WorktreeEntry, WorktreeKind, Worktrees},
 };
-use git2::Oid;
 use ratatui::{Terminal, backend::TestBackend, layout::Rect};
 use std::path::PathBuf;
 
@@ -14,7 +13,7 @@ fn worktree_entry(name: &str) -> WorktreeEntry {
         name: name.into(),
         path: PathBuf::from(format!("/tmp/{name}")),
         branch: Some(name.into()),
-        head: Some(Oid::from_bytes(&[1; 20]).unwrap()),
+        head: Some(gix::ObjectId::from_bytes_or_panic(&[1; 20])),
         alias: None,
         kind: WorktreeKind::Linked,
         is_current: false,

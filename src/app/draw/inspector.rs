@@ -5,7 +5,7 @@ use crate::{
         layout::scrollbar_content_length,
         localisation::{common, empty, inspector},
         text::{center_line, empty_state_top_padding, sanitize, truncate_with_ellipsis, wrap_words},
-        time::timestamp_to_utc,
+        time::{git2_timestamp_to_utc, gix_timestamp_to_utc},
     },
 };
 use ratatui::Frame;
@@ -43,9 +43,8 @@ impl App {
             ];
         } else if !is_showing_uncommitted {
             // Commit metadata is read lazily for the selected graph row.
-            if let Some(identity) = self.graph_identity_at(self.graph_selected) {
+            if let Some((identity, oid)) = self.graph_identity_at(self.graph_selected).and_then(|identity| self.graph_oid_for_identity(identity).map(|oid| (identity, oid))) {
                 let alias = identity.alias;
-                let oid = identity.oid;
                 let commit = repo.find_commit(oid).unwrap();
                 let author = commit.author();
                 let committer = commit.committer();
@@ -98,7 +97,7 @@ impl App {
                     lines.push(Line::default());
                     lines.push(Line::from(Span::styled(inspector::HEAD_REFLOG(), Style::default().fg(self.theme.COLOR_HIGHLIGHTED))));
                     lines.push(Line::from(Span::styled(truncate_with_ellipsis(&entry.selector, max_text_width), Style::default().fg(self.reflogs.get_color(alias).unwrap_or(self.theme.COLOR_TEXT)))));
-                    lines.push(Line::from(Span::styled(timestamp_to_utc(entry.time), Style::default().fg(self.theme.COLOR_TEXT))));
+                    lines.push(Line::from(Span::styled(gix_timestamp_to_utc(entry.time), Style::default().fg(self.theme.COLOR_TEXT))));
                     let wrapped = wrap_words(sanitize(entry.message.clone()), max_text_width);
                     for line in wrapped {
                         lines.push(Line::from(Span::styled(line, Style::default().fg(self.theme.COLOR_TEXT))));
@@ -108,11 +107,11 @@ impl App {
                 lines.extend(vec![
                     Line::from(Span::styled(format!("{} {}", inspector::AUTHORED_BY(), author.name().unwrap_or(common::UNKNOWN())), Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
                     Line::from(Span::styled(author.email().unwrap_or("").to_string(), Style::default().fg(self.theme.COLOR_TEXT))),
-                    Line::from(Span::styled(timestamp_to_utc(author.when()), Style::default().fg(self.theme.COLOR_TEXT))),
+                    Line::from(Span::styled(git2_timestamp_to_utc(author.when()), Style::default().fg(self.theme.COLOR_TEXT))),
                     Line::default(),
                     Line::from(Span::styled(format!("{} {}", inspector::COMMITTED_BY(), committer.name().unwrap_or(common::UNKNOWN())), Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
                     Line::from(Span::styled(committer.email().unwrap_or("").to_string(), Style::default().fg(self.theme.COLOR_TEXT))),
-                    Line::from(Span::styled(timestamp_to_utc(committer.when()).to_string(), Style::default().fg(self.theme.COLOR_TEXT))),
+                    Line::from(Span::styled(git2_timestamp_to_utc(committer.when()), Style::default().fg(self.theme.COLOR_TEXT))),
                     Line::default(),
                     Line::from(Span::styled(inspector::MESSAGE_SUMMARY(), Style::default().fg(self.theme.COLOR_HIGHLIGHTED))),
                 ]);

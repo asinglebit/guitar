@@ -17,7 +17,11 @@ use crate::{
             tagging::untag,
         },
         auth::{AuthRequired, AuthSecret, NetworkResult},
-        queries::{commits::get_current_branch, remotes::effective_default_remote},
+        queries::{
+            commits::get_current_branch,
+            remotes::{effective_default_remote, effective_default_remote_from_remotes},
+            submodules::list_submodules,
+        },
     },
     helpers::{
         branch_visibility::save_branch_visibility,
@@ -32,7 +36,12 @@ impl App {
 
     fn submodule_name_for_status_path(repo: &Repository, path: &str) -> Option<String> {
         let target = Path::new(path);
-        repo.submodules().ok()?.into_iter().find(|submodule| submodule.path() == target).map(|submodule| submodule.name().map(str::to_string).unwrap_or_else(|| path.to_string()))
+        list_submodules(repo).ok()?.into_iter().find(|submodule| submodule.path == target).map(|submodule| submodule.name)
+    }
+
+    fn remote_branch_parts(branch: &str) -> Option<(&str, &str)> {
+        let (remote, name) = branch.split_once('/').unwrap_or(("origin", branch));
+        (!remote.is_empty() && !name.is_empty()).then_some((remote, name))
     }
 
     pub(crate) fn start_network_request(&mut self, request: NetworkRequest) {
@@ -378,7 +387,7 @@ impl App {
                 let Some(alias) = self.stash_alias_at_pane_selection() else {
                     return;
                 };
-                *self.oids.get_oid_by_alias(alias)
+                self.oids.get_oid_by_alias(alias)
             },
             _ => return,
         };
@@ -418,7 +427,7 @@ impl App {
                 let Some(alias) = self.stash_alias_at_pane_selection() else {
                     return;
                 };
-                *self.oids.get_oid_by_alias(alias)
+                self.oids.get_oid_by_alias(alias)
             },
             _ => return,
         };
@@ -790,15 +799,14 @@ impl App {
     }
 
     fn default_remote_for_network(&mut self, operation: &str) -> Option<String> {
-        let Some(repo) = self.repo.clone() else {
-            return None;
-        };
-
-        match effective_default_remote(&repo) {
-            Some(remote_name) => Some(remote_name),
-            None => {
-                self.show_error(errors::no_remotes_configured(operation));
-                None
+        match self.repo.as_ref() {
+            None => None,
+            Some(_) => {
+                let repo_path = self.path.as_deref().unwrap_or(".");
+                effective_default_remote_from_remotes(repo_path, &self.remotes).or_else(|| effective_default_remote(repo_path)).or_else(|| {
+                    self.show_error(errors::no_remotes_configured(operation));
+                    None
+                })
             },
         }
     }
@@ -889,99 +897,96 @@ impl App {
         }
     }
 
-    pub(crate) fn delete_branch_from_ui(&mut self, branch: &str) {
-        let Some(repo) = self.repo.clone() else {
-            return;
-        };
+    fn persist_hidden_branches_if_loaded(&self) {
+        self.path.as_deref().into_iter().for_each(|path| save_branch_visibility(path, &self.branches.hidden_branch_names));
+    }
 
-        if repo.find_branch(branch, BranchType::Local).is_ok() {
-            match delete_branch(&repo, branch) {
-                Ok(_) => {
-                    if self.branches.hidden_branch_names.contains(branch) {
-                        self.branches.hidden_branch_names.remove(branch);
-                        if let Some(path) = &self.path {
-                            save_branch_visibility(path, &self.branches.hidden_branch_names);
-                        }
-                    }
-                    self.modal_delete_branch_selected = 0;
-                    self.focus = Focus::Viewport;
-                    self.reload(None);
-                },
-                Err(error) => self.show_error(errors::with_error(errors::DELETE_BRANCH(), error)),
-            }
-            return;
+    fn remove_hidden_branch(&mut self, branch: &str) {
+        if self.branches.hidden_branch_names.contains(branch) {
+            self.branches.hidden_branch_names.remove(branch);
+            self.persist_hidden_branches_if_loaded();
         }
+    }
 
-        let (remote_name, remote_branch) = branch.split_once('/').unwrap_or(("origin", branch));
-        if remote_name.is_empty() || remote_branch.is_empty() {
+    fn delete_local_branch_from_ui(&mut self, repo: &Repository, branch: &str) {
+        match delete_branch(repo, branch) {
+            Ok(_) => {
+                self.remove_hidden_branch(branch);
+                self.modal_delete_branch_selected = 0;
+                self.focus = Focus::Viewport;
+                self.reload(None);
+            },
+            Err(error) => self.show_error(errors::with_error(errors::DELETE_BRANCH(), error)),
+        }
+    }
+
+    fn delete_remote_branch_from_ui(&mut self, branch: &str) {
+        let Some((remote_name, remote_branch)) = Self::remote_branch_parts(branch) else {
             self.show_error(errors::DELETE_BRANCH_INVALID_REMOTE());
             return;
-        }
+        };
 
         let repo_path = self.path.as_deref().unwrap_or(".");
         self.modal_delete_branch_selected = 0;
         self.start_network_request(NetworkRequest::DeleteRemoteBranch { repo_path: repo_path.to_string(), remote_name: remote_name.to_string(), branch: remote_branch.to_string() });
     }
 
-    pub fn on_delete_branch(&mut self) {
-        let Some(repo) = &self.repo else { return };
-
-        match self.viewport {
-            Viewport::Settings | Viewport::Viewer => return,
-            _ => {},
+    pub(crate) fn delete_branch_from_ui(&mut self, branch: &str) {
+        if let Some(repo) = self.repo.clone() {
+            if repo.find_branch(branch, BranchType::Local).is_ok() {
+                self.delete_local_branch_from_ui(&repo, branch);
+            } else if Self::remote_branch_parts(branch).is_some() {
+                self.delete_remote_branch_from_ui(branch);
+            } else {
+                self.show_error(errors::DELETE_BRANCH());
+            }
         }
+    }
 
-        match self.focus {
-            Focus::Branches => {
-                let projected = self.graph.branches_window.as_ref().and_then(|window| {
-                    if self.branches_selected >= window.start
-                        && self.branches_selected < window.end
-                        && let Some(GraphPaneRow::Branch { name, .. }) = window.rows.get(self.branches_selected - window.start)
-                    {
-                        Some(name.clone())
-                    } else {
-                        None
-                    }
-                });
-                let Some(branch) = projected.or_else(|| self.branches.sorted.get(self.branches_selected).map(|(_, branch)| branch.clone())) else {
-                    return;
-                };
+    fn selected_branch_pane_name(&self) -> Option<String> {
+        let projected = self.graph.branches_window.as_ref().and_then(|window| {
+            let offset = self.branches_selected.checked_sub(window.start)?;
+            let GraphPaneRow::Branch { name, .. } = (self.branches_selected < window.end).then_some(offset).and_then(|offset| window.rows.get(offset))? else {
+                return None;
+            };
+            Some(name.as_str())
+        });
 
-                // Deleting the currently checked-out branch would leave HEAD invalid.
-                let proceed = match get_current_branch(repo) {
-                    Some(current) => current != branch,
-                    None => true,
-                };
+        projected.map(str::to_owned).or_else(|| self.branches.sorted.get(self.branches_selected).map(|(_, branch)| branch.clone()))
+    }
 
-                if proceed {
-                    self.delete_branch_from_ui(&branch);
-                } else {
-                    self.show_error(errors::DELETE_BRANCH_CURRENT());
-                }
-            },
+    fn delete_selected_branch_pane_row(&mut self, repo: &Repository) {
+        let Some(branch) = self.selected_branch_pane_name() else {
+            return;
+        };
 
-            Focus::Viewport => {
-                if self.graph_selected == 0 {
-                    return;
-                }
+        if get_current_branch(repo).is_none_or(|current| current != branch) {
+            self.delete_branch_from_ui(&branch);
+        } else {
+            self.show_error(errors::DELETE_BRANCH_CURRENT());
+        }
+    }
 
-                let Some(alias) = self.graph_alias_at(self.graph_selected) else {
-                    return;
-                };
-                let current = get_current_branch(repo);
+    fn delete_selected_graph_branch(&mut self, repo: &Repository) {
+        let Some(alias) = self.graph_alias_at(self.graph_selected).filter(|_| self.graph_selected != 0) else {
+            return;
+        };
+        let current = get_current_branch(repo);
+        let branch_names = self.graph_deletable_branch_choices(alias, current.as_deref());
 
-                // Current branch is excluded so graph deletion cannot remove checked-out HEAD.
-                let branch_names = self.graph_deletable_branch_choices(alias, current.as_deref());
+        match branch_names.as_slice() {
+            [] => {},
+            [branch] => self.delete_branch_from_ui(branch),
+            _ => self.focus = Focus::ModalDeleteBranch,
+        }
+    }
 
-                match branch_names.len() {
-                    0 => {},
-                    1 => self.delete_branch_from_ui(&branch_names[0]),
-                    _ => {
-                        self.focus = Focus::ModalDeleteBranch;
-                    },
-                }
-            },
+    pub fn on_delete_branch(&mut self) {
+        let repo = self.repo.clone().filter(|_| !matches!(self.viewport, Viewport::Settings | Viewport::Viewer));
 
+        match (repo.as_ref(), self.focus) {
+            (Some(repo), Focus::Branches) => self.delete_selected_branch_pane_row(repo),
+            (Some(repo), Focus::Viewport) => self.delete_selected_graph_branch(repo),
             _ => {},
         }
     }
@@ -997,47 +1002,49 @@ impl App {
         }
     }
 
+    fn selected_tag_pane_name(&self) -> Option<String> {
+        let projected = self.graph.tags_window.as_ref().and_then(|window| {
+            let offset = self.tags_selected.checked_sub(window.start)?;
+            let GraphPaneRow::Tag { name, .. } = (self.tags_selected < window.end).then_some(offset).and_then(|offset| window.rows.get(offset))? else {
+                return None;
+            };
+            Some(name.as_str())
+        });
+
+        projected.map(str::to_owned).or_else(|| self.tags.sorted.get(self.tags_selected).map(|(_, tag)| tag.clone()))
+    }
+
+    fn selected_graph_tag_names(&self) -> Vec<String> {
+        self.graph_row_at(self.graph_selected)
+            .map(|row| row.tags.iter().map(|tag| tag.name.clone()).collect())
+            .or_else(|| self.graph_alias_at(self.graph_selected).and_then(|alias| self.tags.local.get(&alias).cloned()))
+            .unwrap_or_default()
+    }
+
+    fn delete_tag_from_ui(&mut self, repo: &Repository, tag: &str) {
+        match untag(repo, tag) {
+            Ok(_) => self.reload(None),
+            Err(error) => self.show_error(errors::with_error(errors::DELETE_TAG(), error)),
+        }
+    }
+
     pub fn on_untag(&mut self) {
-        if let Some(repo) = &self.repo {
+        if let Some(repo) = self.repo.clone() {
             match self.viewport {
                 Viewport::Settings | Viewport::Viewer => {},
                 _ => match self.focus {
                     Focus::Tags => {
-                        let projected = self.graph.tags_window.as_ref().and_then(|window| {
-                            if self.tags_selected >= window.start
-                                && self.tags_selected < window.end
-                                && let Some(GraphPaneRow::Tag { name, .. }) = window.rows.get(self.tags_selected - window.start)
-                            {
-                                Some(name.clone())
-                            } else {
-                                None
-                            }
-                        });
-                        let Some(tag) = projected.or_else(|| self.tags.sorted.get(self.tags_selected).map(|(_, tag)| tag.clone())) else {
+                        let Some(tag) = self.selected_tag_pane_name() else {
                             return;
                         };
-                        match untag(repo, &tag) {
-                            Ok(_) => self.reload(None),
-                            Err(error) => self.show_error(errors::with_error(errors::DELETE_TAG(), error)),
-                        }
+                        self.delete_tag_from_ui(&repo, &tag);
                     },
-                    Focus::Viewport => {
-                        if self.graph_selected != 0 {
-                            let tag_names: Vec<String> = self
-                                .graph_row_at(if self.graph_selected == 0 { 1 } else { self.graph_selected })
-                                .map(|row| row.tags.iter().map(|tag| tag.name.clone()).collect())
-                                .or_else(|| self.graph_alias_at(if self.graph_selected == 0 { 1 } else { self.graph_selected }).map(|alias| self.tags.local.get(&alias).cloned().unwrap_or_default()))
-                                .unwrap_or_default();
-                            match tag_names.len() {
-                                0 => {},
-                                1 => match untag(repo, tag_names[0].as_str()) {
-                                    Ok(_) => self.reload(None),
-                                    Err(error) => self.show_error(errors::with_error(errors::DELETE_TAG(), error)),
-                                },
-                                _ => {
-                                    self.focus = Focus::ModalDeleteTag;
-                                },
-                            }
+                    Focus::Viewport if self.graph_selected != 0 => {
+                        let tag_names = self.selected_graph_tag_names();
+                        match tag_names.len() {
+                            0 => {},
+                            1 => self.delete_tag_from_ui(&repo, tag_names[0].as_str()),
+                            _ => self.focus = Focus::ModalDeleteTag,
                         }
                     },
                     _ => {},

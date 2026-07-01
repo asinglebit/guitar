@@ -1035,7 +1035,6 @@ pub fn load_symbol_theme_from_path(path: &Path) -> SymbolTheme {
         if let Ok(config) = facet_json::from_str::<SymbolThemeConfig>(&contents)
             && let Some(theme) = symbol_theme_from_config(config)
         {
-            save_symbol_theme_to_path(path, &theme);
             return theme;
         }
         if let Ok(label) = facet_json::from_str::<String>(&contents)

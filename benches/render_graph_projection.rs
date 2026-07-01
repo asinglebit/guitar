@@ -42,6 +42,26 @@ fn accent_theme(mut theme: Theme) -> Theme {
     theme
 }
 
+fn uncommitted_row() -> GraphRow {
+    GraphRow {
+        index: 0,
+        alias: NONE,
+        oid: Oid::zero(),
+        summary: "uncommitted".to_string(),
+        committer_date: String::new(),
+        committer_name: String::new(),
+        is_merge: false,
+        has_any_branch: false,
+        branches: Default::default(),
+        tags: Default::default(),
+        is_stash: false,
+        stash_lane: None,
+        worktrees: Default::default(),
+        has_current_worktree: false,
+        reflog: None,
+    }
+}
+
 #[divan::bench(sample_count = 80, sample_size = 100)]
 fn render_graph_projection_small(bencher: Bencher) {
     let fixture = graph_fixture(6);
@@ -57,21 +77,7 @@ fn render_graph_projection_dense(bencher: Bencher) {
 #[divan::bench(sample_count = 80, sample_size = 100)]
 fn render_graph_projection_uncommitted_row(bencher: Bencher) {
     let fixture = graph_fixture(12);
-    let rows = vec![GraphRow {
-        index: 0,
-        alias: NONE,
-        oid: Oid::zero(),
-        summary: "uncommitted".to_string(),
-        committer_date: String::new(),
-        committer_name: String::new(),
-        has_any_branch: false,
-        branches: Vec::new(),
-        tags: Vec::new(),
-        is_stash: false,
-        stash_lane: None,
-        worktrees: Vec::new(),
-        reflog: None,
-    }];
+    let rows = vec![uncommitted_row()];
     bench_render(bencher, &fixture.theme, &fixture.symbols, &rows, &fixture.history, fixture.head_alias, 0, rows.len(), true);
 }
 

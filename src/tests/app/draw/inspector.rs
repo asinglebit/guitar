@@ -4,22 +4,9 @@ use crate::{
         state::layout::Layout,
     },
     core::graph_service::{GraphCommand, GraphLookupKind},
+    git::test_support::temp_repo,
 };
-use git2::Repository;
 use ratatui::{Terminal, backend::TestBackend, layout::Rect};
-use std::{
-    fs,
-    path::PathBuf,
-    time::{SystemTime, UNIX_EPOCH},
-};
-
-fn temp_repo(name: &str) -> (PathBuf, Repository) {
-    let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-    let path = std::env::temp_dir().join(format!("guitar-inspector-draw-{name}-{id}"));
-    fs::create_dir_all(&path).unwrap();
-    let repo = Repository::init(&path).unwrap();
-    (path, repo)
-}
 
 fn rendered(terminal: &Terminal<TestBackend>) -> String {
     terminal.backend().buffer().content().iter().map(|cell| cell.symbol()).collect::<String>()

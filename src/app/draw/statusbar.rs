@@ -1,7 +1,6 @@
 use crate::{
     app::app::{App, Focus, Viewport},
-    git::queries::commits::get_current_branch,
-    helpers::{branch_visibility::current_branch_names, keymap::InputMode, localisation::status as status_text},
+    helpers::{keymap::InputMode, localisation::status as status_text},
 };
 use ratatui::Frame;
 use ratatui::{
@@ -11,99 +10,114 @@ use ratatui::{
 };
 
 impl App {
-    fn submodule_stack_status_label(&self) -> Option<String> {
-        let first = self.submodule_stack.first()?;
-        let root = first.parent_path.file_name().and_then(|value| value.to_str()).map(str::to_string).unwrap_or_else(|| first.parent_path.display().to_string());
-        let mut parts = vec![root];
-        parts.extend(self.submodule_stack.iter().map(|entry| entry.submodule_path.display().to_string()));
-        Some(format!("{} {} ", self.symbols.submodule.default, parts.join(&self.symbols.submodule.stack_separator)))
+    fn statusbar_left_span_capacity(&self) -> usize {
+        2 + self.submodule_stack.first().map_or(0, |_| 4 + self.submodule_stack.len() * 2)
     }
 
-    pub fn draw_statusbar(&mut self, frame: &mut Frame, repo: &git2::Repository) {
-        let mut left_spans: Vec<Span> = match self.worktrees.current_name() {
-            Some(name) => vec![Span::styled(format!("  {} {name} ", self.symbols.worktree.current), Style::default().fg(self.theme.COLOR_GRASS))],
-            None => vec![Span::raw("  ")],
+    fn submodule_stack_status_spans<'a>(&'a self) -> impl Iterator<Item = Span<'a>> + 'a {
+        self.submodule_stack.first().into_iter().flat_map(move |first| {
+            let style = Style::default().fg(self.theme.COLOR_TEAL);
+            let root = first.parent_path.file_name().unwrap_or_else(|| first.parent_path.as_os_str()).to_string_lossy();
+            [Span::styled(self.symbols.submodule.default.as_str(), style), Span::styled(" ", style), Span::styled(root, style)]
+                .into_iter()
+                .chain(
+                    self.submodule_stack
+                        .iter()
+                        .flat_map(move |entry| [Span::styled(self.symbols.submodule.stack_separator.as_str(), style), Span::styled(entry.submodule_path.as_os_str().to_string_lossy(), style)]),
+                )
+                .chain(std::iter::once(Span::styled(" ", style)))
+        })
+    }
+
+    fn head_status_label(&self) -> Span<'static> {
+        let text_style = Style::default().fg(self.theme.COLOR_TEXT);
+        self.worktrees
+            .entries
+            .iter()
+            .find(|entry| entry.is_current)
+            .map(|current| match (current.branch.as_deref(), current.head) {
+                (Some(branch), _) => Span::styled(format!("{} {}", self.symbols.branch.local_visible, branch), Style::default().fg(self.theme.COLOR_GRASS)),
+                (None, Some(oid)) => Span::styled(format!("{} #{:.6}", status_text::DETACHED_HEAD(), oid), text_style),
+                (None, None) => Span::styled(status_text::NO_HEAD_NO_COMMITS(), text_style),
+            })
+            .unwrap_or_else(|| Span::styled(status_text::NO_HEAD_NO_COMMITS(), text_style))
+    }
+
+    fn statusbar_branch_total(&self) -> usize {
+        self.graph.branches_window.as_ref().map_or_else(|| self.branches.sorted.iter().filter(|(_, branch)| !self.branches.hidden_branch_names.contains(branch)).count(), |window| window.total)
+    }
+
+    fn statusbar_left_spans<'a>(&'a self) -> impl Iterator<Item = Span<'a>> + 'a {
+        let worktree = match self.worktrees.current_name() {
+            Some(name) => Span::styled(format!("  {} {name} ", self.symbols.worktree.current), Style::default().fg(self.theme.COLOR_GRASS)),
+            None => Span::raw("  "),
         };
-        if let Some(label) = self.submodule_stack_status_label() {
-            left_spans.push(Span::styled(label, Style::default().fg(self.theme.COLOR_TEAL)));
-        }
-        match get_current_branch(repo) {
-            Some(branch) => left_spans.push(Span::styled(format!("{} {}", self.symbols.branch.local_visible, branch), Style::default().fg(self.theme.COLOR_GRASS))),
-            None => match repo.head().ok().and_then(|h| h.target()) {
-                Some(oid) => left_spans.push(Span::styled(format!("{} #{:.6}", status_text::DETACHED_HEAD(), oid), Style::default().fg(self.theme.COLOR_TEXT))),
-                None => left_spans.push(Span::styled(status_text::NO_HEAD_NO_COMMITS(), Style::default().fg(self.theme.COLOR_TEXT))),
-            },
-        }
-        let lines = Line::from(left_spans);
 
-        let status_paragraph = ratatui::widgets::Paragraph::new(Text::from(lines)).left_aligned().block(Block::default());
+        std::iter::once(worktree).chain(self.submodule_stack_status_spans()).chain(std::iter::once(self.head_status_label()))
+    }
 
-        frame.render_widget(status_paragraph, self.layout.statusbar_left);
-
-        let total = match self.focus {
-            Focus::Viewport => match self.viewport {
-                Viewport::Graph => self.graph_commit_count(),
-                Viewport::Viewer => self.viewer_row_count(),
-                _ => 0,
+    fn statusbar_position(&self) -> Option<(usize, usize)> {
+        let (cursor, total) = match self.focus {
+            Focus::Viewport => match &self.viewport {
+                Viewport::Graph => (self.graph_selected + 1, self.graph_commit_count()),
+                Viewport::Viewer => (self.viewer_selected + 1, self.viewer_row_count()),
+                _ => (0, 0),
             },
             Focus::StatusTop => {
                 if self.graph_selected == 0 {
-                    self.uncommitted.conflicts.len() + self.uncommitted.staged.modified.len() + self.uncommitted.staged.added.len() + self.uncommitted.staged.deleted.len()
+                    (
+                        self.status_top_selected + 1,
+                        self.uncommitted.conflicts.len() + self.uncommitted.staged.modified.len() + self.uncommitted.staged.added.len() + self.uncommitted.staged.deleted.len(),
+                    )
                 } else {
-                    self.current_diff.len()
+                    (self.status_top_selected + 1, self.current_diff.len())
                 }
             },
-            Focus::StatusBottom => self.uncommitted.conflicts.len() + self.uncommitted.unstaged.modified.len() + self.uncommitted.unstaged.added.len() + self.uncommitted.unstaged.deleted.len(),
-            Focus::Branches => self.graph.branches_window.as_ref().map(|window| window.total).unwrap_or_else(|| current_branch_names(repo).len()),
-            Focus::Tags => self.graph.tags_window.as_ref().map(|window| window.total).unwrap_or(self.tags.sorted.len()),
-            Focus::Stashes => self.graph.stashes_window.as_ref().map(|window| window.total).unwrap_or(self.oids.stashes.len()),
-            Focus::Reflogs => self.graph.reflogs_window.as_ref().map(|window| window.total).unwrap_or(self.reflogs.entries.len()),
-            Focus::Worktrees => self.worktrees.entries.len(),
-            Focus::Submodules => self.submodules.entries.len(),
-            Focus::Search => self.search_rows.len(),
-            _ => 0,
+            Focus::StatusBottom => (
+                self.status_bottom_selected + 1,
+                self.uncommitted.conflicts.len() + self.uncommitted.unstaged.modified.len() + self.uncommitted.unstaged.added.len() + self.uncommitted.unstaged.deleted.len(),
+            ),
+            Focus::Branches => {
+                let total = self.statusbar_branch_total();
+                ((self.branches_selected + 1).min(total), total)
+            },
+            Focus::Tags => (self.tags_selected + 1, self.graph.tags_window.as_ref().map_or(self.tags.sorted.len(), |window| window.total)),
+            Focus::Stashes => (self.stashes_selected + 1, self.graph.stashes_window.as_ref().map_or(self.oids.stashes.len(), |window| window.total)),
+            Focus::Reflogs => (self.reflogs_selected + 1, self.graph.reflogs_window.as_ref().map_or(self.reflogs.entries.len(), |window| window.total)),
+            Focus::Worktrees => (self.worktrees_selected + 1, self.worktrees.entries.len()),
+            Focus::Submodules => (self.submodules_selected + 1, self.submodules.entries.len()),
+            Focus::Search => (self.search_selected + 1, self.search_rows.len()),
+            _ => (0, 0),
         };
 
-        let cursor = if total == 0 {
-            0
-        } else {
-            match self.focus {
-                Focus::Viewport => match self.viewport {
-                    Viewport::Graph => self.graph_selected + 1,
-                    Viewport::Viewer => self.viewer_selected + 1,
-                    _ => 0,
-                },
-                Focus::StatusTop => self.status_top_selected + 1,
-                Focus::StatusBottom => self.status_bottom_selected + 1,
-                Focus::Branches => {
-                    let branch_names = current_branch_names(repo);
-                    let hidden = branch_names.iter().filter(|branch| self.branches.hidden_branch_names.contains(*branch)).count();
-                    branch_names.len().saturating_sub(hidden)
-                },
-                Focus::Tags => self.tags_selected + 1,
-                Focus::Stashes => self.stashes_selected + 1,
-                Focus::Reflogs => self.reflogs_selected + 1,
-                Focus::Worktrees => self.worktrees_selected + 1,
-                Focus::Submodules => self.submodules_selected + 1,
-                Focus::Search => self.search_selected + 1,
-                _ => 0,
-            }
-        };
+        (total != 0).then_some((cursor, total))
+    }
 
-        let icon_spinner = if self.spinner.is_running() { format!("{} ", self.spinner.get_char()) } else { "".to_string() };
+    fn statusbar_count_hint<'a>(&self) -> Option<Span<'a>> {
+        self.statusbar_position().map(|(cursor, total)| {
+            let text = if self.spinner.is_running() { format!("{cursor}/{total}{} ", self.spinner.get_char()) } else { format!("{cursor}/{total} ") };
+            Span::styled(text, Style::default().fg(self.theme.COLOR_TEXT))
+        })
+    }
 
-        // Action mode indicator (moved here)
-        let mut action_hint =
-            if self.mode == InputMode::Action { vec![Span::styled(format!("{} ", self.symbols.graph.commit_branch), Style::default().fg(self.theme.COLOR_GRAPEFRUIT))] } else { Vec::new() };
+    fn action_hint_spans<'a>(&'a self) -> impl Iterator<Item = Span<'a>> + 'a {
+        [(self.mode == InputMode::Action, self.theme.COLOR_GRAPEFRUIT), (self.layout_config.is_zen, self.theme.COLOR_GRASS)]
+            .into_iter()
+            .filter_map(|(enabled, color)| enabled.then_some(color))
+            .flat_map(|color| [Span::styled(self.symbols.graph.commit_branch.as_str(), Style::default().fg(color)), Span::raw(" ")])
+    }
 
-        // Zen mode indicator
-        if self.layout_config.is_zen {
-            action_hint.push(Span::styled(format!("{} ", self.symbols.graph.commit_branch), Style::default().fg(self.theme.COLOR_GRASS)));
-        }
+    pub fn draw_statusbar(&mut self, frame: &mut Frame) {
+        let mut left_spans = Vec::with_capacity(self.statusbar_left_span_capacity());
+        left_spans.extend(self.statusbar_left_spans());
 
-        let mut right_spans = vec![Span::styled(if total == 0 { "".to_string() } else { format!("{}/{}{} ", cursor, total, icon_spinner) }, Style::default().fg(self.theme.COLOR_TEXT))];
+        let status_paragraph = ratatui::widgets::Paragraph::new(Text::from(Line::from(left_spans))).left_aligned().block(Block::default());
 
-        right_spans.extend(action_hint);
+        frame.render_widget(status_paragraph, self.layout.statusbar_left);
+
+        let mut right_spans = Vec::with_capacity(5);
+        right_spans.extend(self.statusbar_count_hint());
+        right_spans.extend(self.action_hint_spans());
 
         let title_paragraph = ratatui::widgets::Paragraph::new(Text::from(Line::from(right_spans))).right_aligned().block(Block::default());
 
