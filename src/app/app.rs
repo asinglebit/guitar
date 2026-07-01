@@ -560,6 +560,7 @@ pub struct App {
     pub language: Language,
     pub heatmap: [[usize; WEEKS]; DAYS],
     pub remotes: Vec<crate::git::queries::remotes::RemoteEntry>,
+    pub remotes_error: Option<String>,
 
     // Git identity used when creating commits.
     pub name: String,
@@ -1027,7 +1028,16 @@ impl App {
 
         if let Ok(gix_repo) = gix::open(&current_path) {
             self.repo = Some(RepoHandle::from_path(current_path.clone()));
-            self.remotes = list_remotes(current_path.as_path()).unwrap_or_default();
+            match list_remotes(current_path.as_path()) {
+                Ok(remotes) => {
+                    self.remotes = remotes;
+                    self.remotes_error = None;
+                },
+                Err(error) => {
+                    self.remotes = Vec::new();
+                    self.remotes_error = Some(error.to_string());
+                },
+            }
             self.worktrees = Worktrees::from_entries(list_worktrees_metadata_from_path(current_path.as_path(), Some(current_path.as_path())).unwrap_or_default());
             self.submodules = Submodules::from_entries(list_submodules_from_path(current_path.as_path()).unwrap_or_default());
 

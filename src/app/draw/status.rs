@@ -137,7 +137,7 @@ impl App {
             (self.commit_status_rows(visible_height_status_top, max_status_top_width), BuiltStatusRows { rows: Vec::new(), has_selectable_changes: false })
         };
 
-        let search_highlight_path = if self.layout_config.is_search { self.search_path.clone() } else { None };
+        let search_highlight_path = self.layout_config.is_search.then(|| self.search_path.as_deref()).flatten();
         let top_has_inspector_border = self.layout_config.is_inspector && (self.graph_selected != 0 || self.uncommitted.has_conflicts);
 
         // Top status pane shows staged files on the pseudo-row or commit file changes otherwise.
@@ -151,7 +151,7 @@ impl App {
                 scroll: &self.status_top_scroll,
                 is_focused: self.focus == Focus::StatusTop,
                 selection_enabled: status_top.has_selectable_changes,
-                search_highlight_path: search_highlight_path.as_deref(),
+                search_highlight_path,
                 area: self.layout.status_top,
                 scrollbar_area: self.layout.status_top_scrollbar,
                 is_zen: self.layout_config.is_zen,
@@ -175,7 +175,7 @@ impl App {
                     scroll: &self.status_bottom_scroll,
                     is_focused: self.focus == Focus::StatusBottom,
                     selection_enabled: status_bottom.has_selectable_changes,
-                    search_highlight_path: search_highlight_path.as_deref(),
+                    search_highlight_path,
                     area: self.layout.status_bottom,
                     scrollbar_area: self.layout.status_bottom_scrollbar,
                     is_zen: self.layout_config.is_zen,

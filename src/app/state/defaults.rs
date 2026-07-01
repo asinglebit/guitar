@@ -76,6 +76,7 @@ impl App {
             language,
             heatmap,
             remotes: Vec::new(),
+            remotes_error: None,
 
             // User
             name: String::new(),

@@ -74,6 +74,20 @@ fn populate_remotes(app: &mut App, repo: &Repository) {
 }
 
 #[test]
+fn settings_repo_tab_distinguishes_remote_load_error_from_empty_remotes() {
+    let (_dir, repo) = temp_repo("remote-load-error");
+    let mut app = settings_app_with_size(140, 120);
+    app.settings_tab = SettingsTab::Repo;
+    app.remotes_error = Some("config exploded".to_string());
+
+    let rendered = rendered_settings(&mut app, &repo, 140, 120);
+
+    assert!(rendered.contains("remote error:"));
+    assert!(rendered.contains("config exploded"));
+    assert!(!rendered.contains("no remotes"));
+}
+
+#[test]
 fn settings_general_tab_renders_sections_and_symbols_paths() {
     let (_dir, repo) = temp_repo("default-tab");
     let mut app = settings_app_with_size(140, 120);

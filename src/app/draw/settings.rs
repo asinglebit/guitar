@@ -265,7 +265,11 @@ impl App {
                 Style::default().fg(self.theme.COLOR_GRASS).bg(self.theme.background_or_default(self.theme.COLOR_GREY_900)),
             ));
             self.add_settings_selection(lines, SettingsSelectionKind::RemoteAdd);
-            lines.push(self.settings_filled_line(&format!(" {}", empty::NO_REMOTES()), "", width, Style::default().fg(self.theme.COLOR_TEXT)));
+            if let Some(error) = &self.remotes_error {
+                lines.push(self.settings_filled_line(settings_text::REMOTE_ERROR(), format!(" {error} ").as_str(), width, Style::default().fg(self.theme.COLOR_ORANGE)));
+            } else {
+                lines.push(self.settings_filled_line(&format!(" {}", empty::NO_REMOTES()), "", width, Style::default().fg(self.theme.COLOR_TEXT)));
+            }
         } else {
             let default_remote = effective_default_remote_from_remotes(repo.workdir().unwrap_or(repo.path()), &self.remotes);
             let default_label = default_remote.as_deref().unwrap_or(common::NONE());
