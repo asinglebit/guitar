@@ -970,8 +970,8 @@ impl App {
 
             // Commit actions require a concrete identity, so missing config is treated as fatal.
             let (name, email) = get_git_user_info(repo).expect("Couldn't get user credentials");
-            self.name = name.unwrap();
-            self.email = email.unwrap();
+            self.name = name;
+            self.email = email;
 
             // The spinner reflects walker activity, not individual git network commands.
             self.spinner.start();

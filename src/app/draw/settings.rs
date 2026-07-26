@@ -365,9 +365,9 @@ impl App {
         lines.push(self.settings_section_line(settings_text::CREDENTIALS(), width));
         lines.push(Line::default());
 
-        lines.push(self.settings_filled_line(settings_text::NAME(), format!("{} ", name.unwrap()).as_str(), width, shaded));
+        lines.push(self.settings_filled_line(settings_text::NAME(), format!("{name} ").as_str(), width, shaded));
         self.add_settings_selection(lines, SettingsSelectionKind::Info);
-        lines.push(self.settings_filled_line(settings_text::EMAIL(), format!("{} ", email.unwrap()).as_str(), width, plain));
+        lines.push(self.settings_filled_line(settings_text::EMAIL(), format!("{email} ").as_str(), width, plain));
         self.add_settings_selection(lines, SettingsSelectionKind::Info);
         lines.push(self.settings_filled_line(settings_text::AUTHORIZATION(), settings_text::SSH_AGENT_DETAIL(), width, shaded));
         self.add_settings_selection(lines, SettingsSelectionKind::Info);
