@@ -973,6 +973,7 @@ catppuccin dark
 catppuccin light
 atom dark
 atom light
+one dark warmer
 vscode dark
 vscode light
 solarized dark

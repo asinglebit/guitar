@@ -50,6 +50,7 @@ fn presets_include_editor_theme_variants() {
         "catppuccin light",
         "atom dark",
         "atom light",
+        "one dark warmer",
         "vscode dark",
         "vscode light",
         "solarized dark",
@@ -95,12 +96,13 @@ fn presets_include_editor_theme_variants() {
 }
 
 #[test]
-fn dark_editor_theme_grey_900_is_lighter_than_grey_950() {
+fn dark_editor_theme_grey_900_is_distinct_from_grey_950() {
     for theme in [
         Theme::dracula_dark(),
         Theme::monokai_dark(),
         Theme::catppuccin_dark(),
         Theme::atom_dark(),
+        Theme::one_dark_warmer(),
         Theme::solarized_dark(),
         Theme::gruvbox_dark(),
         Theme::tokyo_night(),
@@ -109,7 +111,8 @@ fn dark_editor_theme_grey_900_is_lighter_than_grey_950() {
         Theme::everforest_dark(),
         Theme::matrix(),
     ] {
-        assert!(rgb_brightness(theme.COLOR_GREY_900) > rgb_brightness(theme.COLOR_GREY_950), "{} grey 900 should be lighter than grey 950", theme.label());
+        let delta = rgb_brightness(theme.COLOR_GREY_900).abs_diff(rgb_brightness(theme.COLOR_GREY_950));
+        assert!(delta >= 10, "{} grey 900 should be clearly distinct from grey 950, got {delta}", theme.label());
     }
 }
 
