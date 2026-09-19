@@ -41,6 +41,7 @@ fn invalid_language_file_falls_back_to_english() {
 
 #[test]
 fn active_language_changes_localised_text() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     set_active_language(Language::English);
     assert_eq!(menu::SETTINGS(), "Settings");
 
@@ -52,6 +53,7 @@ fn active_language_changes_localised_text() {
 
 #[test]
 fn settings_general_performance_lane_limit_text_is_localised() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     for (language, general, performance, lane_limit, prompt) in [
         (Language::English, "general", " performance:", " graph lane limit:", "Enter graph lane limit"),
         (Language::Spanish, "general", " rendimiento:", " límite de carriles del grafo:", "Introduce límite de carriles del grafo"),
@@ -71,6 +73,7 @@ fn settings_general_performance_lane_limit_text_is_localised() {
 
 #[test]
 fn graph_lane_limit_shortcut_command_labels_are_localised() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     use crate::helpers::keymap::{Command, command_to_visual_string};
 
     for (language, shrink, grow) in [
@@ -90,9 +93,50 @@ fn graph_lane_limit_shortcut_command_labels_are_localised() {
 
 #[test]
 fn formatted_messages_keep_runtime_values() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     set_active_language(Language::Turkish);
     assert!(network::pushing("main", "origin").contains("main"));
     assert!(network::pushing("main", "origin").contains("origin"));
 
     set_active_language(Language::English);
+}
+
+// These call the per-language tables directly rather than switching the process-wide active
+// language, so they stay deterministic when the suite runs in parallel.
+type Translate = fn(&'static str) -> &'static str;
+const TRANSLATORS: [(Translate, &str); 4] = [(es, "es"), (fr, "fr"), (ru, "ru"), (tr_tr, "tr")];
+
+#[test]
+fn settings_background_section_text_is_translated_in_every_language() {
+    for ((translate, tag), background, file_watcher, auto_fetch) in [
+        (TRANSLATORS[0], " segundo plano:", "monitor de archivos", "fetch automático"),
+        (TRANSLATORS[1], " arrière-plan :", "surveillance de fichiers", "fetch automatique"),
+        (TRANSLATORS[2], " фоновые задачи:", "наблюдение за файлами", "автоматический fetch"),
+        (TRANSLATORS[3], " arka plan:", "dosya izleyici", "otomatik fetch"),
+    ] {
+        assert_eq!(translate(" background:"), background, "{tag} background heading");
+        assert_eq!(translate("file watcher"), file_watcher, "{tag} file watcher row");
+        assert_eq!(translate("auto fetch"), auto_fetch, "{tag} auto fetch row");
+    }
+}
+
+#[test]
+fn background_toggle_command_labels_are_translated_in_every_language() {
+    for ((translate, tag), watcher, fetch) in [
+        (TRANSLATORS[0], "Alternar monitor de archivos", "Alternar fetch automático"),
+        (TRANSLATORS[1], "Basculer la surveillance de fichiers", "Basculer le fetch automatique"),
+        (TRANSLATORS[2], "Переключить наблюдение за файлами", "Переключить автоматический fetch"),
+        (TRANSLATORS[3], "Dosya izleyiciyi aç/kapat", "Otomatik fetch’i aç/kapat"),
+    ] {
+        assert_eq!(translate("Toggle file watcher"), watcher, "{tag} watcher command label");
+        assert_eq!(translate("Toggle auto fetch"), fetch, "{tag} auto fetch command label");
+    }
+}
+
+#[test]
+fn background_strings_fall_back_to_english_for_unknown_keys() {
+    // The fallback chain must never panic or return an empty string.
+    for (translate, tag) in TRANSLATORS {
+        assert_eq!(translate("definitely not a translated key"), "definitely not a translated key", "{tag} fallback");
+    }
 }

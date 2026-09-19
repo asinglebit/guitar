@@ -33,6 +33,9 @@ const SETTINGS_PANE_COMMANDS: &[(&str, Command, fn() -> &'static str)] = &[
     ("0", Command::ResetLayout, settings_text::RESET_LAYOUT),
 ];
 
+// No key column here: shortcuts are listed in the shortcuts tab, not repeated beside the toggles.
+const SETTINGS_BACKGROUND_COMMANDS: &[(Command, fn() -> &'static str)] = &[(Command::ToggleFileWatcher, settings_text::FILE_WATCHER), (Command::ToggleAutoFetch, settings_text::AUTO_FETCH)];
+
 const SETTINGS_GRAPH_COMMANDS: &[(&str, Command, fn() -> &'static str)] = &[
     (")", Command::ToggleGraphReflogs, settings_text::GRAPH_REFLOG_COMMITS),
     ("!", Command::ToggleShas, settings_text::SHAS),
@@ -153,6 +156,20 @@ impl App {
                     self.symbols.form.checkbox_off.clone()
                 }
             },
+            Command::ToggleFileWatcher => {
+                if self.layout_config.is_file_watcher {
+                    self.symbols.form.checkbox_on.clone()
+                } else {
+                    self.symbols.form.checkbox_off.clone()
+                }
+            },
+            Command::ToggleAutoFetch => {
+                if self.layout_config.is_auto_fetch {
+                    self.symbols.form.checkbox_on.clone()
+                } else {
+                    self.symbols.form.checkbox_off.clone()
+                }
+            },
             Command::ResetLayout => settings_text::ENTER_ACTION().to_string(),
             _ => String::new(),
         }
@@ -249,6 +266,22 @@ impl App {
         self.add_settings_selection(lines, SettingsSelectionKind::GraphLaneLimit);
     }
 
+    fn append_settings_background(&mut self, lines: &mut Vec<Line<'static>>, width: usize) {
+        lines.push(Line::default());
+        lines.push(self.settings_section_line(settings_text::BACKGROUND(), width));
+        lines.push(Line::default());
+        for (idx, (command, label)) in SETTINGS_BACKGROUND_COMMANDS.iter().enumerate() {
+            let label = format!(" {}:", label());
+            let state = format!(" {} ", self.settings_layout_command_state(command));
+            let mut style = Style::default().fg(self.theme.COLOR_TEXT);
+            if idx.is_multiple_of(2) {
+                style = style.bg(self.theme.background_or_default(self.theme.COLOR_GREY_900));
+            }
+            lines.push(self.settings_filled_line(&label, &state, width, style));
+            self.add_settings_selection(lines, SettingsSelectionKind::LayoutCommand(command.clone()));
+        }
+    }
+
     fn append_settings_general(&mut self, lines: &mut Vec<Line<'static>>, width: usize) {
         // Config paths are informational, but still selectable for consistent navigation.
         lines.push(Line::default());
@@ -275,6 +308,7 @@ impl App {
         self.add_settings_selection(lines, SettingsSelectionKind::Info);
 
         self.append_settings_performance(lines, width);
+        self.append_settings_background(lines, width);
 
         lines.push(Line::default());
         lines.push(self.settings_section_line(settings_text::RECENT_REPOSITORIES(), width));

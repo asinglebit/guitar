@@ -81,6 +81,7 @@ fn remote_selection_lines(app: &App, remote_name: &str) -> Vec<usize> {
 
 #[test]
 fn settings_default_tab_is_general_and_renders_general_sections() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let (_path, repo) = temp_repo("default-tab");
     let mut app = settings_app();
     app.layout.graph = Rect::new(0, 0, 140, 120);
@@ -111,6 +112,7 @@ fn settings_default_tab_is_general_and_renders_general_sections() {
 
 #[test]
 fn settings_active_tabs_render_their_grouped_sections_only() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let (_path, repo) = temp_repo("tab-groups");
     let mut app = settings_app();
     app.layout.graph = Rect::new(0, 0, 160, 160);
@@ -142,6 +144,7 @@ fn settings_active_tabs_render_their_grouped_sections_only() {
 
 #[test]
 fn settings_shortcuts_render_graph_lane_limit_shortcuts() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     crate::helpers::localisation::set_active_language(Language::English);
     let (_path, repo) = temp_repo("lane-limit-shortcuts");
     let mut app = settings_app();
@@ -162,6 +165,7 @@ fn settings_shortcuts_render_graph_lane_limit_shortcuts() {
 
 #[test]
 fn settings_scroll_keeps_visible_selection_without_recentering() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let (_path, repo) = temp_repo("visible");
     let mut app = settings_app();
     app.settings_tab = SettingsTab::Display;
@@ -181,6 +185,7 @@ fn settings_scroll_keeps_visible_selection_without_recentering() {
 
 #[test]
 fn settings_scroll_moves_only_when_selection_leaves_view() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let (_path, repo) = temp_repo("bounded");
     let mut app = settings_app();
     app.settings_tab = SettingsTab::Display;
@@ -205,6 +210,7 @@ fn settings_scroll_moves_only_when_selection_leaves_view() {
 
 #[test]
 fn settings_scroll_clamps_at_top_and_bottom() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let (_path, repo) = temp_repo("clamp");
     let mut app = settings_app();
     app.settings_tab = SettingsTab::Display;
@@ -226,6 +232,7 @@ fn settings_scroll_clamps_at_top_and_bottom() {
 
 #[test]
 fn settings_selection_snaps_to_selectable_line() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let (_path, repo) = temp_repo("snap");
     let mut app = settings_app();
     app.settings_selected = 0;
@@ -237,6 +244,7 @@ fn settings_selection_snaps_to_selectable_line() {
 
 #[test]
 fn settings_renders_layout_visibility_rows_with_states() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let (_path, repo) = temp_repo("layout-section");
     let mut app = settings_app();
     app.settings_tab = SettingsTab::Display;
@@ -265,6 +273,7 @@ fn settings_renders_layout_visibility_rows_with_states() {
 
 #[test]
 fn settings_renders_theme_rows_with_unicode_markers() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let (_path, repo) = temp_repo("theme-markers");
     let mut app = settings_app();
     app.settings_tab = SettingsTab::Display;
@@ -282,6 +291,7 @@ fn settings_renders_theme_rows_with_unicode_markers() {
 
 #[test]
 fn settings_general_tab_includes_symbols_json() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let (_path, repo) = temp_repo("symbols-path");
     let mut app = settings_app();
     app.layout.graph = Rect::new(0, 0, 140, 120);
@@ -297,6 +307,7 @@ fn settings_general_tab_includes_symbols_json() {
 
 #[test]
 fn settings_display_tab_renders_language_rows() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let (_path, repo) = temp_repo("language-rows");
     let mut app = settings_app();
     app.settings_tab = SettingsTab::Display;
@@ -320,6 +331,7 @@ fn settings_display_tab_renders_language_rows() {
 
 #[test]
 fn settings_display_tab_renders_symbol_theme_rows() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let (_path, repo) = temp_repo("symbol-theme-rows");
     let mut app = settings_app();
     app.settings_tab = SettingsTab::Display;
@@ -337,6 +349,7 @@ fn settings_display_tab_renders_symbol_theme_rows() {
 
 #[test]
 fn settings_display_tab_uses_active_symbol_theme_form_markers() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let (_path, repo) = temp_repo("symbol-theme-markers");
     let mut app = settings_app();
     app.symbols = SymbolTheme::ascii();
@@ -358,6 +371,7 @@ fn settings_display_tab_uses_active_symbol_theme_form_markers() {
 
 #[test]
 fn settings_narrow_tab_bar_uses_compact_bullets() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let (_path, repo) = temp_repo("compact-tabs");
     let mut app = settings_app();
     app.layout.graph = Rect::new(0, 0, 30, 80);
@@ -391,6 +405,7 @@ fn settings_narrow_tab_bar_uses_compact_bullets() {
 
 #[test]
 fn settings_section_names_use_highlight_color() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let (_path, repo) = temp_repo("section-highlight");
     let mut app = settings_app();
     app.layout.graph = Rect::new(0, 0, 120, 160);
@@ -426,6 +441,7 @@ fn settings_section_names_use_highlight_color() {
 
 #[test]
 fn settings_layout_rows_use_current_normal_keymap_binding() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let (_path, repo) = temp_repo("layout-key");
     let mut app = settings_app();
     app.settings_tab = SettingsTab::Display;
@@ -440,6 +456,7 @@ fn settings_layout_rows_use_current_normal_keymap_binding() {
 
 #[test]
 fn settings_renders_recent_repositories_section_with_actions_and_selectable_rows() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let (_path, repo) = temp_repo("recent-section");
     let mut app = settings_app();
     app.layout.graph = Rect::new(0, 0, 140, 120);
@@ -461,6 +478,7 @@ fn settings_renders_recent_repositories_section_with_actions_and_selectable_rows
 
 #[test]
 fn settings_recent_repository_actions_use_split_row_and_current_keymap_bindings() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let (_path, repo) = temp_repo("recent-actions-keymap");
     let mut app = settings_app();
     app.layout.graph = Rect::new(0, 0, 140, 120);
@@ -480,6 +498,7 @@ fn settings_recent_repository_actions_use_split_row_and_current_keymap_bindings(
 
 #[test]
 fn settings_empty_recent_repositories_row_is_not_selectable() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let (_path, repo) = temp_repo("empty-recent-section");
     let mut app = settings_app();
     app.layout.graph = Rect::new(0, 0, 140, 120);
@@ -493,6 +512,7 @@ fn settings_empty_recent_repositories_row_is_not_selectable() {
 
 #[test]
 fn settings_renders_remotes_section_with_add_and_empty_state() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let (_path, repo) = temp_repo("empty-remotes-section");
     let mut app = settings_app();
     app.settings_tab = SettingsTab::Repo;
@@ -510,6 +530,7 @@ fn settings_renders_remotes_section_with_add_and_empty_state() {
 
 #[test]
 fn settings_renders_remote_rows_with_fetch_and_push_urls() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let (_path, repo) = temp_repo("remote-rows");
     repo.remote("origin", "https://example.com/repo.git").unwrap();
     let mut app = settings_app();
@@ -532,6 +553,7 @@ fn settings_renders_remote_rows_with_fetch_and_push_urls() {
 
 #[test]
 fn settings_renders_remote_rows_with_explicit_push_url() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let (_path, repo) = temp_repo("remote-push-url");
     repo.remote("origin", "https://example.com/repo.git").unwrap();
     repo.remote_set_pushurl("origin", Some("ssh://example.com/repo.git")).unwrap();
@@ -553,6 +575,7 @@ fn settings_renders_remote_rows_with_explicit_push_url() {
 
 #[test]
 fn settings_marks_effective_default_remote() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let (_path, repo) = temp_repo("remote-default-marker");
     repo.remote("origin", "https://example.com/origin.git").unwrap();
     repo.remote("upstream", "https://example.com/upstream.git").unwrap();
@@ -575,6 +598,7 @@ fn settings_marks_effective_default_remote() {
 
 #[test]
 fn settings_truncates_long_remote_urls() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let (_path, repo) = temp_repo("remote-truncate");
     let long_url = "https://example.com/this/is/a/very/long/path/that/should/not/overflow/the/settings/row/repository.git";
     repo.remote("origin", long_url).unwrap();
@@ -588,4 +612,108 @@ fn settings_truncates_long_remote_urls() {
     assert!(rendered.contains("origin fetch:"));
     assert!(rendered.contains("..."));
     assert!(!rendered.contains(long_url));
+}
+
+#[test]
+fn settings_general_renders_background_rows_with_states() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let (_path, repo) = temp_repo("background-section");
+    let mut app = settings_app();
+    app.settings_tab = SettingsTab::General;
+    app.layout.graph = Rect::new(0, 0, 120, 120);
+    app.layout.app = Rect::new(0, 0, 120, 120);
+    app.layout_config.is_file_watcher = true;
+    app.layout_config.is_auto_fetch = false;
+
+    let rendered = rendered_settings(&mut app, &repo, 120, 120);
+
+    assert!(rendered.contains("background:"));
+    assert!(rendered.contains("file watcher:"));
+    assert!(rendered.contains("auto fetch:"));
+    assert!(rendered.contains("🞕"));
+    assert!(rendered.contains("🞎"));
+}
+
+#[test]
+fn settings_background_rows_are_selectable_layout_commands() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let (_path, repo) = temp_repo("background-selectable");
+    let mut app = settings_app();
+    app.settings_tab = SettingsTab::General;
+    app.layout.graph = Rect::new(0, 0, 120, 120);
+    app.layout.app = Rect::new(0, 0, 120, 120);
+
+    rendered_settings(&mut app, &repo, 120, 120);
+
+    let kinds: Vec<_> = app.settings_selections.iter().map(|selection| selection.kind.clone()).collect();
+    assert!(kinds.contains(&SettingsSelectionKind::LayoutCommand(Command::ToggleFileWatcher)));
+    assert!(kinds.contains(&SettingsSelectionKind::LayoutCommand(Command::ToggleAutoFetch)));
+}
+
+#[test]
+fn settings_background_rows_never_show_a_shortcut_column() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let (_path, repo) = temp_repo("background-no-keys");
+    let mut app = settings_app();
+    app.settings_tab = SettingsTab::General;
+    app.layout.graph = Rect::new(0, 0, 120, 120);
+    app.layout.app = Rect::new(0, 0, 120, 120);
+    app.keymaps.get_mut(&InputMode::Normal).unwrap().insert(KeyBinding::new(KeyCode::Char('y'), KeyModifiers::NONE), Command::ToggleFileWatcher);
+
+    let rendered = rendered_settings(&mut app, &repo, 120, 120);
+
+    // Shortcuts belong in the shortcuts tab; binding a key must not make one appear here.
+    assert!(rendered.contains(" file watcher:"));
+    assert!(!rendered.contains("y file watcher:"));
+    assert!(!rendered.contains("W file watcher:"));
+    assert!(!rendered.contains("A auto fetch:"));
+}
+
+#[test]
+fn settings_shortcuts_tab_lists_the_background_toggles() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let (_path, repo) = temp_repo("background-shortcuts");
+    let mut app = settings_app();
+    app.settings_tab = SettingsTab::Shortcuts;
+    app.layout.graph = Rect::new(0, 0, 120, 200);
+    app.layout.app = Rect::new(0, 0, 120, 200);
+    app.keymaps.get_mut(&InputMode::Normal).unwrap().insert(KeyBinding::new(KeyCode::Char('W'), KeyModifiers::SHIFT), Command::ToggleFileWatcher);
+    app.keymaps.get_mut(&InputMode::Normal).unwrap().insert(KeyBinding::new(KeyCode::Char('A'), KeyModifiers::SHIFT), Command::ToggleAutoFetch);
+
+    let rendered = rendered_settings(&mut app, &repo, 120, 200);
+
+    assert!(rendered.contains("Toggle File Watcher"));
+    assert!(rendered.contains("Toggle Auto Fetch"));
+}
+
+#[test]
+fn settings_background_rows_render_translated_and_keyless_in_every_language() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let (_path, repo) = temp_repo("background-i18n");
+
+    for (language, background, file_watcher, auto_fetch) in [
+        (Language::English, "background:", "file watcher:", "auto fetch:"),
+        (Language::Spanish, "segundo plano:", "monitor de archivos:", "fetch automático:"),
+        (Language::French, "arrière-plan :", "surveillance de fichiers:", "fetch automatique:"),
+        (Language::Russian, "фоновые задачи:", "наблюдение за файлами:", "автоматический fetch:"),
+        (Language::Turkish, "arka plan:", "dosya izleyici:", "otomatik fetch:"),
+    ] {
+        // App::default() resets the active language, so switch after building the app.
+        let mut app = settings_app();
+        crate::helpers::localisation::set_active_language(language);
+        app.settings_tab = SettingsTab::General;
+        app.layout.graph = Rect::new(0, 0, 120, 120);
+        app.layout.app = Rect::new(0, 0, 120, 120);
+        // A bound shortcut must not leak into the row in any language.
+        app.keymaps.get_mut(&InputMode::Normal).unwrap().insert(KeyBinding::new(KeyCode::Char('W'), KeyModifiers::SHIFT), Command::ToggleFileWatcher);
+
+        let rendered = rendered_settings(&mut app, &repo, 120, 120);
+
+        assert!(rendered.contains(background), "{language:?} background heading");
+        assert!(rendered.contains(&format!(" {file_watcher}")), "{language:?} file watcher row");
+        assert!(rendered.contains(&format!(" {auto_fetch}")), "{language:?} auto fetch row");
+        assert!(!rendered.contains(&format!("W {file_watcher}")), "{language:?} must not show a shortcut");
+    }
+
+    crate::helpers::localisation::set_active_language(Language::English);
 }

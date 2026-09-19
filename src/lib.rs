@@ -67,6 +67,7 @@ pub mod helpers {
     pub mod text;
     pub mod time;
     pub mod version;
+    pub mod watcher;
 }
 
 pub use app::app::App;

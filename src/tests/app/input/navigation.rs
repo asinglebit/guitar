@@ -1103,6 +1103,7 @@ fn settings_symbol_theme_selection_updates_persists_and_stays_in_settings() {
 
 #[test]
 fn settings_language_selection_updates_persists_and_stays_in_settings() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let path = temp_language_path("select");
     let mut app = App {
         viewport: Viewport::Settings,
@@ -1464,4 +1465,72 @@ fn reflog_selection_refreshes_current_diff() {
     assert_eq!(app.graph_selected, 1);
     assert_eq!(app.oids.get_alias_by_idx(3), root_alias);
     assert_eq!(diff_filenames(&app), vec!["child.txt"]);
+}
+
+#[test]
+fn settings_background_commands_toggle_and_stay_in_settings() {
+    type BackgroundCase = (SettingsSelectionKind, fn(&App) -> bool);
+    let cases: [BackgroundCase; 2] = [
+        (SettingsSelectionKind::LayoutCommand(Command::ToggleFileWatcher), |app| app.layout_config.is_file_watcher),
+        (SettingsSelectionKind::LayoutCommand(Command::ToggleAutoFetch), |app| app.layout_config.is_auto_fetch),
+    ];
+    for (kind, read) in cases {
+        let mut app = App {
+            viewport: Viewport::Settings,
+            focus: Focus::Viewport,
+            settings_selected: 7,
+            settings_selections: vec![SettingsSelection { line: 7, kind }],
+            layout_config: LayoutConfig::default(),
+            ..Default::default()
+        };
+        app.settings_scroll.set(3);
+
+        app.on_select();
+
+        assert!(read(&app));
+        assert_eq!(app.viewport, Viewport::Settings);
+        assert_eq!(app.focus, Focus::Viewport);
+        assert_eq!(app.settings_selected, 7);
+        assert_eq!(app.settings_scroll.get(), 3);
+
+        // Toggling writes layout.json, so flip back and leave the saved layout as it was found.
+        app.on_select();
+        assert!(!read(&app));
+    }
+}
+
+#[test]
+fn background_toggle_handlers_flip_saved_state() {
+    let mut app = App { layout_config: LayoutConfig::default(), ..Default::default() };
+
+    app.on_toggle_file_watcher();
+    assert!(app.layout_config.is_file_watcher);
+    app.on_toggle_file_watcher();
+    assert!(!app.layout_config.is_file_watcher);
+
+    app.on_toggle_auto_fetch();
+    assert!(app.layout_config.is_auto_fetch);
+    app.on_toggle_auto_fetch();
+    assert!(!app.layout_config.is_auto_fetch);
+}
+
+#[test]
+fn toggling_auto_fetch_clears_a_previous_back_off() {
+    let mut app = App { layout_config: LayoutConfig::default(), ..Default::default() };
+    app.auto_fetch_suspended = true;
+
+    app.on_toggle_auto_fetch();
+
+    assert!(!app.auto_fetch_suspended);
+    app.on_toggle_auto_fetch();
+}
+
+#[test]
+fn the_watcher_does_not_start_while_its_toggle_is_off() {
+    let mut app = App { layout_config: LayoutConfig::default(), ..Default::default() };
+    app.path = Some(".".to_string());
+
+    app.sync_file_watcher();
+
+    assert!(app.file_watcher.is_none());
 }

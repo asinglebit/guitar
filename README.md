@@ -38,6 +38,7 @@ made with ♡
 - [Inputs And Keymaps](#inputs-and-keymaps)
 - [Git Operations](#git-operations)
 - [Authentication](#authentication)
+- [Background Tasks](#background-tasks)
 - [Settings](#settings)
 - [Persistence](#persistence)
 - [Configuration Files](#configuration-files)
@@ -293,6 +294,17 @@ For merge commits, file lists and file diffs compare against the first parent.
 
 The settings/help view is opened with `?`. It shows version and the commit heatmap above tabbed settings sections for general, display, auth, repo, and shortcuts. Recent repository rows, performance rows, remote rows, theme rows, layout rows, and keybinding rows are selectable.
 
+### Status Bar
+
+The bottom row shows the current worktree, submodule breadcrumb, and branch on the left. On the right it shows the selection counter, the walker spinner while history is still loading, and indicator circles.
+
+Indicator circles, in left-to-right order:
+
+- Action mode is armed.
+- Zen mode is on.
+- The file watcher is running.
+- Auto fetch is running. The circle is hollow while auto fetch is backed off, so a filled circle always means it is still fetching.
+
 ## Navigation
 
 ### Scope
@@ -521,6 +533,8 @@ Defaults are written to `keymap.json` on first run. User-edited keymaps can diff
 | Toggle Graph Refs | `$` |
 | Shrink Graph Lane Limit | `-` |
 | Grow Graph Lane Limit | `+` |
+| Toggle File Watcher | `Shift+W` |
+| Toggle Auto Fetch | `Shift+A` |
 | Toggle Help / Settings | `?` |
 | Return To Parent Repository | `Backspace` |
 | Action Mode | `Ctrl+a` |
@@ -612,6 +626,8 @@ It fetches:
 - `refs/tags/*` into local tags.
 
 Pruning is enabled.
+
+Fetching can also run on a timer. See [Background Tasks](#background-tasks).
 
 ### Remotes
 
@@ -933,13 +949,42 @@ Use a personal access token as the password when your hosting provider requires 
 
 Only one network operation can run at a time.
 
+## Background Tasks
+
+Two optional background features keep an open repository current without pressing `r`. Both are off by default, both persist in `layout.json`, and both can be toggled from the `background` section of the `general` settings tab or with a shortcut.
+
+### File Watcher
+
+Normal key: `Shift+W`.
+
+The file watcher reloads the repository for you whenever something changes on disk, which is the same thing `r` does. It notices commits, checkouts, branch and tag changes, rebases, merges and staging performed in another terminal, as well as ordinary edits saved from an editor.
+
+- It watches `.git`, `.git/refs`, and the working tree. `.git/objects`, `.git/logs`, `target`, and `node_modules` are excluded, because they churn without changing what the app shows.
+- Filesystem events are coalesced, so one Git command produces one reload rather than a burst.
+- Reloads wait for a safe moment. Nothing is reloaded while a modal, prompt, or operation is open; the reload happens once you close it.
+- While the watcher is running, a blue circle appears in the bottom-right status bar.
+- Very large repositories can exhaust the operating system watch limit. If the watcher cannot start it stays silent, and reload keeps working normally.
+
+### Auto Fetch
+
+Normal key: `Shift+A`.
+
+Auto fetch runs the same fetch as normal `f` against the default remote every 5 seconds, quietly.
+
+- It never opens the progress modal, never takes focus, and never prompts for credentials.
+- It only uses credentials already cached in the current session.
+- The repository reloads only when the fetch actually moved a ref, so an unchanged remote leaves the selection and scroll position untouched.
+- It is skipped while another network operation is running.
+- While auto fetch is enabled, a circle appears in the bottom-right status bar.
+- If a fetch fails, most often because credentials are needed, auto fetch stops retrying and its status bar circle goes hollow. Toggling it again, or completing a manual network operation, re-arms it.
+
 ## Settings
 
 Open settings with `?`.
 
 The settings view includes app version and commit heatmap above these tabs:
 
-- `general`: config file paths, performance settings, and recent repositories.
+- `general`: config file paths, performance settings, background task toggles, and recent repositories.
 - `display`: pane visibility, graph metadata toggles, language, symbol themes, and theme list.
 - `auth`: Git `user.name`, `user.email`, and auth behavior notes.
 - `repo`: remotes and remote URLs.
@@ -952,6 +997,7 @@ Selectable rows:
 - Add remote row: `Enter` opens name and URL prompts.
 - Theme rows: `Enter` activates and saves the selected theme.
 - Display toggle rows: `Enter` toggles the row or resets layout.
+- Background rows: `Enter` toggles the file watcher or auto fetch.
 - Graph lane limit row: `Enter` opens a numeric prompt. Positive values save to `layout.json`; `0` and invalid input keep the modal open without changing the setting. In normal mode, `-` and `+` shrink or grow the saved graph lane limit by one and reload an open repository.
 - Keybinding rows: `Enter` opens key capture.
 
@@ -1026,7 +1072,7 @@ Windows: %APPDATA%\guitar
 The app writes:
 
 - `keymap.json`: keyboard mappings.
-- `layout.json`: pane visibility, widths, weights, graph metadata display, graph reflog setting, graph lane limit, zen/minimal state.
+- `layout.json`: pane visibility, widths, weights, graph metadata display, graph reflog setting, graph lane limit, zen/minimal state, and background task toggles.
 - `theme.json`: active theme and all color slots.
 - `symbols.json`: active symbol theme and all configurable UI symbols.
 - `recent.json`: recent repository paths.
@@ -1130,6 +1176,8 @@ Default layout:
   "is_status": true,
   "is_inspector": true,
   "is_zen": false,
+  "is_file_watcher": false,
+  "is_auto_fetch": false,
   "width_left_pane": 45,
   "width_right_pane": 46,
   "weight_branches": 100,
@@ -1280,13 +1328,12 @@ Important source areas:
 - `src/git/actions/`: mutating Git operations.
 - `src/git/queries/`: repository reads, diffs, commits, reflogs, worktrees, submodules.
 - `src/git/auth.rs`: network credential classification, prompting, and session cache.
-- `src/helpers/`: keymaps, layout persistence, themes, recent repos, symbols, text, colors.
+- `src/helpers/`: keymaps, layout persistence, themes, recent repos, symbols, text, colors, filesystem watcher.
 
 Graph internals are documented separately in [GRAPH.MD](GRAPH.MD), including lane snapshots, compressed lanes, walker/buffer behavior, and renderer alignment.
 
 ## Known Limitations
 
-- No filesystem watcher. Use reload when repository state changes outside the app.
 - Current branch push is force push only.
 - No pull UI.
 - Conflict resolution editing is external.

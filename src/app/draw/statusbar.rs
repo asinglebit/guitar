@@ -101,6 +101,18 @@ impl App {
             action_hint.push(Span::styled(format!("{} ", self.symbols.graph.commit_branch), Style::default().fg(self.theme.COLOR_GRASS)));
         }
 
+        // File watcher indicator
+        if self.layout_config.is_file_watcher {
+            action_hint.push(Span::styled(format!("{} ", self.symbols.graph.commit_branch), Style::default().fg(self.theme.COLOR_BLUE)));
+        }
+
+        // Auto fetch indicator. It goes hollow once the fetcher has backed itself off, so a filled
+        // circle never claims that fetching is still happening.
+        if self.layout_config.is_auto_fetch {
+            let symbol = if self.auto_fetch_suspended { &self.symbols.graph.commit } else { &self.symbols.graph.commit_branch };
+            action_hint.push(Span::styled(format!("{symbol} "), Style::default().fg(self.theme.COLOR_PURPLE)));
+        }
+
         let mut right_spans = vec![Span::styled(if total == 0 { "".to_string() } else { format!("{}/{}{} ", cursor, total, icon_spinner) }, Style::default().fg(self.theme.COLOR_TEXT))];
 
         right_spans.extend(action_hint);

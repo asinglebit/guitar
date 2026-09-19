@@ -393,6 +393,9 @@ fn es(en: &'static str) -> &'static str {
         " active custom symbols:" => " símbolos personalizados activos:",
         "auth" => "auth",
         " authorization:" => " autorización:",
+        "auto fetch" => "fetch automático",
+        " background:" => " segundo plano:",
+        "file watcher" => "monitor de archivos",
         "branches" => "ramas",
         "committer date/time" => "fecha/hora del committer",
         "committers" => "committers",
@@ -501,6 +504,8 @@ fn es(en: &'static str) -> &'static str {
         "Toggle status" => "Alternar estado",
         "Toggle inspector" => "Alternar inspector",
         "Toggle SHAs" => "Alternar SHAs",
+        "Toggle file watcher" => "Alternar monitor de archivos",
+        "Toggle auto fetch" => "Alternar fetch automático",
         "Toggle help" => "Alternar ayuda",
         "Action mode" => "Modo acción",
         "Remove recent repository" => "Eliminar repositorio reciente",
@@ -701,6 +706,9 @@ fn fr(en: &'static str) -> &'static str {
         " active custom:" => " personnalisé actif :",
         " active custom symbols:" => " symboles personnalisés actifs :",
         " authorization:" => " autorisation :",
+        "auto fetch" => "fetch automatique",
+        " background:" => " arrière-plan :",
+        "file watcher" => "surveillance de fichiers",
         "branches" => "branches",
         " credentials:" => " identifiants :",
         " default remote:" => " distant par défaut :",
@@ -868,6 +876,9 @@ fn ru(en: &'static str) -> &'static str {
         "complete" => "завершено",
         "conflict" => "конфликт",
         " actions:" => " действия:",
+        "auto fetch" => "автоматический fetch",
+        " background:" => " фоновые задачи:",
+        "file watcher" => "наблюдение за файлами",
         "branches" => "ветки",
         " credentials:" => " учётные данные:",
         " default remote:" => " удалённый по умолчанию:",
@@ -1000,6 +1011,9 @@ fn tr_tr(en: &'static str) -> &'static str {
         "complete" => "tamamlandı",
         "conflict" => "çakışma",
         " actions:" => " eylemler:",
+        "auto fetch" => "otomatik fetch",
+        " background:" => " arka plan:",
+        "file watcher" => "dosya izleyici",
         "branches" => "dallar",
         " credentials:" => " kimlik bilgileri:",
         " default remote:" => " varsayılan remote:",
@@ -1157,6 +1171,8 @@ fn fr_extra(en: &'static str) -> &'static str {
             "Échec de l’indexation du fichier : résolvez les conflits dans votre éditeur, puis continuez l’opération active"
         },
         "Toggle SHAs" => "Basculer les SHAs",
+        "Toggle file watcher" => "Basculer la surveillance de fichiers",
+        "Toggle auto fetch" => "Basculer le fetch automatique",
         "Toggle graph committers" => "Basculer les committers du graphe",
         "Toggle graph dates" => "Basculer les dates du graphe",
         "Toggle graph reflogs" => "Basculer les reflogs du graphe",
@@ -1396,6 +1412,8 @@ fn ru_extra(en: &'static str) -> &'static str {
         "Shrink graph lane limit" => "Уменьшить лимит дорожек графа",
         "Grow graph lane limit" => "Увеличить лимит дорожек графа",
         "Toggle SHAs" => "Переключить SHA",
+        "Toggle file watcher" => "Переключить наблюдение за файлами",
+        "Toggle auto fetch" => "Переключить автоматический fetch",
         "Toggle branch" => "Переключить ветку",
         "Toggle branches" => "Переключить ветки",
         "Toggle graph committers" => "Переключить committers графа",
@@ -1673,6 +1691,8 @@ fn tr_extra(en: &'static str) -> &'static str {
         "Shrink graph lane limit" => "Grafik şerit sınırını azalt",
         "Grow graph lane limit" => "Grafik şerit sınırını artır",
         "Toggle SHAs" => "SHA’ları aç/kapat",
+        "Toggle file watcher" => "Dosya izleyiciyi aç/kapat",
+        "Toggle auto fetch" => "Otomatik fetch’i aç/kapat",
         "Toggle branch" => "Dalı aç/kapat",
         "Toggle branches" => "Dalları aç/kapat",
         "Toggle graph committers" => "Grafik commit yapanlarını aç/kapat",
@@ -2526,6 +2546,8 @@ localized_module!(settings {
     ACTIVE_CUSTOM_SYMBOLS => " active custom symbols:",
     AUTH => "auth",
     AUTHORIZATION => " authorization:",
+    AUTO_FETCH => "auto fetch",
+    BACKGROUND => " background:",
     BRANCHES => "branches",
     COMMITTER_DATE_TIME => "committer date/time",
     COMMITTERS => "committers",
@@ -2534,6 +2556,7 @@ localized_module!(settings {
     DISPLAY => "display",
     EMAIL => " email:",
     ENTER_ACTION => "(enter)",
+    FILE_WATCHER => "file watcher",
     GENERAL => "general",
     GRAPH_METADATA => " graph metadata:",
     GRAPH_LANE_LIMIT => " graph lane limit:",
@@ -2635,6 +2658,10 @@ localized_module!(status {
     NEW_COMMITS => "new commits",
     UNTRACKED => "untracked",
 });
+
+// The active language is process-global, so tests that switch it must not run concurrently.
+#[cfg(test)]
+pub static LANGUAGE_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[cfg(test)]
 #[path = "../tests/helpers/localisation.rs"]

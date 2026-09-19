@@ -52,6 +52,8 @@ pub enum Command {
     ToggleStatus,
     ToggleInspector,
     ToggleShas,
+    ToggleFileWatcher,
+    ToggleAutoFetch,
     ToggleHelp,
     ActionMode,
     Exit,
@@ -194,6 +196,8 @@ pub fn command_to_visual_string(command: &Command) -> String {
         Command::ToggleStatus => "Toggle status",
         Command::ToggleInspector => "Toggle inspector",
         Command::ToggleShas => "Toggle SHAs",
+        Command::ToggleFileWatcher => "Toggle file watcher",
+        Command::ToggleAutoFetch => "Toggle auto fetch",
         Command::ToggleHelp => "Toggle help",
         Command::ActionMode => "Action mode",
         Command::Exit => "Exit",
@@ -640,6 +644,11 @@ fn default_normal_keymap() -> IndexMap<KeyBinding, Command> {
     map.insert(KeyBinding::new(Char('-'), KeyModifiers::NONE), Command::ShrinkGraphLaneLimit);
     map.insert(KeyBinding::new(Char('+'), KeyModifiers::NONE), Command::GrowGraphLaneLimit);
 
+    // 'W' for the file watcher and 'A' for auto fetch. Action mode rebinds both keys to
+    // Remove Worktree and Abort, so these stay normal-mode only.
+    map.insert(KeyBinding::new(Char('W'), KeyModifiers::SHIFT), Command::ToggleFileWatcher);
+    map.insert(KeyBinding::new(Char('A'), KeyModifiers::SHIFT), Command::ToggleAutoFetch);
+
     map
 }
 
@@ -877,7 +886,12 @@ fn ensure_default_keymap_bindings(maps: &mut Keymaps) -> bool {
         normal_map.insert(return_parent_key, Command::ReturnToParentRepository);
         changed = true;
     }
-    let normal_only_defaults = [(KeyBinding::new(Char('-'), KeyModifiers::NONE), Command::ShrinkGraphLaneLimit), (KeyBinding::new(Char('+'), KeyModifiers::NONE), Command::GrowGraphLaneLimit)];
+    let normal_only_defaults = [
+        (KeyBinding::new(Char('-'), KeyModifiers::NONE), Command::ShrinkGraphLaneLimit),
+        (KeyBinding::new(Char('+'), KeyModifiers::NONE), Command::GrowGraphLaneLimit),
+        (KeyBinding::new(Char('W'), KeyModifiers::SHIFT), Command::ToggleFileWatcher),
+        (KeyBinding::new(Char('A'), KeyModifiers::SHIFT), Command::ToggleAutoFetch),
+    ];
     for (key, command) in normal_only_defaults {
         if insert_default_binding_if_available(normal_map, key, command) {
             changed = true;

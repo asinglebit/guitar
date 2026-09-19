@@ -1,11 +1,12 @@
 use crate::{
-    app::app::{App, AuthInputField, BranchModalAction, Focus, OperationKind, PendingOperationAction, Viewport},
+    app::app::{AUTO_FETCH_INTERVAL, App, AuthInputField, BranchModalAction, Focus, OperationKind, PendingOperationAction, Viewport},
     core::graph_service::GraphPaneRow,
     git::{
         actions::{
             branching::delete_branch,
             checkout::{checkout_branch, checkout_head},
             cherrypicking::{CherrypickOutcome, abort_cherrypick, continue_cherrypick, is_cherrypick_in_progress},
+            fetching::fetch_remote_quiet,
             merging::{MergeOutcome, abort_merge, continue_merge, is_merge_in_progress, start_merge},
             network::NetworkRequest,
             rebasing::{RebaseOutcome, abort_rebase, continue_rebase, is_rebase_in_progress, start_rebase},
@@ -25,7 +26,7 @@ use crate::{
     },
 };
 use git2::{BranchType, Repository, RepositoryState};
-use std::path::Path;
+use std::{path::Path, time::Instant};
 
 impl App {
     const MAX_AUTH_ATTEMPTS: usize = 3;
@@ -77,6 +78,50 @@ impl App {
         }
     }
 
+    // The background fetcher. Unlike start_network_request it never takes focus, never opens the
+    // auth modal and never shows an error: a failure just backs it off until the user re-arms it.
+    pub fn poll_auto_fetch(&mut self) {
+        // Collect a finished run first so the interval is measured from completion, not from start.
+        if self.auto_fetch_handle.as_ref().is_some_and(|handle| handle.is_finished()) {
+            if let Some(handle) = self.auto_fetch_handle.take() {
+                match handle.join() {
+                    Ok(outcome) if outcome.ok => {
+                        if outcome.changed {
+                            // Hand the reload to the same pending marker the watcher uses, so it
+                            // waits for a safe moment instead of interrupting a modal.
+                            self.pending_reload_since = Some(Instant::now());
+                        }
+                    },
+                    // Almost always missing credentials. Backing off avoids hammering the network
+                    // every interval; a toggle or a successful manual fetch re-arms it.
+                    _ => self.auto_fetch_suspended = true,
+                }
+            }
+            self.auto_fetch_last = Instant::now();
+        }
+
+        if !self.layout_config.is_auto_fetch || self.auto_fetch_suspended || self.auto_fetch_handle.is_some() {
+            return;
+        }
+        // Stay out of the way of user-initiated network work rather than racing it for ref locks.
+        if self.network_handle.is_some() || self.auto_fetch_last.elapsed() < AUTO_FETCH_INTERVAL {
+            return;
+        }
+
+        let Some(repo) = self.repo.clone() else {
+            return;
+        };
+        let Some(remote_name) = effective_default_remote(&repo) else {
+            // Nothing to fetch from, so stop trying instead of rechecking every interval.
+            self.auto_fetch_suspended = true;
+            return;
+        };
+        let repo_path = self.path.as_deref().unwrap_or(".").to_string();
+
+        self.auto_fetch_last = Instant::now();
+        self.auto_fetch_handle = Some(fetch_remote_quiet(&repo_path, &remote_name, self.auth_session.clone()));
+    }
+
     pub(crate) fn handle_network_result(&mut self, result: NetworkResult) {
         match result {
             NetworkResult::Success => {
@@ -97,6 +142,8 @@ impl App {
                     }
                 }
                 self.focus = Focus::Viewport;
+                // A manual network operation proves credentials work, so re-arm any backed-off auto fetch.
+                self.arm_auto_fetch();
                 self.reload(None);
             },
             NetworkResult::AuthRequired(AuthRequired { challenge, rejected }) => {

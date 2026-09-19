@@ -36,6 +36,7 @@ use crate::{
         tags::Tags,
     },
     git::{
+        actions::fetching::QuietFetchOutcome,
         actions::network::NetworkRequest,
         queries::{
             commits::get_git_user_info,
@@ -43,7 +44,13 @@ use crate::{
             helpers::{FileChange, UncommittedChanges},
         },
     },
-    helpers::{colors::ColorPicker, keymap::InputMode, palette::*, spinner::Spinner},
+    helpers::{
+        colors::ColorPicker,
+        keymap::InputMode,
+        palette::*,
+        spinner::Spinner,
+        watcher::{RepoWatcher, spawn_repo_watcher},
+    },
 };
 use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture, KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags},
@@ -648,9 +655,24 @@ pub struct App {
     pub modal_network_title: String,
     pub modal_network_message: String,
 
+    // Background file watcher and auto fetcher. Both are opt-in and never steal focus.
+    pub file_watcher: Option<RepoWatcher>,
+    // Set by the watcher and by a changed auto fetch; drained once a reload is safe.
+    pub pending_reload_since: Option<Instant>,
+    pub auto_fetch_handle: Option<JoinHandle<QuietFetchOutcome>>,
+    pub auto_fetch_last: Instant,
+    pub auto_fetch_suspended: bool,
+
     // Main loop shutdown flag.
     pub is_exit: bool,
 }
+
+// A single git command emits a burst of filesystem events, and reload() rewalks the whole graph, so
+// events are coalesced until the repository has been quiet for this long.
+const WATCHER_QUIET_PERIOD: Duration = Duration::from_millis(300);
+
+// How often the background fetcher tries the default remote.
+pub const AUTO_FETCH_INTERVAL: Duration = Duration::from_secs(5);
 
 impl App {
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
@@ -683,6 +705,8 @@ impl App {
                     self.sync(repo);
                 }
                 self.poll_network_request();
+                self.poll_auto_fetch();
+                self.poll_file_watcher();
 
                 terminal.draw(|frame| self.draw(frame))?;
                 self.run_pending_operation_action();
@@ -1005,6 +1029,81 @@ impl App {
 
             self.walker_handle = Some(handle);
         }
+
+        // Re-target the watcher after a repository, worktree or submodule switch.
+        self.sync_file_watcher();
+    }
+
+    // Start, stop or re-target the watcher so it always matches the toggle and the open repository.
+    pub fn sync_file_watcher(&mut self) {
+        let path = self.path.clone().filter(|_| self.layout_config.is_file_watcher);
+        let Some(path) = path else {
+            // Dropping the watcher releases its OS watches.
+            self.file_watcher = None;
+            self.pending_reload_since = None;
+            return;
+        };
+        if self.file_watcher.as_ref().is_some_and(|watcher| watcher.path == path) {
+            return;
+        }
+        self.file_watcher = spawn_repo_watcher(&path);
+        self.pending_reload_since = None;
+    }
+
+    // Clear any back-off and restart the interval, so a toggle or a manual fetch re-arms auto fetch.
+    pub fn arm_auto_fetch(&mut self) {
+        self.auto_fetch_suspended = false;
+        self.auto_fetch_last = Instant::now();
+    }
+
+    // Reloading under a modal would tear down whatever the user is in the middle of, so background
+    // reloads wait for a plain pane focus. The allow-list is deliberate: a modal added later is
+    // excluded by default.
+    pub(crate) fn is_auto_reload_safe(&self) -> bool {
+        if self.viewport == Viewport::Splash || self.network_handle.is_some() || self.pending_operation_action.is_some() {
+            return false;
+        }
+        if !matches!(
+            self.focus,
+            Focus::Viewport
+                | Focus::Inspector
+                | Focus::StatusTop
+                | Focus::StatusBottom
+                | Focus::Search
+                | Focus::Branches
+                | Focus::Tags
+                | Focus::Stashes
+                | Focus::Reflogs
+                | Focus::Worktrees
+                | Focus::Submodules
+        ) {
+            return false;
+        }
+        // reload() unwraps the configured identity, so reloading without one would panic the app.
+        self.repo.as_ref().and_then(|repo| get_git_user_info(repo).ok()).is_some_and(|(name, email)| name.is_some() && email.is_some())
+    }
+
+    // Drain the watcher channel and reload once the burst has settled.
+    pub fn poll_file_watcher(&mut self) {
+        let mut changed = false;
+        if let Some(watcher) = &self.file_watcher {
+            while watcher.rx.try_recv().is_ok() {
+                changed = true;
+            }
+        }
+        if changed {
+            self.pending_reload_since = Some(Instant::now());
+        }
+
+        let Some(pending_since) = self.pending_reload_since else {
+            return;
+        };
+        if pending_since.elapsed() < WATCHER_QUIET_PERIOD || !self.is_auto_reload_safe() {
+            // Keep the marker so the reload lands as soon as the user closes whatever is open.
+            return;
+        }
+        self.pending_reload_since = None;
+        self.on_reload();
     }
 
     pub fn sync(&mut self, repo: &git2::Repository) {
