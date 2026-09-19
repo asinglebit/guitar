@@ -188,8 +188,16 @@ pub fn load_layout_config() -> LayoutConfig {
 }
 
 pub fn save_layout_config(config: &LayoutConfig) {
-    let path = layout_path();
-    save_layout_config_to_path(&path, config);
+    // Tests drive real toggle handlers, and those persist. Writing the developer's own layout.json
+    // from a test run would quietly change their settings, so the real path is only touched outside
+    // tests. Persistence itself is covered through save_layout_config_to_path.
+    #[cfg(test)]
+    let _ = config;
+    #[cfg(not(test))]
+    {
+        let path = layout_path();
+        save_layout_config_to_path(&path, config);
+    }
 }
 
 fn save_layout_config_to_path(path: &Path, config: &LayoutConfig) {
