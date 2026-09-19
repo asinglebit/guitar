@@ -381,8 +381,14 @@ fn branch_toggle_uses_git_branch_universe_when_pane_window_is_partial() {
         branches_selected: 1,
         ..Default::default()
     };
-    app.graph.branches_window =
-        Some(PaneWindowCache { version: 1, start: 1, end: 2, total: 3, rows: vec![GraphPaneRow::Branch { alias: 1, name: "main".to_string(), is_local: true, lane: None, graph_index: Some(1) }] });
+    app.graph.branches_window = Some(PaneWindowCache {
+        version: 1,
+        start: 1,
+        end: 2,
+        total: 3,
+        rows: vec![GraphPaneRow::Branch { alias: 1, name: "main".to_string(), is_local: true, lane: None, graph_index: Some(1) }],
+        is_stale: false,
+    });
 
     app.on_toggle_branch();
 
@@ -831,6 +837,7 @@ fn zen_graph_narrow_promotes_cached_window_row_before_opening_inspector() {
             reflog: None,
         }],
         history: Default::default(),
+        is_stale: false,
     });
 
     app.on_narrow_scope();

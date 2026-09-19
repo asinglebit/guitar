@@ -86,6 +86,7 @@ fn app_with_cached_window(start: usize, summaries: &[&str], oid: Oid) -> App {
         head_alias: 1,
         rows: summaries.iter().enumerate().map(|(offset, summary)| graph_row(start + offset, (start + offset + 1) as u32, oid, summary)).collect(),
         history: GraphHistory::new(),
+        is_stale: false,
     });
     app
 }
@@ -116,6 +117,7 @@ fn app_with_uncommitted_window(window_end: usize, history_len: usize, oid: Oid) 
         head_alias: 1,
         rows: (0..window_end).map(|index| if index == 0 { graph_row(index, NONE, Oid::zero(), "") } else { graph_row(index, index as u32, oid, &format!("row{index}")) }).collect(),
         history: graph_history(history_len),
+        is_stale: false,
     });
     app
 }
@@ -397,4 +399,27 @@ fn zero_sized_graph_draw_does_not_request_empty_window() {
         .unwrap();
 
     assert!(rx.try_recv().is_err());
+}
+
+#[test]
+fn retained_window_keeps_selection_scroll_and_rows_through_a_draw_after_reload() {
+    let (_path, repo, oid) = temp_repo("retained-draw");
+    let mut app = app_with_cached_window(400, &["row400", "row401", "row402"], oid);
+    // The shape right after a same-repository reload: rows and count retained, window marked stale.
+    app.graph.total = 5000;
+    app.graph.graph_window.as_mut().unwrap().is_stale = true;
+    app.graph_selected = 401;
+    app.graph_scroll.set(400);
+
+    let mut terminal = Terminal::new(TestBackend::new(80, 3)).unwrap();
+    terminal.draw(|frame| app.draw_graph(frame, &repo)).unwrap();
+
+    // Before retaining `total`, graph_commit_count() collapsed to 1 here and the draw pass clamped
+    // both of these to 0, which is the jump to the top that reload used to produce.
+    assert_eq!(app.graph_selected, 401);
+    assert_eq!(app.graph_scroll.get(), 400);
+
+    let lines = rendered_lines(&terminal);
+    assert!(lines[0].contains("row400"), "retained rows should still draw: {lines:?}");
+    assert!(lines[1].contains("row401"), "{lines:?}");
 }

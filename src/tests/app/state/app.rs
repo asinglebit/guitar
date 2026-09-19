@@ -162,7 +162,7 @@ fn reload_captures_selected_commit_oid_and_visual_offset_for_restore() {
     let mut app =
         App { path: Some(path_string.clone()), recent: vec![path_string], repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, graph_selected: 4, ..Default::default() };
     app.graph_scroll.set(2);
-    app.graph.graph_window = Some(GraphWindowCache { version: 1, start: 4, end: 5, head_alias: 9, rows: vec![graph_row(4, 9, oid)], history: Default::default() });
+    app.graph.graph_window = Some(GraphWindowCache { version: 1, start: 4, end: 5, head_alias: 9, rows: vec![graph_row(4, 9, oid)], history: Default::default(), is_stale: false });
 
     app.reload(None);
 
@@ -344,7 +344,7 @@ fn graph_window_request_reuses_cached_window_that_covers_range() {
     let mut app = App { graph_tx: Some(tx), ..Default::default() };
     app.graph.generation = 7;
     app.graph.version = 2;
-    app.graph.graph_window = Some(GraphWindowCache { version: 2, start: 0, end: 10, head_alias: 1, rows: Vec::new(), history: Default::default() });
+    app.graph.graph_window = Some(GraphWindowCache { version: 2, start: 0, end: 10, head_alias: 1, rows: Vec::new(), history: Default::default(), is_stale: false });
 
     app.request_graph_window(2, 8);
 
@@ -368,7 +368,7 @@ fn pane_window_request_reuses_cached_window_that_covers_range() {
     let mut app = App { graph_tx: Some(tx), ..Default::default() };
     app.graph.generation = 7;
     app.graph.version = 2;
-    app.graph.branches_window = Some(PaneWindowCache { version: 2, start: 0, end: 10, total: 20, rows: Vec::new() });
+    app.graph.branches_window = Some(PaneWindowCache { version: 2, start: 0, end: 10, total: 20, rows: Vec::new(), is_stale: false });
 
     app.request_pane_window(GraphPane::Branches, 2, 8);
 
@@ -430,4 +430,125 @@ fn an_owed_reload_survives_until_it_is_safe_to_run() {
     // Reloading under a prompt would discard what the user is typing, so it waits instead.
     assert!(app.pending_reload, "an owed reload must not be dropped while a modal is open");
     assert!(!app.is_auto_reload_safe());
+}
+
+fn pane_cache(is_stale: bool) -> PaneWindowCache {
+    PaneWindowCache { version: 2, start: 0, end: 10, total: 20, rows: Vec::new(), is_stale }
+}
+
+#[test]
+fn stale_graph_window_still_requests_a_replacement() {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let mut app = App { graph_tx: Some(tx), ..Default::default() };
+    app.graph.generation = 7;
+    app.graph.graph_window = Some(GraphWindowCache { version: 2, start: 0, end: 10, head_alias: 1, rows: Vec::new(), history: Default::default(), is_stale: true });
+
+    // The range is covered and the retained version still beats the reset one, so without the
+    // staleness check this request is skipped and the retained rows are never replaced.
+    app.request_graph_window(2, 8);
+
+    assert!(matches!(rx.try_recv(), Ok(GraphCommand::QueryGraphWindow { start: 2, end: 8, .. })));
+}
+
+#[test]
+fn stale_pane_window_still_requests_a_replacement() {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let mut app = App { graph_tx: Some(tx), ..Default::default() };
+    app.graph.generation = 7;
+    app.graph.branches_window = Some(pane_cache(true));
+
+    app.request_pane_window(GraphPane::Branches, 2, 8);
+
+    assert!(matches!(rx.try_recv(), Ok(GraphCommand::QueryPaneWindow { pane: GraphPane::Branches, start: 2, end: 8, .. })));
+}
+
+#[test]
+fn reload_retains_the_visible_view_for_the_same_repository() {
+    let (path, repo) = temp_repo("retain-same-repo");
+    let oid = commit_file(&repo, "retained.txt", "retained");
+    let path_string = path.display().to_string();
+    let mut app =
+        App { path: Some(path_string.clone()), recent: vec![path_string], repo: Some(Rc::new(repo)), viewport: Viewport::Graph, focus: Focus::Viewport, graph_selected: 4, ..Default::default() };
+    app.graph_scroll.set(2);
+    app.graph.total = 5000;
+    app.graph.graph_window = Some(GraphWindowCache { version: 1, start: 4, end: 5, head_alias: 9, rows: vec![graph_row(4, 9, oid)], history: Default::default(), is_stale: false });
+    app.graph.branches_window = Some(pane_cache(false));
+    app.graph.tags_window = Some(pane_cache(false));
+    app.graph.stashes_window = Some(pane_cache(false));
+    app.graph.reflogs_window = Some(pane_cache(false));
+    app.heatmap[0][0] = 7;
+    app.is_uncommitted_loaded = true;
+
+    app.reload(None);
+
+    // Rows stay on screen so the panes do not blank.
+    assert!(app.graph.graph_window.as_ref().is_some_and(|window| window.is_stale && window.rows.len() == 1));
+    for window in [&app.graph.branches_window, &app.graph.tags_window, &app.graph.stashes_window, &app.graph.reflogs_window] {
+        assert!(window.as_ref().is_some_and(|window| window.is_stale), "every pane window should be retained and marked stale");
+    }
+    // Retaining the count is what stops the draw pass clamping the selection and scroll to the top.
+    assert_eq!(app.graph.total, 5000);
+    assert_eq!(app.graph_commit_count(), 5000);
+    assert_eq!(app.graph_selected, 4);
+    assert_eq!(app.graph_scroll.get(), 2);
+    assert_eq!(app.heatmap[0][0], 7);
+    assert!(app.is_uncommitted_loaded);
+    // The off-window lookup cache is deliberately dropped.
+    assert!(app.graph.index_rows.is_empty());
+    stop_graph_service(&mut app);
+}
+
+#[test]
+fn reload_clears_the_visible_view_when_switching_repository() {
+    let (path, repo) = temp_repo("retain-switch-from");
+    let oid = commit_file(&repo, "from.txt", "from");
+    let (other_path, other_repo) = temp_repo("retain-switch-to");
+    commit_file(&other_repo, "to.txt", "to");
+    let path_string = path.display().to_string();
+    let other_string = other_path.display().to_string();
+    let mut app = App {
+        path: Some(path_string.clone()),
+        recent: vec![path_string, other_string.clone()],
+        repo: Some(Rc::new(repo)),
+        viewport: Viewport::Graph,
+        focus: Focus::Viewport,
+        graph_selected: 4,
+        ..Default::default()
+    };
+    app.graph.total = 5000;
+    app.graph.graph_window = Some(GraphWindowCache { version: 1, start: 4, end: 5, head_alias: 9, rows: vec![graph_row(4, 9, oid)], history: Default::default(), is_stale: false });
+    app.graph.branches_window = Some(pane_cache(false));
+    app.heatmap[0][0] = 7;
+    app.is_uncommitted_loaded = true;
+
+    app.reload(Some(other_string));
+
+    // Showing the previous repository's history here would present it as if it were the new one.
+    assert!(app.graph.graph_window.is_none());
+    assert!(app.graph.branches_window.is_none());
+    assert_eq!(app.graph.total, 0);
+    assert_eq!(app.heatmap[0][0], 0);
+    assert!(!app.is_uncommitted_loaded);
+    stop_graph_service(&mut app);
+}
+
+#[test]
+fn a_delivered_window_replaces_the_retained_one() {
+    let (_path, repo) = temp_repo("retain-replace");
+    let oid = commit_file(&repo, "replace.txt", "replace");
+    let mut app = App { viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+    app.graph.generation = 3;
+    app.graph.graph_window = Some(GraphWindowCache { version: 1, start: 0, end: 1, head_alias: 9, rows: Vec::new(), history: Default::default(), is_stale: true });
+    app.graph.branches_window = Some(pane_cache(true));
+    app.graph.requested_graph = Some((1, 0, 1));
+
+    app.handle_graph_event(
+        &repo,
+        GraphEvent::GraphWindow { generation: 3, request_id: 1, version: 5, start: 0, end: 1, total: 42, head_alias: 9, rows: vec![graph_row(0, 9, oid)], history: Default::default() },
+    );
+    app.handle_graph_event(&repo, GraphEvent::PaneWindow { generation: 3, version: 5, pane: GraphPane::Branches, start: 0, end: 1, total: 3, rows: Vec::new() });
+
+    assert!(app.graph.graph_window.as_ref().is_some_and(|window| !window.is_stale));
+    assert!(app.graph.branches_window.as_ref().is_some_and(|window| !window.is_stale));
+    assert_eq!(app.graph.total, 42);
 }

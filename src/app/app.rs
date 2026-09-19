@@ -198,6 +198,9 @@ pub struct GraphWindowCache {
     pub head_alias: u32,
     pub rows: Vec<GraphRow>,
     pub history: GraphHistory,
+    // Retained from the previous reload so the rows stay on screen. Still drawn, but never counted
+    // as cached for request purposes, or the replacement would never be fetched.
+    pub is_stale: bool,
 }
 
 #[derive(Default)]
@@ -207,6 +210,8 @@ pub struct PaneWindowCache {
     pub end: usize,
     pub total: usize,
     pub rows: Vec<GraphPaneRow>,
+    // See GraphWindowCache::is_stale.
+    pub is_stale: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -243,6 +248,29 @@ pub struct GraphClientCache {
 }
 
 impl GraphClientCache {
+    // Carry the visible rows and the row count across a same-repository reload so the panes keep
+    // their content instead of blanking. Retaining `total` matters as much as the windows: without
+    // it graph_commit_count() collapses to 1 and the draw pass clamps the selection and scroll to
+    // the top before the asynchronous restore can run.
+    //
+    // Deliberately dropped: index_rows, the off-window lookup cache. A stale entry there could
+    // surface the wrong commit in the inspector well after the reload, and a retained graph_window
+    // already covers the selected row.
+    fn retaining(previous: Self, generation: Generation, pending_selection_restore: Option<GraphSelectionRestore>) -> Self {
+        let mark = |window: Option<PaneWindowCache>| window.map(|window| PaneWindowCache { is_stale: true, ..window });
+        Self {
+            generation,
+            pending_selection_restore,
+            total: previous.total,
+            graph_window: previous.graph_window.map(|window| GraphWindowCache { is_stale: true, ..window }),
+            branches_window: mark(previous.branches_window),
+            tags_window: mark(previous.tags_window),
+            stashes_window: mark(previous.stashes_window),
+            reflogs_window: mark(previous.reflogs_window),
+            ..Default::default()
+        }
+    }
+
     pub fn next_request_id(&mut self) -> RequestId {
         self.next_request_id = self.next_request_id.saturating_add(1);
         self.next_request_id
@@ -902,6 +930,10 @@ impl App {
         let existing_hidden_branch_names = self.branches.hidden_branch_names.clone();
         let previous_path = self.path.clone();
         let has_override_path = override_path.is_some();
+        // An override path is the only way reload() changes repository, so it is an exact test for
+        // "same repository". Keeping the previous view is what stops the panes blanking; doing it
+        // while switching repositories would briefly present another repository's history as real.
+        let retain_view = !has_override_path;
         let pending_selection_restore = if override_path.is_none() && self.graph_selected != 0 {
             self.graph_identity_at(self.graph_selected)
                 .map(|identity| GraphSelectionRestore { oid: identity.oid, selected_offset: self.graph_selected.saturating_sub(self.graph_scroll.get()) })
@@ -910,16 +942,21 @@ impl App {
             None
         };
 
-        // Clear derived data; the walker will repopulate it asynchronously.
-        self.heatmap = empty_heatmap();
-        self.current_diff = Vec::new();
-        self.current_diff_identity = None;
-        self.is_uncommitted_loaded = false;
-        self.uncommitted = UncommittedChanges::default();
-        self.viewer_lines = Vec::new();
-        self.viewer_split_rows = Vec::new();
-        self.viewer_edges = Vec::new();
-        self.viewer_hunks = Vec::new();
+        // Clear derived data; the walker will repopulate it asynchronously. On a same-repository
+        // reload it is left in place instead, so it is overwritten rather than blanked first.
+        if !retain_view {
+            self.heatmap = empty_heatmap();
+            self.current_diff = Vec::new();
+            self.current_diff_identity = None;
+            self.is_uncommitted_loaded = false;
+            self.uncommitted = UncommittedChanges::default();
+            self.viewer_lines = Vec::new();
+            self.viewer_split_rows = Vec::new();
+            self.viewer_edges = Vec::new();
+            self.viewer_hunks = Vec::new();
+        }
+
+        // These are only read through the pre-windowing fallback paths, so they always reset.
         self.branches = Branches::default();
         self.tags = Tags::default();
         self.stashes = Stashes::default();
@@ -1002,7 +1039,11 @@ impl App {
             self.walker_cancel = Some(cancel);
 
             let generation = self.graph.generation.saturating_add(1);
-            self.graph = GraphClientCache { generation, pending_selection_restore, ..Default::default() };
+            self.graph = if retain_view {
+                GraphClientCache::retaining(std::mem::take(&mut self.graph), generation, pending_selection_restore)
+            } else {
+                GraphClientCache { generation, pending_selection_restore, ..Default::default() }
+            };
 
             let (command_tx, command_rx) = channel();
             let (event_tx, event_rx) = channel();
@@ -1157,7 +1198,7 @@ impl App {
                 }
                 self.graph.version = self.graph.version.max(version);
                 self.graph.total = total;
-                self.graph.graph_window = Some(GraphWindowCache { version, start, end, head_alias, rows, history });
+                self.graph.graph_window = Some(GraphWindowCache { version, start, end, head_alias, rows, history, is_stale: false });
                 self.graph.requested_graph = None;
 
                 if self.graph_selected != 0
@@ -1171,7 +1212,7 @@ impl App {
                 if generation != self.graph.generation {
                     return;
                 }
-                let cache = PaneWindowCache { version, start, end, total, rows };
+                let cache = PaneWindowCache { version, start, end, total, rows, is_stale: false };
                 match pane {
                     GraphPane::Branches => self.graph.branches_window = Some(cache),
                     GraphPane::Tags => self.graph.tags_window = Some(cache),
@@ -1312,7 +1353,7 @@ impl App {
             return;
         };
 
-        if self.graph.graph_window.as_ref().is_some_and(|window| window.start <= start && end <= window.end && window.version >= self.graph.version) {
+        if self.graph.graph_window.as_ref().is_some_and(|window| !window.is_stale && window.start <= start && end <= window.end && window.version >= self.graph.version) {
             return;
         }
 
@@ -1337,7 +1378,7 @@ impl App {
             GraphPane::Reflogs => self.graph.reflogs_window.as_ref(),
         };
 
-        if cache.is_some_and(|window| window.start <= start && end <= window.end && window.version >= self.graph.version) {
+        if cache.is_some_and(|window| !window.is_stale && window.start <= start && end <= window.end && window.version >= self.graph.version) {
             return;
         }
 
