@@ -79,8 +79,6 @@ pub struct LayoutConfig {
     pub is_zen: bool,
     #[facet(default = false)]
     pub is_file_watcher: bool,
-    #[facet(default = false)]
-    pub is_auto_fetch: bool,
     #[facet(default = LAYOUT_WIDTH_LEFT_PANE)]
     pub width_left_pane: u16,
     #[facet(default = LAYOUT_WIDTH_RIGHT_PANE)]
@@ -135,7 +133,6 @@ impl Default for LayoutConfig {
             is_inspector: true,
             is_zen: false,
             is_file_watcher: false,
-            is_auto_fetch: false,
             width_left_pane: LAYOUT_WIDTH_LEFT_PANE,
             width_right_pane: LAYOUT_WIDTH_RIGHT_PANE,
             weight_branches: LAYOUT_WEIGHT_DEFAULT,

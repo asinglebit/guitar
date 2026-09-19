@@ -108,28 +108,26 @@ const TRANSLATORS: [(Translate, &str); 4] = [(es, "es"), (fr, "fr"), (ru, "ru"),
 
 #[test]
 fn settings_background_section_text_is_translated_in_every_language() {
-    for ((translate, tag), background, file_watcher, auto_fetch) in [
-        (TRANSLATORS[0], " segundo plano:", "monitor de archivos", "fetch automático"),
-        (TRANSLATORS[1], " arrière-plan :", "surveillance de fichiers", "fetch automatique"),
-        (TRANSLATORS[2], " фоновые задачи:", "наблюдение за файлами", "автоматический fetch"),
-        (TRANSLATORS[3], " arka plan:", "dosya izleyici", "otomatik fetch"),
+    for ((translate, tag), background, file_watcher) in [
+        (TRANSLATORS[0], " segundo plano:", "monitor de archivos"),
+        (TRANSLATORS[1], " arrière-plan :", "surveillance de fichiers"),
+        (TRANSLATORS[2], " фоновые задачи:", "наблюдение за файлами"),
+        (TRANSLATORS[3], " arka plan:", "dosya izleyici"),
     ] {
         assert_eq!(translate(" background:"), background, "{tag} background heading");
         assert_eq!(translate("file watcher"), file_watcher, "{tag} file watcher row");
-        assert_eq!(translate("auto fetch"), auto_fetch, "{tag} auto fetch row");
     }
 }
 
 #[test]
 fn background_toggle_command_labels_are_translated_in_every_language() {
-    for ((translate, tag), watcher, fetch) in [
-        (TRANSLATORS[0], "Alternar monitor de archivos", "Alternar fetch automático"),
-        (TRANSLATORS[1], "Basculer la surveillance de fichiers", "Basculer le fetch automatique"),
-        (TRANSLATORS[2], "Переключить наблюдение за файлами", "Переключить автоматический fetch"),
-        (TRANSLATORS[3], "Dosya izleyiciyi aç/kapat", "Otomatik fetch’i aç/kapat"),
+    for ((translate, tag), watcher) in [
+        (TRANSLATORS[0], "Alternar monitor de archivos"),
+        (TRANSLATORS[1], "Basculer la surveillance de fichiers"),
+        (TRANSLATORS[2], "Переключить наблюдение за файлами"),
+        (TRANSLATORS[3], "Dosya izleyiciyi aç/kapat"),
     ] {
         assert_eq!(translate("Toggle file watcher"), watcher, "{tag} watcher command label");
-        assert_eq!(translate("Toggle auto fetch"), fetch, "{tag} auto fetch command label");
     }
 }
 

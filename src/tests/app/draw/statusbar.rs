@@ -99,50 +99,17 @@ fn statusbar_shows_zen_and_watcher_circles_side_by_side() {
 }
 
 #[test]
-fn statusbar_shows_a_filled_auto_fetch_circle_while_it_is_running() {
-    let (path, repo) = temp_repo("auto-fetch");
-    let mut app = statusbar_app();
-    let mut terminal = Terminal::new(TestBackend::new(200, 1)).unwrap();
-
-    terminal.draw(|frame| app.draw_statusbar(frame, &repo)).unwrap();
-    assert_eq!(right_bar_symbols(&terminal).matches('●').count(), 0);
-
-    app.layout_config.is_auto_fetch = true;
-    terminal.draw(|frame| app.draw_statusbar(frame, &repo)).unwrap();
-    assert_eq!(right_bar_symbols(&terminal).matches('●').count(), 1);
-
-    fs::remove_dir_all(&path).ok();
-}
-
-#[test]
-fn statusbar_hollows_the_auto_fetch_circle_once_it_backs_off() {
-    let (path, repo) = temp_repo("auto-fetch-suspended");
-    let mut app = statusbar_app();
-    app.layout_config.is_auto_fetch = true;
-    app.auto_fetch_suspended = true;
-    let mut terminal = Terminal::new(TestBackend::new(200, 1)).unwrap();
-
-    terminal.draw(|frame| app.draw_statusbar(frame, &repo)).unwrap();
-
-    let right = right_bar_symbols(&terminal);
-    assert_eq!(right.matches('○').count(), 1, "suspended auto fetch should read as hollow");
-    assert_eq!(right.matches('●').count(), 0, "a filled circle would imply it is still fetching");
-    fs::remove_dir_all(&path).ok();
-}
-
-#[test]
 fn statusbar_shows_every_indicator_together_in_order() {
     let (path, repo) = temp_repo("all-indicators");
     let mut app = statusbar_app();
     app.mode = InputMode::Action;
     app.layout_config.is_zen = true;
     app.layout_config.is_file_watcher = true;
-    app.layout_config.is_auto_fetch = true;
     let mut terminal = Terminal::new(TestBackend::new(200, 1)).unwrap();
 
     terminal.draw(|frame| app.draw_statusbar(frame, &repo)).unwrap();
 
-    // Action, zen, file watcher, auto fetch.
-    assert_eq!(right_bar_symbols(&terminal).matches('●').count(), 4);
+    // Action, zen, file watcher.
+    assert_eq!(right_bar_symbols(&terminal).matches('●').count(), 3);
     fs::remove_dir_all(&path).ok();
 }

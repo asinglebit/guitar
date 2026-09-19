@@ -541,11 +541,6 @@ impl App {
                 self.sync_file_watcher();
                 self.save_layout();
             },
-            Command::ToggleAutoFetch => {
-                self.layout_config.is_auto_fetch = !self.layout_config.is_auto_fetch;
-                self.arm_auto_fetch();
-                self.save_layout();
-            },
             _ => {},
         }
 
@@ -2263,13 +2258,6 @@ impl App {
     pub fn on_toggle_file_watcher(&mut self) {
         self.layout_config.is_file_watcher = !self.layout_config.is_file_watcher;
         self.sync_file_watcher();
-        self.save_layout();
-    }
-
-    pub fn on_toggle_auto_fetch(&mut self) {
-        self.layout_config.is_auto_fetch = !self.layout_config.is_auto_fetch;
-        // An explicit toggle also clears a back-off left by an earlier auth or network failure.
-        self.arm_auto_fetch();
         self.save_layout();
     }
 

@@ -35,9 +35,8 @@ fn layout_config_reads_old_boolean_only_config() {
     assert!(!config.is_graph_dates);
     assert!(!config.is_graph_committers);
     assert!(config.is_graph_refs);
-    // Background features must default to off for a config written before they existed.
+    // The file watcher must default to off for a config written before it existed.
     assert!(!config.is_file_watcher);
-    assert!(!config.is_auto_fetch);
     assert_eq!(config.weight_viewer_split_left, LAYOUT_WEIGHT_DEFAULT);
     assert_eq!(config.weight_viewer_split_right, LAYOUT_WEIGHT_DEFAULT);
     assert_eq!(config.graph_lane_limit, GRAPH_LANE_LIMIT_DEFAULT);
@@ -63,7 +62,6 @@ fn default_layout_shows_primary_workflow_panes() {
     assert!(!config.is_search);
     assert!(!config.is_zen);
     assert!(!config.is_file_watcher);
-    assert!(!config.is_auto_fetch);
     assert_eq!(config.graph_lane_limit, GRAPH_LANE_LIMIT_DEFAULT);
 }
 
@@ -107,14 +105,13 @@ fn split_viewer_divider_is_centered() {
 }
 
 #[test]
-fn layout_config_round_trips_background_toggles() {
-    let path = temp_layout_path("background");
-    let config = LayoutConfig { is_file_watcher: true, is_auto_fetch: true, ..Default::default() };
+fn layout_config_round_trips_the_file_watcher_toggle() {
+    let path = temp_layout_path("file-watcher");
+    let config = LayoutConfig { is_file_watcher: true, ..Default::default() };
 
     save_layout_config_to_path(&path, &config);
     let loaded = facet_json::from_str::<LayoutConfig>(&fs::read_to_string(&path).unwrap()).unwrap().normalized();
 
     assert!(loaded.is_file_watcher);
-    assert!(loaded.is_auto_fetch);
     fs::remove_dir_all(path.parent().unwrap()).ok();
 }

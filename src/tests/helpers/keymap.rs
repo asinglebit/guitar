@@ -574,22 +574,20 @@ fn keymap_config_serialization_stays_english_while_visual_labels_localise() {
 }
 
 #[test]
-fn defaults_bind_background_toggles_in_normal_mode_only() {
+fn defaults_bind_the_file_watcher_toggle_in_normal_mode_only() {
     let maps = default_keymaps();
     let normal = maps.get(&InputMode::Normal).unwrap();
     let action = maps.get(&InputMode::Action).unwrap();
 
     assert_eq!(normal.get(&KeyBinding::new(Char('W'), KeyModifiers::SHIFT)), Some(&Command::ToggleFileWatcher));
-    assert_eq!(normal.get(&KeyBinding::new(Char('A'), KeyModifiers::SHIFT)), Some(&Command::ToggleAutoFetch));
 
-    // Action mode reuses both keys for destructive commands, so it must keep its own meanings.
+    // Action mode reuses the key for a destructive command, so it must keep its own meaning.
     assert_eq!(action.get(&KeyBinding::new(Char('W'), KeyModifiers::SHIFT)), Some(&Command::RemoveWorktree));
-    assert_eq!(action.get(&KeyBinding::new(Char('A'), KeyModifiers::SHIFT)), Some(&Command::AbortOperation));
-    assert!(!action.values().any(|command| matches!(command, Command::ToggleFileWatcher | Command::ToggleAutoFetch)));
+    assert!(!action.values().any(|command| matches!(command, Command::ToggleFileWatcher)));
 }
 
 #[test]
-fn existing_keymaps_gain_background_toggle_bindings() {
+fn existing_keymaps_gain_the_file_watcher_binding() {
     let mut maps = IndexMap::new();
     let mut normal = IndexMap::new();
     normal.insert(KeyBinding::new(Char('j'), KeyModifiers::NONE), Command::ScrollDown);
@@ -601,17 +599,15 @@ fn existing_keymaps_gain_background_toggle_bindings() {
 
     let normal = maps.get(&InputMode::Normal).unwrap();
     assert_eq!(normal.get(&KeyBinding::new(Char('W'), KeyModifiers::SHIFT)), Some(&Command::ToggleFileWatcher));
-    assert_eq!(normal.get(&KeyBinding::new(Char('A'), KeyModifiers::SHIFT)), Some(&Command::ToggleAutoFetch));
     let action = maps.get(&InputMode::Action).unwrap();
-    assert!(!action.values().any(|command| matches!(command, Command::ToggleFileWatcher | Command::ToggleAutoFetch)));
+    assert!(!action.values().any(|command| matches!(command, Command::ToggleFileWatcher)));
 }
 
 #[test]
-fn upgrade_keeps_a_user_binding_on_the_background_toggle_keys() {
+fn upgrade_keeps_a_user_binding_on_the_file_watcher_key() {
     let mut maps = IndexMap::new();
     let mut normal = IndexMap::new();
     normal.insert(KeyBinding::new(Char('W'), KeyModifiers::SHIFT), Command::CreateWorktree);
-    normal.insert(KeyBinding::new(Char('A'), KeyModifiers::SHIFT), Command::Stage);
     let action = normal.clone();
     maps.insert(InputMode::Normal, normal);
     maps.insert(InputMode::Action, action);
@@ -621,12 +617,10 @@ fn upgrade_keeps_a_user_binding_on_the_background_toggle_keys() {
     // A key the user already claimed is never taken over; the new command simply stays unbound.
     let normal = maps.get(&InputMode::Normal).unwrap();
     assert_eq!(normal.get(&KeyBinding::new(Char('W'), KeyModifiers::SHIFT)), Some(&Command::CreateWorktree));
-    assert_eq!(normal.get(&KeyBinding::new(Char('A'), KeyModifiers::SHIFT)), Some(&Command::Stage));
-    assert!(!normal.values().any(|command| matches!(command, Command::ToggleFileWatcher | Command::ToggleAutoFetch)));
+    assert!(!normal.values().any(|command| matches!(command, Command::ToggleFileWatcher)));
 }
 
 #[test]
-fn background_toggle_commands_have_visual_labels() {
+fn file_watcher_command_has_a_visual_label() {
     assert_eq!(command_to_visual_string(&Command::ToggleFileWatcher), "Toggle file watcher");
-    assert_eq!(command_to_visual_string(&Command::ToggleAutoFetch), "Toggle auto fetch");
 }

@@ -53,7 +53,6 @@ pub enum Command {
     ToggleInspector,
     ToggleShas,
     ToggleFileWatcher,
-    ToggleAutoFetch,
     ToggleHelp,
     ActionMode,
     Exit,
@@ -197,7 +196,6 @@ pub fn command_to_visual_string(command: &Command) -> String {
         Command::ToggleInspector => "Toggle inspector",
         Command::ToggleShas => "Toggle SHAs",
         Command::ToggleFileWatcher => "Toggle file watcher",
-        Command::ToggleAutoFetch => "Toggle auto fetch",
         Command::ToggleHelp => "Toggle help",
         Command::ActionMode => "Action mode",
         Command::Exit => "Exit",
@@ -644,10 +642,9 @@ fn default_normal_keymap() -> IndexMap<KeyBinding, Command> {
     map.insert(KeyBinding::new(Char('-'), KeyModifiers::NONE), Command::ShrinkGraphLaneLimit);
     map.insert(KeyBinding::new(Char('+'), KeyModifiers::NONE), Command::GrowGraphLaneLimit);
 
-    // 'W' for the file watcher and 'A' for auto fetch. Action mode rebinds both keys to
-    // Remove Worktree and Abort, so these stay normal-mode only.
+    // 'W' for the file watcher. Action mode rebinds the key to Remove Worktree, so this stays
+    // normal-mode only.
     map.insert(KeyBinding::new(Char('W'), KeyModifiers::SHIFT), Command::ToggleFileWatcher);
-    map.insert(KeyBinding::new(Char('A'), KeyModifiers::SHIFT), Command::ToggleAutoFetch);
 
     map
 }
@@ -890,7 +887,6 @@ fn ensure_default_keymap_bindings(maps: &mut Keymaps) -> bool {
         (KeyBinding::new(Char('-'), KeyModifiers::NONE), Command::ShrinkGraphLaneLimit),
         (KeyBinding::new(Char('+'), KeyModifiers::NONE), Command::GrowGraphLaneLimit),
         (KeyBinding::new(Char('W'), KeyModifiers::SHIFT), Command::ToggleFileWatcher),
-        (KeyBinding::new(Char('A'), KeyModifiers::SHIFT), Command::ToggleAutoFetch),
     ];
     for (key, command) in normal_only_defaults {
         if insert_default_binding_if_available(normal_map, key, command) {

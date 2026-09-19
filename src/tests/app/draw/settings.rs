@@ -623,15 +623,16 @@ fn settings_general_renders_background_rows_with_states() {
     app.layout.graph = Rect::new(0, 0, 120, 120);
     app.layout.app = Rect::new(0, 0, 120, 120);
     app.layout_config.is_file_watcher = true;
-    app.layout_config.is_auto_fetch = false;
 
     let rendered = rendered_settings(&mut app, &repo, 120, 120);
-
     assert!(rendered.contains("background:"));
     assert!(rendered.contains("file watcher:"));
-    assert!(rendered.contains("auto fetch:"));
-    assert!(rendered.contains("🞕"));
-    assert!(rendered.contains("🞎"));
+    assert!(rendered.contains("🞕"), "an enabled watcher should render a ticked box");
+
+    app.layout_config.is_file_watcher = false;
+    let rendered = rendered_settings(&mut app, &repo, 120, 120);
+    assert!(rendered.contains("🞎"), "a disabled watcher should render an empty box");
+    assert!(!rendered.contains("🞕"));
 }
 
 #[test]
@@ -647,7 +648,6 @@ fn settings_background_rows_are_selectable_layout_commands() {
 
     let kinds: Vec<_> = app.settings_selections.iter().map(|selection| selection.kind.clone()).collect();
     assert!(kinds.contains(&SettingsSelectionKind::LayoutCommand(Command::ToggleFileWatcher)));
-    assert!(kinds.contains(&SettingsSelectionKind::LayoutCommand(Command::ToggleAutoFetch)));
 }
 
 #[test]
@@ -666,11 +666,10 @@ fn settings_background_rows_never_show_a_shortcut_column() {
     assert!(rendered.contains(" file watcher:"));
     assert!(!rendered.contains("y file watcher:"));
     assert!(!rendered.contains("W file watcher:"));
-    assert!(!rendered.contains("A auto fetch:"));
 }
 
 #[test]
-fn settings_shortcuts_tab_lists_the_background_toggles() {
+fn settings_shortcuts_tab_lists_the_file_watcher_toggle() {
     let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let (_path, repo) = temp_repo("background-shortcuts");
     let mut app = settings_app();
@@ -678,12 +677,10 @@ fn settings_shortcuts_tab_lists_the_background_toggles() {
     app.layout.graph = Rect::new(0, 0, 120, 200);
     app.layout.app = Rect::new(0, 0, 120, 200);
     app.keymaps.get_mut(&InputMode::Normal).unwrap().insert(KeyBinding::new(KeyCode::Char('W'), KeyModifiers::SHIFT), Command::ToggleFileWatcher);
-    app.keymaps.get_mut(&InputMode::Normal).unwrap().insert(KeyBinding::new(KeyCode::Char('A'), KeyModifiers::SHIFT), Command::ToggleAutoFetch);
 
     let rendered = rendered_settings(&mut app, &repo, 120, 200);
 
     assert!(rendered.contains("Toggle File Watcher"));
-    assert!(rendered.contains("Toggle Auto Fetch"));
 }
 
 #[test]
@@ -691,12 +688,12 @@ fn settings_background_rows_render_translated_and_keyless_in_every_language() {
     let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let (_path, repo) = temp_repo("background-i18n");
 
-    for (language, background, file_watcher, auto_fetch) in [
-        (Language::English, "background:", "file watcher:", "auto fetch:"),
-        (Language::Spanish, "segundo plano:", "monitor de archivos:", "fetch automático:"),
-        (Language::French, "arrière-plan :", "surveillance de fichiers:", "fetch automatique:"),
-        (Language::Russian, "фоновые задачи:", "наблюдение за файлами:", "автоматический fetch:"),
-        (Language::Turkish, "arka plan:", "dosya izleyici:", "otomatik fetch:"),
+    for (language, background, file_watcher) in [
+        (Language::English, "background:", "file watcher:"),
+        (Language::Spanish, "segundo plano:", "monitor de archivos:"),
+        (Language::French, "arrière-plan :", "surveillance de fichiers:"),
+        (Language::Russian, "фоновые задачи:", "наблюдение за файлами:"),
+        (Language::Turkish, "arka plan:", "dosya izleyici:"),
     ] {
         // App::default() resets the active language, so switch after building the app.
         let mut app = settings_app();
@@ -711,7 +708,6 @@ fn settings_background_rows_render_translated_and_keyless_in_every_language() {
 
         assert!(rendered.contains(background), "{language:?} background heading");
         assert!(rendered.contains(&format!(" {file_watcher}")), "{language:?} file watcher row");
-        assert!(rendered.contains(&format!(" {auto_fetch}")), "{language:?} auto fetch row");
         assert!(!rendered.contains(&format!("W {file_watcher}")), "{language:?} must not show a shortcut");
     }
 

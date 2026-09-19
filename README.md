@@ -303,7 +303,6 @@ Indicator circles, in left-to-right order:
 - Action mode is armed.
 - Zen mode is on.
 - The file watcher is running.
-- Auto fetch is running. The circle is hollow while auto fetch is backed off, so a filled circle always means it is still fetching.
 
 ## Navigation
 
@@ -534,7 +533,6 @@ Defaults are written to `keymap.json` on first run. User-edited keymaps can diff
 | Shrink Graph Lane Limit | `-` |
 | Grow Graph Lane Limit | `+` |
 | Toggle File Watcher | `Shift+W` |
-| Toggle Auto Fetch | `Shift+A` |
 | Toggle Help / Settings | `?` |
 | Return To Parent Repository | `Backspace` |
 | Action Mode | `Ctrl+a` |
@@ -626,8 +624,6 @@ It fetches:
 - `refs/tags/*` into local tags.
 
 Pruning is enabled.
-
-Fetching can also run on a timer. See [Background Tasks](#background-tasks).
 
 ### Remotes
 
@@ -951,7 +947,7 @@ Only one network operation can run at a time.
 
 ## Background Tasks
 
-Two optional background features keep an open repository current without pressing `r`. Both are off by default, both persist in `layout.json`, and both can be toggled from the `background` section of the `general` settings tab or with a shortcut.
+The file watcher keeps an open repository current without pressing `r`. It is off by default, persists in `layout.json`, and can be toggled from the `background` section of the `general` settings tab or with a shortcut.
 
 ### File Watcher
 
@@ -965,19 +961,6 @@ The file watcher reloads the repository for you whenever something changes on di
 - Reloads wait for a safe moment. Nothing is reloaded while a modal, prompt, or operation is open; the reload happens once you close it.
 - While the watcher is running, a blue circle appears in the bottom-right status bar.
 - Very large repositories can exhaust the operating system watch limit. If the watcher cannot start it stays silent, and reload keeps working normally.
-
-### Auto Fetch
-
-Normal key: `Shift+A`.
-
-Auto fetch runs the same fetch as normal `f` against the default remote every 5 seconds, quietly.
-
-- It never opens the progress modal, never takes focus, and never prompts for credentials.
-- It only uses credentials already cached in the current session.
-- The repository reloads only when the fetch actually moved a ref, so an unchanged remote leaves the selection and scroll position untouched.
-- It is skipped while another network operation is running.
-- While auto fetch is enabled, a circle appears in the bottom-right status bar.
-- If a fetch fails, most often because credentials are needed, auto fetch stops retrying and its status bar circle goes hollow. Toggling it again, or completing a manual network operation, re-arms it.
 
 ## Settings
 
@@ -998,7 +981,7 @@ Selectable rows:
 - Add remote row: `Enter` opens name and URL prompts.
 - Theme rows: `Enter` activates and saves the selected theme.
 - Display toggle rows: `Enter` toggles the row or resets layout.
-- Background rows: `Enter` toggles the file watcher or auto fetch.
+- Background rows: `Enter` toggles the file watcher.
 - Graph lane limit row: `Enter` opens a numeric prompt. Positive values save to `layout.json`; `0` and invalid input keep the modal open without changing the setting. In normal mode, `-` and `+` shrink or grow the saved graph lane limit by one and reload an open repository.
 - Keybinding rows: `Enter` opens key capture.
 
@@ -1178,7 +1161,6 @@ Default layout:
   "is_inspector": true,
   "is_zen": false,
   "is_file_watcher": false,
-  "is_auto_fetch": false,
   "width_left_pane": 45,
   "width_right_pane": 46,
   "weight_branches": 100,

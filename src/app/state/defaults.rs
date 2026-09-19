@@ -22,7 +22,7 @@ use crate::{
 };
 use indexmap::IndexMap;
 use ratatui::{style::Style, text::Span, widgets::ListItem};
-use std::{cell::RefCell, rc::Rc, time::Instant};
+use std::{cell::RefCell, rc::Rc};
 
 #[derive(Clone)]
 pub struct SplitViewerRow {
@@ -237,14 +237,11 @@ impl Default for App {
             modal_network_title: String::new(),
             modal_network_message: String::new(),
 
-            // Background file watcher and auto fetcher. Both start idle; run() spawns the watcher
-            // through reload() once the saved layout has been read.
+            // Background file watcher. run() spawns it through reload() once the saved layout has
+            // been read.
             file_watcher: None,
             watcher_quiet_since: None,
             pending_reload: false,
-            auto_fetch_handle: None,
-            auto_fetch_last: Instant::now(),
-            auto_fetch_suspended: false,
 
             // Exit
             is_exit: false,

@@ -34,7 +34,7 @@ const SETTINGS_PANE_COMMANDS: &[(&str, Command, fn() -> &'static str)] = &[
 ];
 
 // No key column here: shortcuts are listed in the shortcuts tab, not repeated beside the toggles.
-const SETTINGS_BACKGROUND_COMMANDS: &[(Command, fn() -> &'static str)] = &[(Command::ToggleFileWatcher, settings_text::FILE_WATCHER), (Command::ToggleAutoFetch, settings_text::AUTO_FETCH)];
+const SETTINGS_BACKGROUND_COMMANDS: &[(Command, fn() -> &'static str)] = &[(Command::ToggleFileWatcher, settings_text::FILE_WATCHER)];
 
 const SETTINGS_GRAPH_COMMANDS: &[(&str, Command, fn() -> &'static str)] = &[
     (")", Command::ToggleGraphReflogs, settings_text::GRAPH_REFLOG_COMMITS),
@@ -158,13 +158,6 @@ impl App {
             },
             Command::ToggleFileWatcher => {
                 if self.layout_config.is_file_watcher {
-                    self.symbols.form.checkbox_on.clone()
-                } else {
-                    self.symbols.form.checkbox_off.clone()
-                }
-            },
-            Command::ToggleAutoFetch => {
-                if self.layout_config.is_auto_fetch {
                     self.symbols.form.checkbox_on.clone()
                 } else {
                     self.symbols.form.checkbox_off.clone()

@@ -1468,12 +1468,9 @@ fn reflog_selection_refreshes_current_diff() {
 }
 
 #[test]
-fn settings_background_commands_toggle_and_stay_in_settings() {
+fn settings_file_watcher_command_toggles_and_stays_in_settings() {
     type BackgroundCase = (SettingsSelectionKind, fn(&App) -> bool);
-    let cases: [BackgroundCase; 2] = [
-        (SettingsSelectionKind::LayoutCommand(Command::ToggleFileWatcher), |app| app.layout_config.is_file_watcher),
-        (SettingsSelectionKind::LayoutCommand(Command::ToggleAutoFetch), |app| app.layout_config.is_auto_fetch),
-    ];
+    let cases: [BackgroundCase; 1] = [(SettingsSelectionKind::LayoutCommand(Command::ToggleFileWatcher), |app| app.layout_config.is_file_watcher)];
     for (kind, read) in cases {
         let mut app = App {
             viewport: Viewport::Settings,
@@ -1500,29 +1497,13 @@ fn settings_background_commands_toggle_and_stay_in_settings() {
 }
 
 #[test]
-fn background_toggle_handlers_flip_saved_state() {
+fn file_watcher_toggle_handler_flips_saved_state() {
     let mut app = App { layout_config: LayoutConfig::default(), ..Default::default() };
 
     app.on_toggle_file_watcher();
     assert!(app.layout_config.is_file_watcher);
     app.on_toggle_file_watcher();
     assert!(!app.layout_config.is_file_watcher);
-
-    app.on_toggle_auto_fetch();
-    assert!(app.layout_config.is_auto_fetch);
-    app.on_toggle_auto_fetch();
-    assert!(!app.layout_config.is_auto_fetch);
-}
-
-#[test]
-fn toggling_auto_fetch_clears_a_previous_back_off() {
-    let mut app = App { layout_config: LayoutConfig::default(), ..Default::default() };
-    app.auto_fetch_suspended = true;
-
-    app.on_toggle_auto_fetch();
-
-    assert!(!app.auto_fetch_suspended);
-    app.on_toggle_auto_fetch();
 }
 
 #[test]

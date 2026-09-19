@@ -36,7 +36,6 @@ use crate::{
         tags::Tags,
     },
     git::{
-        actions::fetching::QuietFetchOutcome,
         actions::network::NetworkRequest,
         queries::{
             commits::get_git_user_info,
@@ -655,16 +654,13 @@ pub struct App {
     pub modal_network_title: String,
     pub modal_network_message: String,
 
-    // Background file watcher and auto fetcher. Both are opt-in and never steal focus.
+    // Background file watcher. Opt-in, and never steals focus.
     pub file_watcher: Option<RepoWatcher>,
     // Watcher debounce, reset by every filesystem event so one Git command means one reload.
     pub watcher_quiet_since: Option<Instant>,
-    // A reload is owed. Kept separate from the debounce above so watcher noise can never postpone
-    // a reload that something else, such as a fetch that moved a ref, has already asked for.
+    // A reload is owed. Kept separate from the debounce above so a burst of events cannot postpone
+    // a reload that has already been asked for.
     pub pending_reload: bool,
-    pub auto_fetch_handle: Option<JoinHandle<QuietFetchOutcome>>,
-    pub auto_fetch_last: Instant,
-    pub auto_fetch_suspended: bool,
 
     // Main loop shutdown flag.
     pub is_exit: bool,
@@ -673,9 +669,6 @@ pub struct App {
 // A single git command emits a burst of filesystem events, and reload() rewalks the whole graph, so
 // events are coalesced until the repository has been quiet for this long.
 const WATCHER_QUIET_PERIOD: Duration = Duration::from_millis(300);
-
-// How often the background fetcher tries the default remote.
-pub const AUTO_FETCH_INTERVAL: Duration = Duration::from_secs(5);
 
 impl App {
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
@@ -708,7 +701,6 @@ impl App {
                     self.sync(repo);
                 }
                 self.poll_network_request();
-                self.poll_auto_fetch();
                 self.poll_file_watcher();
                 self.run_pending_reload();
 
@@ -1054,12 +1046,6 @@ impl App {
         self.watcher_quiet_since = None;
     }
 
-    // Clear any back-off and restart the interval, so a toggle or a manual fetch re-arms auto fetch.
-    pub fn arm_auto_fetch(&mut self) {
-        self.auto_fetch_suspended = false;
-        self.auto_fetch_last = Instant::now();
-    }
-
     // Reloading under a modal would tear down whatever the user is in the middle of, so background
     // reloads wait for a plain pane focus. The allow-list is deliberate: a modal added later is
     // excluded by default.
@@ -1104,9 +1090,9 @@ impl App {
         }
     }
 
-    // Run whatever reload is owed, whether the watcher or a fetch that moved a ref asked for it.
-    // The flag is kept until the moment is safe, so the reload lands as soon as the user closes
-    // whatever modal or operation is open rather than being dropped.
+    // Run whatever reload the watcher has asked for. The flag is kept until the moment is safe, so
+    // the reload lands as soon as the user closes whatever modal or operation is open rather than
+    // being dropped.
     pub fn run_pending_reload(&mut self) {
         if self.pending_reload && self.is_auto_reload_safe() {
             self.pending_reload = false;
