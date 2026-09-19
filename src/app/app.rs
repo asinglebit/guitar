@@ -657,8 +657,11 @@ pub struct App {
 
     // Background file watcher and auto fetcher. Both are opt-in and never steal focus.
     pub file_watcher: Option<RepoWatcher>,
-    // Set by the watcher and by a changed auto fetch; drained once a reload is safe.
-    pub pending_reload_since: Option<Instant>,
+    // Watcher debounce, reset by every filesystem event so one Git command means one reload.
+    pub watcher_quiet_since: Option<Instant>,
+    // A reload is owed. Kept separate from the debounce above so watcher noise can never postpone
+    // a reload that something else, such as a fetch that moved a ref, has already asked for.
+    pub pending_reload: bool,
     pub auto_fetch_handle: Option<JoinHandle<QuietFetchOutcome>>,
     pub auto_fetch_last: Instant,
     pub auto_fetch_suspended: bool,
@@ -707,6 +710,7 @@ impl App {
                 self.poll_network_request();
                 self.poll_auto_fetch();
                 self.poll_file_watcher();
+                self.run_pending_reload();
 
                 terminal.draw(|frame| self.draw(frame))?;
                 self.run_pending_operation_action();
@@ -1040,14 +1044,14 @@ impl App {
         let Some(path) = path else {
             // Dropping the watcher releases its OS watches.
             self.file_watcher = None;
-            self.pending_reload_since = None;
+            self.watcher_quiet_since = None;
             return;
         };
         if self.file_watcher.as_ref().is_some_and(|watcher| watcher.path == path) {
             return;
         }
         self.file_watcher = spawn_repo_watcher(&path);
-        self.pending_reload_since = None;
+        self.watcher_quiet_since = None;
     }
 
     // Clear any back-off and restart the interval, so a toggle or a manual fetch re-arms auto fetch.
@@ -1083,27 +1087,31 @@ impl App {
         self.repo.as_ref().and_then(|repo| get_git_user_info(repo).ok()).is_some_and(|(name, email)| name.is_some() && email.is_some())
     }
 
-    // Drain the watcher channel and reload once the burst has settled.
+    // Drain the watcher channel and mark a reload owed once the burst has settled.
     pub fn poll_file_watcher(&mut self) {
-        let mut changed = false;
+        let mut saw_event = false;
         if let Some(watcher) = &self.file_watcher {
             while watcher.rx.try_recv().is_ok() {
-                changed = true;
+                saw_event = true;
             }
         }
-        if changed {
-            self.pending_reload_since = Some(Instant::now());
+        if saw_event {
+            self.watcher_quiet_since = Some(Instant::now());
         }
+        if self.watcher_quiet_since.is_some_and(|since| since.elapsed() >= WATCHER_QUIET_PERIOD) {
+            self.watcher_quiet_since = None;
+            self.pending_reload = true;
+        }
+    }
 
-        let Some(pending_since) = self.pending_reload_since else {
-            return;
-        };
-        if pending_since.elapsed() < WATCHER_QUIET_PERIOD || !self.is_auto_reload_safe() {
-            // Keep the marker so the reload lands as soon as the user closes whatever is open.
-            return;
+    // Run whatever reload is owed, whether the watcher or a fetch that moved a ref asked for it.
+    // The flag is kept until the moment is safe, so the reload lands as soon as the user closes
+    // whatever modal or operation is open rather than being dropped.
+    pub fn run_pending_reload(&mut self) {
+        if self.pending_reload && self.is_auto_reload_safe() {
+            self.pending_reload = false;
+            self.on_reload();
         }
-        self.pending_reload_since = None;
-        self.on_reload();
     }
 
     pub fn sync(&mut self, repo: &git2::Repository) {

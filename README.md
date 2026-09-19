@@ -961,6 +961,7 @@ The file watcher reloads the repository for you whenever something changes on di
 
 - It watches `.git`, `.git/refs`, and the working tree. `.git/objects`, `.git/logs`, `target`, and `node_modules` are excluded, because they churn without changing what the app shows.
 - Filesystem events are coalesced, so one Git command produces one reload rather than a burst.
+- Only real changes count. Reads are ignored, so the app looking at the repository never makes it reload itself.
 - Reloads wait for a safe moment. Nothing is reloaded while a modal, prompt, or operation is open; the reload happens once you close it.
 - While the watcher is running, a blue circle appears in the bottom-right status bar.
 - Very large repositories can exhaust the operating system watch limit. If the watcher cannot start it stays silent, and reload keeps working normally.

@@ -87,9 +87,9 @@ impl App {
                 match handle.join() {
                     Ok(outcome) if outcome.ok => {
                         if outcome.changed {
-                            // Hand the reload to the same pending marker the watcher uses, so it
+                            // Hand the reload to the same owed-reload flag the watcher uses, so it
                             // waits for a safe moment instead of interrupting a modal.
-                            self.pending_reload_since = Some(Instant::now());
+                            self.pending_reload = true;
                         }
                     },
                     // Almost always missing credentials. Backing off avoids hammering the network

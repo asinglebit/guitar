@@ -101,3 +101,7 @@ pub fn fetch_remote_quiet(repo_path: &str, remote_name: &str, auth_session: Auth
         }
     })
 }
+
+#[cfg(test)]
+#[path = "../../tests/git/actions/fetching.rs"]
+mod tests;

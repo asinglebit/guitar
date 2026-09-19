@@ -240,7 +240,8 @@ impl Default for App {
             // Background file watcher and auto fetcher. Both start idle; run() spawns the watcher
             // through reload() once the saved layout has been read.
             file_watcher: None,
-            pending_reload_since: None,
+            watcher_quiet_since: None,
+            pending_reload: false,
             auto_fetch_handle: None,
             auto_fetch_last: Instant::now(),
             auto_fetch_suspended: false,

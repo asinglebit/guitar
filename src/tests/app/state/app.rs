@@ -385,3 +385,49 @@ fn pane_window_request_reuses_cached_window_that_covers_range() {
         other => panic!("expected pane window request, got {other:?}"),
     }
 }
+
+fn watcher_temp_dir(name: &str) -> PathBuf {
+    let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+    let path = std::env::temp_dir().join(format!("guitar-app-watcher-{name}-{id}"));
+    fs::create_dir_all(path.join("src")).unwrap();
+    fs::create_dir_all(path.join(".git/refs/heads")).unwrap();
+    path
+}
+
+#[test]
+fn file_watcher_events_owe_a_reload_once_the_burst_settles() {
+    let root = watcher_temp_dir("owed-reload");
+    let mut app = App { layout_config: LayoutConfig { is_file_watcher: true, ..Default::default() }, ..Default::default() };
+    app.path = Some(root.to_str().unwrap().to_string());
+
+    app.sync_file_watcher();
+    assert!(app.file_watcher.is_some(), "the watcher should start when the toggle is on");
+    std::thread::sleep(std::time::Duration::from_millis(300));
+
+    fs::write(root.join("src/changed.txt"), "external edit").unwrap();
+
+    // The regression: Access events from the app's own reads used to keep resetting the debounce,
+    // so this flag never flipped and the graph never reloaded while the status bar kept updating.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while !app.pending_reload && std::time::Instant::now() < deadline {
+        app.poll_file_watcher();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+
+    let owed = app.pending_reload;
+    fs::remove_dir_all(&root).ok();
+    assert!(owed, "a working tree change should leave a reload owed");
+}
+
+#[test]
+fn an_owed_reload_survives_until_it_is_safe_to_run() {
+    let mut app = App { layout_config: LayoutConfig::default(), ..Default::default() };
+    app.pending_reload = true;
+    app.focus = Focus::ModalCommit;
+
+    app.run_pending_reload();
+
+    // Reloading under a prompt would discard what the user is typing, so it waits instead.
+    assert!(app.pending_reload, "an owed reload must not be dropped while a modal is open");
+    assert!(!app.is_auto_reload_safe());
+}

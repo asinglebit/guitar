@@ -3,7 +3,7 @@ use std::{
     sync::mpsc::{Receiver, Sender, channel},
 };
 
-use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher, event::ModifyKind};
 
 // Directories that churn without changing what the app renders. Keeping them out of the watch set
 // matters more than filtering their events: a recursive watch registers one OS handle per
@@ -31,6 +31,21 @@ fn is_excluded(path: &Path, repo_root: &Path) -> bool {
         Some(first) if first == ".git" => components.next().is_some_and(|second| EXCLUDED_GIT_ENTRIES.contains(&second.as_str())),
         Some(first) => EXCLUDED_DIRECTORIES.contains(&first.as_str()),
         None => false,
+    }
+}
+
+// Reading a file produces Access events, and the app reads the repository constantly: the graph
+// walker alone opens refs and objects on every reload. Treating those as changes would keep the
+// debounce window permanently open, so a reload would be owed forever and never actually run.
+// Metadata modifications are dropped for the same reason, since a read can bump an access time.
+fn is_change(kind: &EventKind) -> bool {
+    match kind {
+        EventKind::Create(_) | EventKind::Remove(_) => true,
+        EventKind::Modify(ModifyKind::Metadata(_)) => false,
+        EventKind::Modify(_) => true,
+        // Backends that cannot classify an event still report a real change.
+        EventKind::Any => true,
+        EventKind::Access(_) | EventKind::Other => false,
     }
 }
 
@@ -76,7 +91,7 @@ pub fn spawn_repo_watcher(repo_path: &str) -> Option<RepoWatcher> {
             return;
         };
         // Coalescing happens in the main loop, so every interesting event is just a bare ping.
-        if event.paths.iter().any(|path| !is_excluded(path, &filter_root)) {
+        if is_change(&event.kind) && event.paths.iter().any(|path| !is_excluded(path, &filter_root)) {
             let _ = tx.send(());
         }
     })
