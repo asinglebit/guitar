@@ -1193,7 +1193,15 @@ impl App {
                 let Some((pending_id, pending_start, pending_end)) = self.graph.requested_graph else {
                     return;
                 };
-                if request_id < pending_id || start != pending_start || end != pending_end {
+                if request_id < pending_id {
+                    return;
+                }
+                if start != pending_start || end != pending_end {
+                    // send_graph_window clamps the range to the commits walked so far, so an answer
+                    // can be narrower than the request. Release the slot rather than leaving it
+                    // pending: request_graph_window suppresses any later request covered by it, so
+                    // a stuck slot means the window is never replaced again.
+                    self.graph.requested_graph = None;
                     return;
                 }
                 self.graph.version = self.graph.version.max(version);

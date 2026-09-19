@@ -552,3 +552,68 @@ fn a_delivered_window_replaces_the_retained_one() {
     assert!(app.graph.branches_window.as_ref().is_some_and(|window| !window.is_stale));
     assert_eq!(app.graph.total, 42);
 }
+
+#[test]
+fn a_clamped_graph_window_reply_releases_the_request_slot() {
+    let (_path, repo) = temp_repo("clamped-reply");
+    let oid = commit_file(&repo, "clamped.txt", "clamped");
+    let mut app = App { viewport: Viewport::Graph, focus: Focus::Viewport, ..Default::default() };
+    app.graph.generation = 3;
+    let retained = GraphWindowCache { version: 1, start: 0, end: 6, head_alias: 9, rows: vec![graph_row(0, 9, oid)], history: Default::default(), is_stale: true };
+    app.graph.graph_window = Some(retained);
+    app.graph.requested_graph = Some((1, 0, 6));
+
+    // The worker clamps the range to what it has walked, which right after a reload is nothing.
+    app.handle_graph_event(&repo, GraphEvent::GraphWindow { generation: 3, request_id: 1, version: 5, start: 0, end: 0, total: 0, head_alias: 9, rows: Vec::new(), history: Default::default() });
+
+    // The narrower answer is not useful, so the retained rows stay on screen, but the slot must be
+    // released. Leaving it pending makes request_graph_window suppress every later request for a
+    // covered range, and the window is then never replaced again.
+    assert_eq!(app.graph.requested_graph, None, "a clamped reply must not leave the request slot pending");
+    assert!(app.graph.graph_window.as_ref().is_some_and(|window| window.is_stale && window.rows.len() == 1));
+}
+
+#[test]
+fn reload_replaces_retained_rows_with_fresh_topology() {
+    let (path, repo) = temp_repo("fresh-topology");
+    for index in 0..4 {
+        commit_file(&repo, "file.txt", &format!("commit {index}"));
+    }
+    let path_string = path.display().to_string();
+    let mut app = App {
+        path: Some(path_string.clone()),
+        recent: vec![path_string],
+        repo: Some(Rc::new(Repository::open(&path).unwrap())),
+        viewport: Viewport::Graph,
+        focus: Focus::Viewport,
+        layout: Layout { graph: Rect::new(0, 0, 120, 20), graph_scrollbar: Rect::new(119, 0, 1, 20), ..Default::default() },
+        ..Default::default()
+    };
+
+    let settle = |app: &mut App| {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while std::time::Instant::now() < deadline {
+            let repo = app.repo.clone().unwrap();
+            app.sync(&repo);
+            let mut terminal = Terminal::new(TestBackend::new(120, 20)).unwrap();
+            terminal.draw(|frame| app.draw_graph(frame, &repo)).unwrap();
+            if app.graph.is_complete && app.graph.graph_window.as_ref().is_some_and(|window| !window.is_stale) {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        panic!("graph window never settled");
+    };
+
+    app.reload(None);
+    settle(&mut app);
+
+    let head_commit = repo.head().unwrap().peel_to_commit().unwrap();
+    repo.branch("fresh-branch", &head_commit, false).unwrap();
+    app.reload(None);
+    settle(&mut app);
+
+    let labels: Vec<String> = app.graph.graph_window.as_ref().map(|window| window.rows.iter().flat_map(|row| row.branches.iter().map(|label| label.name.clone())).collect()).unwrap_or_default();
+    stop_graph_service(&mut app);
+    assert!(labels.iter().any(|name| name == "fresh-branch"), "a branch created between reloads must reach the graph rows, got {labels:?}");
+}
