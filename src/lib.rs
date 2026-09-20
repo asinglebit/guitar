@@ -68,6 +68,7 @@ pub mod helpers {
     pub mod time;
     pub mod version;
     pub mod watcher;
+    pub mod worktree_hook;
 }
 
 pub use app::app::App;

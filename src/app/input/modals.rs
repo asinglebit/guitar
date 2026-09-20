@@ -14,6 +14,7 @@ use crate::{
         branch_visibility::save_branch_visibility,
         keymap::{KeyBinding, rebind_keymap_selection, save_keymaps, save_keymaps_to_path},
         localisation::{errors, operations},
+        worktree_hook::worktree_created,
     },
 };
 use git2::Oid;
@@ -531,6 +532,9 @@ impl App {
                                 self.modal_worktree_name.clear();
                                 self.focus = Focus::Viewport;
                                 self.reload(None);
+                                // Said once, to whatever is listening. Nothing
+                                // usually is, and that costs guitar nothing.
+                                worktree_created(&path);
                             },
                             Err(error) => self.show_error(errors::with_error(errors::CREATE_WORKTREE(), error)),
                         }
