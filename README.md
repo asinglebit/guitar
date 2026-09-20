@@ -1039,6 +1039,19 @@ base16 tomorrow
 base16 ocean
 base16 eighties
 matrix
+catppuccin macchiato
+catppuccin frappe
+tokyo night moon
+dracula soft
+nightfox
+duskfox
+nordfox
+terafox
+carbonfox
+dayfox
+dawnfox
+oxocarbon dark
+oxocarbon light
 ```
 
 ## Persistence
