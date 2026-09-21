@@ -243,6 +243,9 @@ impl Default for App {
             watcher_quiet_since: None,
             pending_reload: false,
 
+            // Terminal focus. Assumed until a terminal says otherwise.
+            is_focused: true,
+
             // Exit
             is_exit: false,
         }

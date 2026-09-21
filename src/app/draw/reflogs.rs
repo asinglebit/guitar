@@ -81,7 +81,16 @@ impl App {
 
         let display_start = if reflogs_empty || lines_are_windowed { 0 } else { start };
         let display_end = if reflogs_empty || lines_are_windowed { lines.len() } else { end };
-        let list_items = zebra_list_items(&lines[display_start..display_end], visible_height, start, self.reflogs_selected, self.focus == Focus::Reflogs, !reflogs_empty, &self.theme);
+        let list_items = zebra_list_items(
+            &lines[display_start..display_end],
+            visible_height,
+            start,
+            self.reflogs_selected,
+            self.focus == Focus::Reflogs,
+            !reflogs_empty,
+            self.cursor_line_background(),
+            &self.theme,
+        );
 
         if self.layout_config.is_zen {
             let list = List::new(list_items).block(Block::default().borders(Borders::ALL).padding(padding).border_set(self.symbols.border.block_set()));

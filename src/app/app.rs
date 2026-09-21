@@ -45,6 +45,7 @@ use crate::{
     },
     helpers::{
         colors::ColorPicker,
+        cursor_line::cursor_line_background,
         keymap::InputMode,
         palette::*,
         spinner::Spinner,
@@ -52,7 +53,7 @@ use crate::{
     },
 };
 use crossterm::{
-    event::{DisableMouseCapture, EnableMouseCapture, KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags},
+    event::{DisableFocusChange, DisableMouseCapture, EnableFocusChange, EnableMouseCapture, KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags},
     execute,
     terminal::{enable_raw_mode, supports_keyboard_enhancement},
 };
@@ -62,7 +63,7 @@ use ratatui::{
     DefaultTerminal, Frame,
     crossterm::event,
     layout::Rect,
-    style::Style,
+    style::{Color, Style},
     text::Span,
     widgets::{Block, Borders, ListItem},
 };
@@ -690,6 +691,10 @@ pub struct App {
     // a reload that has already been asked for.
     pub pending_reload: bool,
 
+    // Whether the terminal window itself has focus. Terminals that do not report focus changes
+    // leave this true, so the cursor line simply stays bright.
+    pub is_focused: bool,
+
     // Main loop shutdown flag.
     pub is_exit: bool,
 }
@@ -708,6 +713,9 @@ impl App {
             execute!(stdout(), PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES | KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES))?;
         }
         execute!(stdout(), EnableMouseCapture)?;
+        // Terminals that understand this report when the window is focused; the rest stay silent
+        // and the cursor line stays bright.
+        let _ = execute!(stdout(), EnableFocusChange);
 
         let run_result = (|| {
             // Load persisted state before the first repository scan.
@@ -740,6 +748,7 @@ impl App {
         })();
 
         let pop_result = if has_keyboard_enhancement { execute!(stdout(), PopKeyboardEnhancementFlags) } else { Ok(()) };
+        let _ = execute!(stdout(), DisableFocusChange);
         let mouse_result = execute!(stdout(), DisableMouseCapture);
         if run_result.is_ok() {
             pop_result?;
@@ -747,6 +756,15 @@ impl App {
         }
 
         run_result
+    }
+
+    // The cursor line's background: bright while the terminal itself has focus, dim when it is
+    // not, so a dim cursor line means the keystrokes are landing somewhere else.
+    pub fn cursor_line_background(&self) -> Color {
+        if !self.layout_config.is_cursor_focus {
+            return self.theme.cursor_line_color();
+        }
+        cursor_line_background(self.theme.cursor_line_color(), self.theme.zebra_color(), self.is_focused)
     }
 
     pub fn draw(&mut self, frame: &mut Frame) {

@@ -76,6 +76,12 @@ impl App {
             Event::Mouse(mouse_event) => {
                 self.handle_mouse_event(mouse_event);
             },
+            Event::FocusGained => {
+                self.is_focused = true;
+            },
+            Event::FocusLost => {
+                self.is_focused = false;
+            },
             _ => {},
         };
         Ok(())

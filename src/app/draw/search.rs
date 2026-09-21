@@ -96,7 +96,7 @@ impl App {
         }
 
         let display_start = if selection_enabled { start } else { 0 };
-        let list_items = zebra_list_items(&lines, visible_height, display_start, self.search_selected, self.focus == Focus::Search, selection_enabled, &self.theme);
+        let list_items = zebra_list_items(&lines, visible_height, display_start, self.search_selected, self.focus == Focus::Search, selection_enabled, self.cursor_line_background(), &self.theme);
 
         if self.layout_config.is_zen {
             let list = List::new(list_items).block(Block::default().borders(Borders::ALL).padding(padding).border_set(self.symbols.border.block_set()));

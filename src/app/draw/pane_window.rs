@@ -1,6 +1,6 @@
 use crate::{app::app::PaneWindowCache, core::graph_service::GraphPaneRow, helpers::palette::Theme};
 use ratatui::{
-    style::Style,
+    style::{Color, Style},
     text::{Line, Span},
     widgets::ListItem,
 };
@@ -25,7 +25,9 @@ pub(super) fn preloaded_pane_window(start: usize, end: usize, total_lines: usize
     (start.saturating_sub(visible_height), end.saturating_add(visible_height).min(total_lines))
 }
 
-pub(super) fn zebra_list_items<'a>(lines: &[Line<'a>], visible_height: usize, global_start: usize, selected: usize, is_focused: bool, selection_enabled: bool, theme: &Theme) -> Vec<ListItem<'a>> {
+pub(super) fn zebra_list_items<'a>(
+    lines: &[Line<'a>], visible_height: usize, global_start: usize, selected: usize, is_focused: bool, selection_enabled: bool, cursor_line: Color, theme: &Theme,
+) -> Vec<ListItem<'a>> {
     (0..visible_height)
         .map(|idx| {
             let line = lines.get(idx).cloned().unwrap_or_default();
@@ -34,7 +36,7 @@ pub(super) fn zebra_list_items<'a>(lines: &[Line<'a>], visible_height: usize, gl
 
             let mut item = if is_selected {
                 let spans: Vec<Span> = line.iter().map(|span| Span::styled(span.content.clone(), span.style)).collect();
-                ListItem::new(Line::from(spans)).style(Style::default().bg(theme.background_or_default(theme.COLOR_GREY_800)))
+                ListItem::new(Line::from(spans)).style(Style::default().bg(cursor_line))
             } else {
                 ListItem::new(line)
             };

@@ -117,7 +117,7 @@ impl App {
                 let absolute_idx = start + i;
                 let mut item = (*line).clone();
                 if absolute_idx == self.viewer_selected && self.focus == Focus::Viewport {
-                    item = item.style(Style::default().bg(self.theme.background_or_default(self.theme.COLOR_GREY_800)));
+                    item = item.style(Style::default().bg(self.cursor_line_background()));
                 }
                 item
             })
@@ -187,7 +187,7 @@ impl App {
             let mut left = row.left.clone();
             let mut right = row.right.clone();
             if absolute_idx == self.viewer_selected && self.focus == Focus::Viewport {
-                let selected = Style::default().bg(self.theme.background_or_default(self.theme.COLOR_GREY_800));
+                let selected = Style::default().bg(self.cursor_line_background());
                 left = left.style(selected);
                 right = right.style(selected);
             }

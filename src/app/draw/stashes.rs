@@ -95,7 +95,16 @@ impl App {
         // Selection is skipped for the synthetic empty row; striping still fills the pane.
         let display_start = if stashes_empty || lines_are_windowed { 0 } else { start };
         let display_end = if stashes_empty || lines_are_windowed { lines.len() } else { end };
-        let list_items = zebra_list_items(&lines[display_start..display_end], visible_height, start, self.stashes_selected, self.focus == Focus::Stashes, !stashes_empty, &self.theme);
+        let list_items = zebra_list_items(
+            &lines[display_start..display_end],
+            visible_height,
+            start,
+            self.stashes_selected,
+            self.focus == Focus::Stashes,
+            !stashes_empty,
+            self.cursor_line_background(),
+            &self.theme,
+        );
 
         if self.layout_config.is_zen {
             // Zen mode frames the pane as a full standalone list.

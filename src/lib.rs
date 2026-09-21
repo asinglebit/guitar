@@ -55,6 +55,7 @@ pub mod git {
 pub mod helpers {
     pub mod branch_visibility;
     pub mod colors;
+    pub mod cursor_line;
     pub mod heatmap;
     pub mod keymap;
     pub mod layout;

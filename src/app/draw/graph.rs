@@ -6,7 +6,7 @@ use ratatui::layout::{Alignment, Constraint, Direction, Layout};
 use ratatui::text::Line;
 use ratatui::widgets::Paragraph;
 use ratatui::{
-    style::Style,
+    style::{Color, Style},
     widgets::{Block, Borders, Cell as WidgetCell, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, Table},
 };
 use std::collections::HashSet;
@@ -50,7 +50,7 @@ impl App {
         match repo.head().ok().and_then(|h| h.target()) {
             Some(_) => {},
             None => {
-                let table = Table::new(graph_backdrop_rows(visible_height, 0, None, &self.theme), [ratatui::layout::Constraint::Min(0)])
+                let table = Table::new(graph_backdrop_rows(visible_height, 0, None, self.cursor_line_background(), &self.theme), [ratatui::layout::Constraint::Min(0)])
                     .block(Block::default().borders(Borders::LEFT | Borders::RIGHT).border_style(Style::default().fg(self.theme.COLOR_BORDER)))
                     .column_spacing(0);
 
@@ -104,6 +104,7 @@ impl App {
 
         // Build table rows and measure the graph column from rendered span widths.
         let mut rows = Vec::with_capacity(visible_height);
+        let cursor_line = self.cursor_line_background();
         let width = graph_range.iter().map(|line| line.spans.iter().filter(|span| !span.content.is_empty()).map(|span| span.content.chars().count()).sum::<usize>()).max().unwrap_or(0) as u16;
         let search_highlight_indices: HashSet<usize> =
             if self.layout_config.is_search && self.search_path.is_some() { self.search_rows.iter().map(|row| row.graph_index).filter(|&index| index != 0).collect() } else { HashSet::new() };
@@ -129,8 +130,10 @@ impl App {
             let global_idx = idx + start;
             let is_selected = idx < visible_len && global_idx == self.graph_selected && self.focus == Focus::Viewport;
             let is_search_highlighted = idx < visible_len && search_highlight_indices.contains(&global_idx);
-            if is_selected || is_search_highlighted {
-                row = row.style(Style::default().bg(self.theme.background_or_default(self.theme.COLOR_GREY_800)));
+            if is_selected {
+                row = row.style(Style::default().bg(cursor_line));
+            } else if is_search_highlighted {
+                row = row.style(Style::default().bg(self.theme.cursor_line_color()));
             } else if global_idx.is_multiple_of(2) {
                 row = row.style(Style::default().bg(self.theme.background_or_default(self.theme.COLOR_GREY_900)));
             }
@@ -208,13 +211,13 @@ fn blank_projection(len: usize) -> Vec<Line<'static>> {
     vec![Line::default(); len]
 }
 
-fn graph_backdrop_rows<'a>(visible_height: usize, start: usize, selected: Option<usize>, theme: &crate::helpers::palette::Theme) -> Vec<Row<'a>> {
+fn graph_backdrop_rows<'a>(visible_height: usize, start: usize, selected: Option<usize>, cursor_line: Color, theme: &crate::helpers::palette::Theme) -> Vec<Row<'a>> {
     (0..visible_height)
         .map(|idx| {
             let global_idx = start + idx;
             let mut row = Row::new([WidgetCell::from(Line::default())]);
             if selected == Some(global_idx) {
-                row = row.style(Style::default().bg(theme.background_or_default(theme.COLOR_GREY_800)));
+                row = row.style(Style::default().bg(cursor_line));
             } else if global_idx.is_multiple_of(2) {
                 row = row.style(Style::default().bg(theme.background_or_default(theme.COLOR_GREY_900)));
             }

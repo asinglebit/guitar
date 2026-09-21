@@ -25,7 +25,7 @@ impl App {
         self.theme.clear_area(area, frame.buffer_mut());
 
         let menu_bg = self.theme.background_or_default(self.theme.COLOR_GREY_900);
-        let selected_bg = self.theme.background_or_default(self.theme.COLOR_GREY_800);
+        let selected_bg = self.cursor_line_background();
         let label_width = menu.label_width();
         let divider_width = label_width.saturating_add(3);
         let mut items = Vec::with_capacity(menu.items.len().saturating_add(2));

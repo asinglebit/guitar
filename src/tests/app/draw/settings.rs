@@ -713,3 +713,25 @@ fn settings_background_rows_render_translated_and_keyless_in_every_language() {
 
     crate::helpers::localisation::set_active_language(Language::English);
 }
+
+#[test]
+fn settings_display_tab_renders_the_cursor_focus_toggle() {
+    let _language_guard = crate::helpers::localisation::LANGUAGE_TEST_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let (_path, repo) = temp_repo("cursor-focus");
+    let mut app = settings_app();
+    app.layout.graph = Rect::new(0, 0, 160, 160);
+    app.layout.app = Rect::new(0, 0, 160, 160);
+    app.settings_tab = SettingsTab::Display;
+
+    app.layout_config.is_cursor_focus = true;
+    let on = rendered_settings(&mut app, &repo, 160, 160);
+    assert!(on.contains("cursor:"));
+    assert!(on.contains("follow terminal focus:"));
+
+    app.layout_config.is_cursor_focus = false;
+    let off = rendered_settings(&mut app, &repo, 160, 160);
+    assert_ne!(on, off, "the checkbox must follow the setting");
+
+    // The row is selectable, so Enter reaches the toggle.
+    assert!(app.settings_selections.iter().any(|selection| selection.kind == SettingsSelectionKind::LayoutCommand(Command::ToggleCursorFocus)));
+}

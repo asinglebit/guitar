@@ -102,7 +102,8 @@ impl App {
         let start = self.worktrees_scroll.get().min(total_lines.saturating_sub(visible_height));
         let end = (start + visible_height).min(total_lines);
 
-        let list_items = zebra_list_items(&lines[start..end], visible_height, start, self.worktrees_selected, self.focus == Focus::Worktrees, !worktrees_empty, &self.theme);
+        let list_items =
+            zebra_list_items(&lines[start..end], visible_height, start, self.worktrees_selected, self.focus == Focus::Worktrees, !worktrees_empty, self.cursor_line_background(), &self.theme);
 
         if self.layout_config.is_zen {
             let list = List::new(list_items).block(Block::default().borders(Borders::ALL).padding(padding).border_set(self.symbols.border.block_set()));

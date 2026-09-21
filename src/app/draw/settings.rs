@@ -36,6 +36,8 @@ const SETTINGS_PANE_COMMANDS: &[(&str, Command, fn() -> &'static str)] = &[
 // No key column here: shortcuts are listed in the shortcuts tab, not repeated beside the toggles.
 const SETTINGS_BACKGROUND_COMMANDS: &[(Command, fn() -> &'static str)] = &[(Command::ToggleFileWatcher, settings_text::FILE_WATCHER)];
 
+const SETTINGS_CURSOR_COMMANDS: &[(Command, fn() -> &'static str)] = &[(Command::ToggleCursorFocus, settings_text::FOLLOW_FOCUS)];
+
 const SETTINGS_GRAPH_COMMANDS: &[(&str, Command, fn() -> &'static str)] = &[
     (")", Command::ToggleGraphReflogs, settings_text::GRAPH_REFLOG_COMMITS),
     ("!", Command::ToggleShas, settings_text::SHAS),
@@ -158,6 +160,13 @@ impl App {
             },
             Command::ToggleFileWatcher => {
                 if self.layout_config.is_file_watcher {
+                    self.symbols.form.checkbox_on.clone()
+                } else {
+                    self.symbols.form.checkbox_off.clone()
+                }
+            },
+            Command::ToggleCursorFocus => {
+                if self.layout_config.is_cursor_focus {
                     self.symbols.form.checkbox_on.clone()
                 } else {
                     self.symbols.form.checkbox_off.clone()
@@ -508,6 +517,20 @@ impl App {
             lines.push(self.settings_filled_line(&label, &state, width, style));
             self.add_settings_selection(lines, SettingsSelectionKind::LayoutCommand(command.clone()));
         }
+
+        lines.push(Line::default());
+        lines.push(self.settings_section_line(settings_text::CURSOR(), width));
+        lines.push(Line::default());
+        for (idx, (command, label)) in SETTINGS_CURSOR_COMMANDS.iter().enumerate() {
+            let label = format!(" {}:", label());
+            let state = format!(" {} ", self.settings_layout_command_state(command));
+            let mut style = Style::default().fg(self.theme.COLOR_TEXT);
+            if idx.is_multiple_of(2) {
+                style = style.bg(self.theme.background_or_default(self.theme.COLOR_GREY_900));
+            }
+            lines.push(self.settings_filled_line(&label, &state, width, style));
+            self.add_settings_selection(lines, SettingsSelectionKind::LayoutCommand(command.clone()));
+        }
     }
 
     fn append_settings_shortcuts(&mut self, lines: &mut Vec<Line<'static>>, width: usize) {
@@ -691,6 +714,7 @@ impl App {
         let end = (start + visible_height).min(total_lines);
 
         // Ensure blank lines still occupy space after conversion to ListItem.
+        let cursor_line = self.cursor_line_background();
         let list_items: Vec<ListItem> = lines[start..end]
             .iter()
             .enumerate()
@@ -709,7 +733,7 @@ impl App {
                         .iter()
                         .map(|span| {
                             let mut style = span.style;
-                            style = style.bg(self.theme.background_or_default(self.theme.COLOR_GREY_800));
+                            style = style.bg(cursor_line);
                             Span::styled(span.content.clone(), style)
                         })
                         .collect();

@@ -334,6 +334,16 @@ graph/viewer, inspector, staged/commit status, unstaged status, search, submodul
 
 Hidden panes are skipped. The unstaged status pane is focusable only on the uncommitted row.
 
+Exactly one cursor line is visible at a time, in the focused pane. It is drawn brighter while the
+terminal window itself has focus and dimmer when it does not, so a dim cursor line means your
+keystrokes are landing elsewhere. The dim state settles part of the way toward the zebra stripe
+rather than by a fixed step, so it stays legible on tight palettes. Terminals that do not report
+focus changes leave it bright. The `follow terminal focus` row in the `display` settings tab turns
+this off, and the choice persists in `layout.json`.
+
+Under `tmux`, this needs `set -g focus-events on`; `tmux` leaves it off by default and then never
+tells a pane it stopped being the active one.
+
 ### Selection
 
 `Enter` means "open/select" for the current focus:
@@ -969,7 +979,7 @@ Open settings with `?`.
 The settings view includes app version and commit heatmap above these tabs:
 
 - `general`: config file paths, performance settings, background task toggles, and recent repositories.
-- `display`: pane visibility, graph metadata toggles, language, symbol themes, and theme list.
+- `display`: pane visibility, graph metadata toggles, cursor line focus cue, language, symbol themes, and theme list.
 - `auth`: Git `user.name`, `user.email`, and auth behavior notes.
 - `repo`: remotes and remote URLs.
 - `shortcuts`: normal-mode shortcuts and action-mode shortcuts that differ from normal mode.
@@ -982,6 +992,7 @@ Selectable rows:
 - Theme rows: `Enter` activates and saves the selected theme.
 - Display toggle rows: `Enter` toggles the row or resets layout.
 - Background rows: `Enter` toggles the file watcher.
+- Cursor rows: `Enter` toggles the cursor line focus cue.
 - Graph lane limit row: `Enter` opens a numeric prompt. Positive values save to `layout.json`; `0` and invalid input keep the modal open without changing the setting. In normal mode, `-` and `+` shrink or grow the saved graph lane limit by one and reload an open repository.
 - Keybinding rows: `Enter` opens key capture.
 
@@ -1069,7 +1080,7 @@ Windows: %APPDATA%\guitar
 The app writes:
 
 - `keymap.json`: keyboard mappings.
-- `layout.json`: pane visibility, widths, weights, graph metadata display, graph reflog setting, graph lane limit, zen/minimal state, and background task toggles.
+- `layout.json`: pane visibility, widths, weights, graph metadata display, graph reflog setting, graph lane limit, zen/minimal state, cursor line focus cue, and background task toggles.
 - `theme.json`: active theme and all color slots.
 - `symbols.json`: active symbol theme and all configurable UI symbols.
 - `recent.json`: recent repository paths.
@@ -1174,6 +1185,7 @@ Default layout:
   "is_inspector": true,
   "is_zen": false,
   "is_file_watcher": false,
+  "is_cursor_focus": true,
   "width_left_pane": 45,
   "width_right_pane": 46,
   "weight_branches": 100,

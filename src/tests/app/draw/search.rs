@@ -86,7 +86,7 @@ fn search_results_render_rows_and_selection() {
     assert!(rendered.contains("touch search pane"));
 
     let buffer = terminal.backend().buffer();
-    let selected_bg = app.theme.background_or_default(app.theme.COLOR_GREY_800);
+    let selected_bg = app.cursor_line_background();
     assert!(buffer.content().iter().any(|cell| cell.bg == selected_bg));
 }
 

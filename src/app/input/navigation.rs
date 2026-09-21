@@ -541,6 +541,7 @@ impl App {
                 self.sync_file_watcher();
                 self.save_layout();
             },
+            Command::ToggleCursorFocus => self.on_toggle_cursor_focus(),
             _ => {},
         }
 
@@ -2258,6 +2259,11 @@ impl App {
     pub fn on_toggle_file_watcher(&mut self) {
         self.layout_config.is_file_watcher = !self.layout_config.is_file_watcher;
         self.sync_file_watcher();
+        self.save_layout();
+    }
+
+    pub fn on_toggle_cursor_focus(&mut self) {
+        self.layout_config.is_cursor_focus = !self.layout_config.is_cursor_focus;
         self.save_layout();
     }
 

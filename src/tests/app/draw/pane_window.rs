@@ -40,7 +40,7 @@ fn preloaded_pane_window_adds_one_visible_page_on_each_side() {
 #[test]
 fn zebra_list_items_fill_blank_tail_rows() {
     let theme = Theme::default();
-    let items = zebra_list_items(&[Line::from("row")], 3, 0, usize::MAX, false, false, &theme);
+    let items = zebra_list_items(&[Line::from("row")], 3, 0, usize::MAX, false, false, theme.cursor_line_color(), &theme);
     let zebra = theme.background_or_default(theme.COLOR_GREY_900);
 
     let backend = TestBackend::new(10, 3);

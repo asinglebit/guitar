@@ -60,7 +60,7 @@ fn context_menu_renders_labels_rounded_corners_and_selected_row() {
     assert_eq!(buffer[(4 + width - 1, 3)].symbol(), "╮");
 
     let selected_row = 3 + 2 + 5;
-    assert_eq!(buffer[(5, selected_row)].bg, app.theme.background_or_default(app.theme.COLOR_GREY_800));
+    assert_eq!(buffer[(5, selected_row)].bg, app.cursor_line_background());
     assert_eq!(buffer[(5, 6)].bg, app.theme.background_or_default(app.theme.COLOR_GREY_900));
     assert_eq!(buffer[(6, 7)].symbol(), "─");
     assert_eq!(buffer[(5, 8)].bg, app.theme.background_or_default(app.theme.COLOR_GREY_900));

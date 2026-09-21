@@ -224,6 +224,7 @@ impl App {
                 self.focus == Focus::StatusTop,
                 is_staged_changes && !status_top_empty,
                 search_highlight_path,
+                self.cursor_line_background(),
                 &self.theme,
             );
 
@@ -297,6 +298,7 @@ impl App {
                     self.focus == Focus::StatusBottom,
                     is_unstaged_changes && !status_bottom_empty,
                     search_highlight_path,
+                    self.cursor_line_background(),
                     &self.theme,
                 );
 
@@ -349,7 +351,7 @@ fn centered_loading_lines(visible_height: usize, width: usize, style: Style) -> 
 }
 
 fn status_list_items<'a>(
-    rows: &[StatusRow<'a>], visible_height: usize, start: usize, selected: usize, is_focused: bool, selection_enabled: bool, search_highlight_path: Option<&str>,
+    rows: &[StatusRow<'a>], visible_height: usize, start: usize, selected: usize, is_focused: bool, selection_enabled: bool, search_highlight_path: Option<&str>, cursor_line: ratatui::style::Color,
     theme: &crate::helpers::palette::Theme,
 ) -> Vec<ListItem<'a>> {
     (0..visible_height)
@@ -362,7 +364,8 @@ fn status_list_items<'a>(
 
             let mut item = if is_highlighted {
                 let spans: Vec<Span> = row.line.iter().map(|span| Span::styled(span.content.clone(), span.style.fg(theme.COLOR_HIGHLIGHTED))).collect();
-                ListItem::new(Line::from(spans)).style(Style::default().bg(theme.background_or_default(theme.COLOR_GREY_800)).fg(theme.COLOR_HIGHLIGHTED))
+                let background = if is_selected { cursor_line } else { theme.cursor_line_color() };
+                ListItem::new(Line::from(spans)).style(Style::default().bg(background).fg(theme.COLOR_HIGHLIGHTED))
             } else {
                 ListItem::new(row.line)
             };

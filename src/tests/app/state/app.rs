@@ -617,3 +617,31 @@ fn reload_replaces_retained_rows_with_fresh_topology() {
     stop_graph_service(&mut app);
     assert!(labels.iter().any(|name| name == "fresh-branch"), "a branch created between reloads must reach the graph rows, got {labels:?}");
 }
+
+#[test]
+fn cursor_line_is_brighter_focused_than_unfocused() {
+    let mut app = App::default();
+    app.theme = Theme::classic();
+    app.layout_config.is_cursor_focus = true;
+
+    app.is_focused = true;
+    let focused = app.cursor_line_background();
+    app.is_focused = false;
+    let unfocused = app.cursor_line_background();
+
+    let (Color::Rgb(bright, _, _), Color::Rgb(dim, _, _)) = (focused, unfocused) else {
+        panic!("the classic theme is rgb");
+    };
+    assert!(bright > dim, "focused {bright} must sit above unfocused {dim}");
+}
+
+#[test]
+fn cursor_line_keeps_its_resting_colour_when_the_focus_cue_is_switched_off() {
+    let mut app = App::default();
+    app.layout_config.is_cursor_focus = false;
+
+    app.is_focused = true;
+    assert_eq!(app.cursor_line_background(), app.theme.cursor_line_color());
+    app.is_focused = false;
+    assert_eq!(app.cursor_line_background(), app.theme.cursor_line_color());
+}

@@ -226,6 +226,14 @@ impl Theme {
         }
     }
 
+    pub const fn cursor_line_color(&self) -> Color {
+        self.background_or_default(self.COLOR_GREY_800)
+    }
+
+    pub const fn zebra_color(&self) -> Color {
+        self.background_or_default(self.COLOR_GREY_900)
+    }
+
     pub fn clear_area(&self, area: Rect, buf: &mut Buffer) {
         let area = area.intersection(*buf.area());
         if area.is_empty() {

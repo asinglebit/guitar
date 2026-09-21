@@ -79,6 +79,7 @@ impl App {
             Command::ToggleInspector => self.on_toggle_inspector(),
             Command::ToggleShas => self.on_toggle_shas(),
             Command::ToggleFileWatcher => self.on_toggle_file_watcher(),
+            Command::ToggleCursorFocus => self.on_toggle_cursor_focus(),
             Command::ToggleHelp => self.on_toggle_help(),
             Command::ActionMode => self.on_action_mode(),
             Command::Exit => self.on_exit(),

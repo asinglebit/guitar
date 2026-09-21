@@ -149,13 +149,14 @@ impl App {
         let end = (start + visible_height).min(total_lines);
 
         // Selection highlight dims text to keep metadata subordinate to graph selection.
+        let cursor_line = self.cursor_line_background();
         let list_items: Vec<ListItem> = lines[start..end]
             .iter()
             .enumerate()
             .map(|(i, line)| {
                 if start + i == self.inspector_selected && self.focus == Focus::Inspector {
                     let spans: Vec<Span> = line.iter().map(|span| Span::styled(span.content.clone(), span.style.fg(self.theme.COLOR_HIGHLIGHTED))).collect();
-                    ListItem::new(Line::from(spans)).style(Style::default().bg(self.theme.background_or_default(self.theme.COLOR_GREY_800)).fg(self.theme.COLOR_HIGHLIGHTED))
+                    ListItem::new(Line::from(spans)).style(Style::default().bg(cursor_line).fg(self.theme.COLOR_HIGHLIGHTED))
                 } else {
                     ListItem::new(line.clone())
                 }
