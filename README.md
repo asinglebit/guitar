@@ -169,7 +169,7 @@ The splash screen appears when no repository is open or when you back out of the
 - `Esc` returns to the graph when a repository is already loaded.
 - `q` exits.
 
-The wordmark above the list is drawn at one of three sizes: the full logo at 120 columns and wider, a smaller one from 80 to 119, and the compact `guita` below that.
+The wordmark above the list is drawn at one of three sizes: the full logo at 106 columns and wider, a smaller one from 80 to 105, and the compact `guita` below that. Both widths live in `helpers::logo`, because the splash centres on the row count they pick and a click on a recent repository is measured against the same count.
 
 It is animated, off how long guitar has been up. Characters drift, each swapping only for another glyph of the same weight so the letterforms hold, and about one cell in eighteen is carrying a borrowed glyph at any moment. A sheen crosses the wordmark roughly every five seconds, leaning two columns a row. Its crest is cut into one step per entry in its profile — `0 -1 -2 -3 -2 -1 0 1 2 3 2 1 0`, out to the lightest tint, down through the ramp to the darkest, and back to where the wordmark rests — and a cell is carried along the whole of it as the light passes over. So the band reads yellow at its left and dark green at its right, the ramp written along the wordmark the way you read it, and it eases to nothing at both ends rather than meeting the resting colour on a hard line. The tail after the dark section is measured along the same diagonal as the rest, so it leans with it.
 

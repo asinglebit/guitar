@@ -69,13 +69,7 @@ impl App {
             };
 
         // Logo detail scales down for narrow terminals.
-        let logo_rows = if self.layout.app.width < 80 {
-            1
-        } else if self.layout.app.width < 120 {
-            9
-        } else {
-            11
-        };
+        let logo_rows = logo::rows_at(self.layout.app.width, &self.symbols.splash);
 
         let visible = visible_height;
 
@@ -94,10 +88,10 @@ impl App {
         // both read off how long guitar has been up. The row the tone changes on is the split the
         // splash has always had, and at rest the wordmark is exactly the art.
         let elapsed = self.started.elapsed();
-        if self.layout.app.width < 80 {
+        if self.layout.app.width < logo::NARROW_COLUMNS {
             lines.push(logo::word(&self.symbols.splash.logo_compact, &self.theme, elapsed).centered());
         } else {
-            let (art, bright) = if self.layout.app.width < 120 { (&self.symbols.splash.logo_narrow, 4) } else { (&self.symbols.splash.logo_wide, 5) };
+            let (art, bright) = if self.layout.app.width < logo::WIDE_COLUMNS { (&self.symbols.splash.logo_narrow, 4) } else { (&self.symbols.splash.logo_wide, 5) };
             lines.extend(logo::lines(art, bright, &self.theme, elapsed).into_iter().map(Line::centered));
         }
 

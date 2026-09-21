@@ -257,3 +257,24 @@ fn the_sheen_lightens_before_it_darkens() {
 
     assert!(lightest < darkest, "the light section belongs before the dark one, got {lightest} and {darkest}");
 }
+
+#[test]
+fn the_drawn_logo_gives_way_to_the_smaller_one_at_the_breakpoint() {
+    // The splash centres on this and a click on a recent repository is measured against it, so the
+    // two have to see the same row count at every width.
+    let splash = SymbolTheme::default().splash;
+
+    assert_eq!(rows_at(WIDE_COLUMNS, &splash), splash.logo_wide.len());
+    assert_eq!(rows_at(WIDE_COLUMNS - 1, &splash), splash.logo_narrow.len(), "a column short of the breakpoint is the smaller wordmark");
+    assert_eq!(rows_at(NARROW_COLUMNS, &splash), splash.logo_narrow.len());
+    assert_eq!(rows_at(NARROW_COLUMNS - 1, &splash), 1, "below that it is the word, on one row");
+}
+
+#[test]
+fn every_wordmark_leaves_room_around_it_at_the_width_that_chooses_it() {
+    let splash = SymbolTheme::default().splash;
+    let widest = |art: &[String]| art.iter().map(|row| row.chars().count()).max().unwrap_or(0);
+
+    assert!(widest(&splash.logo_wide) < WIDE_COLUMNS as usize, "the drawn logo has to fit the width that picks it, with room left over");
+    assert!(widest(&splash.logo_narrow) < NARROW_COLUMNS as usize);
+}

@@ -5,6 +5,26 @@ use ratatui::{
 use std::time::Duration;
 
 use crate::helpers::palette::{Theme, blend, distinct};
+use crate::helpers::symbols::SplashSymbols;
+
+// Where the splash changes wordmark: the width the drawn logo needs before it is given the room,
+// and the width below which neither drawing fits and the word stands in for them. Kept here
+// because the splash and the click that lands on a recent repository both measure against them,
+// and a pair that drifted apart would put the list somewhere other than where it was painted.
+pub const WIDE_COLUMNS: u16 = 106;
+pub const NARROW_COLUMNS: u16 = 80;
+
+// How many rows the wordmark takes at this width. Read off the art itself, so a symbol theme that
+// replaces it with something a different height is still centred and still clicked correctly.
+pub fn rows_at(width: u16, splash: &SplashSymbols) -> usize {
+    if width < NARROW_COLUMNS {
+        1
+    } else if width < WIDE_COLUMNS {
+        splash.logo_narrow.len()
+    } else {
+        splash.logo_wide.len()
+    }
+}
 
 // Glyphs of like weight. A cell only ever swaps for another glyph from its own group, so the
 // letterforms hold while the texture moves. Anything the groups do not name -- the letters of the
