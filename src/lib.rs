@@ -61,6 +61,7 @@ pub mod helpers {
     pub mod layout;
     pub mod localisation;
     pub mod logger;
+    pub mod logo;
     pub mod palette;
     pub mod recent;
     pub mod spinner;

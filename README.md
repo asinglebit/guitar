@@ -169,6 +169,16 @@ The splash screen appears when no repository is open or when you back out of the
 - `Esc` returns to the graph when a repository is already loaded.
 - `q` exits.
 
+The wordmark above the list is drawn at one of three sizes: the full logo at 120 columns and wider, a smaller one from 80 to 119, and the compact `guita` below that.
+
+It is animated, off how long guitar has been up. Characters drift, each swapping only for another glyph of the same weight so the letterforms hold, and about one cell in eighteen is carrying a borrowed glyph at any moment. A sheen crosses the wordmark roughly every five seconds, leaning two columns a row. Its crest is cut into one step per entry in its profile — `0 -1 -2 -3 -2 -1 0 1 2 3 2 1 0`, out to the lightest tint, down through the ramp to the darkest, and back to where the wordmark rests — and a cell is carried along the whole of it as the light passes over. So the band reads yellow at its left and dark green at its right, the ramp written along the wordmark the way you read it, and it eases to nothing at both ends rather than meeting the resting colour on a hard line. The tail after the dark section is measured along the same diagonal as the rest, so it leans with it.
+
+The ramp runs `COLOR_YELLOW`, `COLOR_LIME`, `COLOR_GRASS`, `COLOR_GREEN`, and then two stops darker than any green the palette names, mixed from `COLOR_GREEN` toward black. The dark end is mixed rather than taken from `COLOR_LIGHT_GREEN_900`, which reads as the darkest green only on a dark theme: it is the colour behind an added line, so on the twelve light themes it is a pale wash and would have turned the ramp back up at its far end. At rest the wordmark is exactly the art, resting on the grass and green it always did, and the row the tone changes on is the one it always was.
+
+Most themes map several roles onto one colour — nord publishes a single green, everforest one colour for three of those slots — and a ramp built straight off those would stand still exactly where they collapse. `palette::distinct` fills the gaps by mixing the distinct colours either side of a run, so the ramp always has somewhere to travel. The themes themselves are untouched, so nothing else in the interface shifts and each stays faithful to the palette it is named after. Themes built from named terminal colours have nothing to mix and are left as they are.
+
+The compact logo takes the sheen but keeps its letters, because it is a word rather than a picture. A custom symbol theme can replace any of the three; glyphs the weight groups do not name are left alone and take only the colour.
+
 ### Graph
 
 The graph is the central history view. It can render:

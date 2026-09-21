@@ -3157,6 +3157,59 @@ pub fn save_theme(theme: &Theme) {
     save_theme_to_path(&theme_path(), theme);
 }
 
+// Mixes `amount` of the way from one colour to another, channel by channel. A colour with no
+// channels -- one of the terminal's own named sixteen -- has nothing to mix and is returned as it
+// is, which is what leaves those themes with the colours they chose.
+pub fn blend(from: Color, to: Color, amount: f32) -> Color {
+    let (Color::Rgb(from_red, from_green, from_blue), Color::Rgb(to_red, to_green, to_blue)) = (from, to) else {
+        return from;
+    };
+    let mix = |from: u8, to: u8| (f32::from(from) + (f32::from(to) - f32::from(from)) * amount).round().clamp(0.0, 255.0) as u8;
+    Color::Rgb(mix(from_red, to_red), mix(from_green, to_green), mix(from_blue, to_blue))
+}
+
+// A ramp whose stops are all different. A theme is free to map several of its roles onto one
+// colour -- nord publishes a single green, everforest one colour for three of these slots at once
+// -- and a gradient built straight off those would stand still exactly where they collapse.
+// Wherever neighbouring stops share a colour, the run between them is filled in by mixing the
+// distinct colours either side, so the ramp always has somewhere to travel.
+//
+// Themes built from named terminal colours have no channels to mix and are handed back untouched,
+// which is also what keeps the monochrome theme monochrome.
+pub fn distinct<const N: usize>(stops: [Color; N]) -> [Color; N] {
+    if stops.iter().any(|stop| !matches!(stop, Color::Rgb(..))) {
+        return stops;
+    }
+
+    let mut ramp = stops;
+    let mut start = 0;
+    while start < N {
+        let mut end = start + 1;
+        while end < N && stops[end] == stops[start] {
+            end += 1;
+        }
+
+        let run = end - start;
+        if run > 1 {
+            if end < N {
+                // Spread the run toward the next distinct stop, leaving the first where it is.
+                for step in 1..run {
+                    ramp[start + step] = blend(ramp[start], stops[end], step as f32 / run as f32);
+                }
+            } else if start > 0 {
+                // A run at the far end has nothing ahead of it, so it backs onto what came
+                // before -- the stop as this pass has already left it, because the run before it
+                // may have been spread toward this very colour and would otherwise be matched.
+                for step in 0..run - 1 {
+                    ramp[start + step] = blend(ramp[start - 1], stops[start], (step + 1) as f32 / run as f32);
+                }
+            }
+        }
+        start = end;
+    }
+    ramp
+}
+
 #[cfg(test)]
 #[path = "../tests/helpers/palette.rs"]
 mod tests;

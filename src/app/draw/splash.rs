@@ -1,6 +1,7 @@
 use crate::app::app::{App, Focus};
 use crate::helpers::keymap::{Command, InputMode, keybinding_to_visual_string};
 use crate::helpers::localisation::splash as splash_text;
+use crate::helpers::logo;
 use ratatui::Frame;
 use ratatui::{
     style::Style,
@@ -89,18 +90,15 @@ impl App {
             lines.push(Line::default());
         }
 
+        // The logo is drawn rather than printed: the characters drift and a sheen crosses them,
+        // both read off how long guitar has been up. The row the tone changes on is the split the
+        // splash has always had, and at rest the wordmark is exactly the art.
+        let elapsed = self.started.elapsed();
         if self.layout.app.width < 80 {
-            lines.push(Line::from(Span::styled(self.symbols.splash.logo_compact.clone(), Style::default().fg(self.theme.COLOR_GRASS))).centered());
-        } else if self.layout.app.width < 120 {
-            for (idx, row) in self.symbols.splash.logo_narrow.iter().enumerate() {
-                let color = if idx < 4 { self.theme.COLOR_GRASS } else { self.theme.COLOR_GREEN };
-                lines.push(Line::from(Span::styled(row.clone(), Style::default().fg(color))).centered());
-            }
+            lines.push(logo::word(&self.symbols.splash.logo_compact, &self.theme, elapsed).centered());
         } else {
-            for (idx, row) in self.symbols.splash.logo_wide.iter().enumerate() {
-                let color = if idx < 5 { self.theme.COLOR_GRASS } else { self.theme.COLOR_GREEN };
-                lines.push(Line::from(Span::styled(row.clone(), Style::default().fg(color))).centered());
-            }
+            let (art, bright) = if self.layout.app.width < 120 { (&self.symbols.splash.logo_narrow, 4) } else { (&self.symbols.splash.logo_wide, 5) };
+            lines.extend(logo::lines(art, bright, &self.theme, elapsed).into_iter().map(Line::centered));
         }
 
         lines.push(Line::default());

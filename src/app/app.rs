@@ -687,6 +687,8 @@ pub struct App {
     pub file_watcher: Option<RepoWatcher>,
     // Watcher debounce, reset by every filesystem event so one Git command means one reload.
     pub watcher_quiet_since: Option<Instant>,
+    // When guitar started, which is what the splash wordmark is animated from.
+    pub started: Instant,
     // A reload is owed. Kept separate from the debounce above so a burst of events cannot postpone
     // a reload that has already been asked for.
     pub pending_reload: bool,

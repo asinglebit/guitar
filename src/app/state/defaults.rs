@@ -22,7 +22,7 @@ use crate::{
 };
 use indexmap::IndexMap;
 use ratatui::{style::Style, text::Span, widgets::ListItem};
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc, time::Instant};
 
 #[derive(Clone)]
 pub struct SplitViewerRow {
@@ -241,6 +241,7 @@ impl Default for App {
             // been read.
             file_watcher: None,
             watcher_quiet_since: None,
+            started: Instant::now(),
             pending_reload: false,
 
             // Terminal focus. Assumed until a terminal says otherwise.
