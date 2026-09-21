@@ -110,11 +110,17 @@ impl App {
         } else {
             lines.push(Line::from(vec![Span::styled(splash_text::RECENT_REPOSITORIES().to_string(), Style::default().fg(self.theme.COLOR_TEXT))]).centered());
             lines.push(Line::default());
-            lines.push(Line::from(vec![Span::styled(self.recent_repository_actions_text(), Style::default().fg(self.theme.COLOR_TEXT))]).centered());
+            // The keys are a reminder rather than the thing you came to read, so they sit back a
+            // shade from the label above and the list below -- atrium dims its own hint line the
+            // same way.
+            lines.push(Line::from(vec![Span::styled(self.recent_repository_actions_text(), Style::default().fg(self.theme.COLOR_GREY_600))]).centered());
             lines.push(Line::default());
             // Recent repositories are selectable only when loading has finished.
             self.recent.iter().enumerate().for_each(|(i, path)| {
-                let style = if Some(path) == self.path.as_ref() {
+                let is_selected = i == self.splash_selected && self.focus == Focus::Viewport && !self.spinner.is_running();
+                // The whole row goes green, not only the brackets around it: the colour is what
+                // carries at a glance, and two marks at the ends of a centred line do not.
+                let style = if is_selected || Some(path) == self.path.as_ref() {
                     self.theme.COLOR_GRASS
                 } else {
                     self.theme.COLOR_TEXT
@@ -123,7 +129,7 @@ impl App {
                 let mut line = Line::from(Span::styled(path.clone(), Style::default().fg(style))).centered();
 
                 // Brackets make the current splash selection visible without changing row width too much.
-                if i == self.splash_selected && self.focus == Focus::Viewport && !self.spinner.is_running() {
+                if is_selected {
                     let mut spans = Vec::new();
                     spans.push(Span::styled(self.symbols.splash.selected_left.clone(), Style::default().fg(self.theme.COLOR_GRASS)));
                     spans.extend(line.spans.clone());
