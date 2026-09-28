@@ -91,10 +91,12 @@ pub fn get_timestamps(repo: &Repository, _branches: &HashMap<Oid, Vec<String>>) 
         .collect()
 }
 
-pub fn get_git_user_info(repo: &Repository) -> Result<(Option<String>, Option<String>), git2::Error> {
+pub fn get_git_user_info(repo: &Repository) -> Result<(String, String), git2::Error> {
     let config = repo.config()?;
-    let name = config.get_string("user.name").ok();
-    let email = config.get_string("user.email").ok();
+    // Missing config falls back to empty strings; committing then surfaces libgit2's
+    // "empty name/email" error rather than attributing commits to an unconfigured identity.
+    let name = config.get_string("user.name").unwrap_or_default();
+    let email = config.get_string("user.email").unwrap_or_default();
     Ok((name, email))
 }
 
