@@ -206,3 +206,25 @@ fn walker_keeps_stash_adjacent_to_its_base_parent() {
 
     assert_eq!(stash_idx + 1, base_idx);
 }
+
+#[test]
+fn walker_loads_detached_head_and_tags_without_branches() {
+    let (path, repo) = temp_repo("detached-tags");
+    let base = commit(&repo, "file.txt", "base");
+    let tagged = commit(&repo, "file.txt", "tagged");
+    let detached = commit(&repo, "file.txt", "detached");
+    let tagged_commit = repo.find_commit(tagged).unwrap();
+    repo.tag_lightweight("v1", tagged_commit.as_object(), false).unwrap();
+    repo.set_head_detached(base).unwrap();
+    repo.find_reference("refs/heads/master").unwrap().delete().unwrap();
+    repo.set_head_detached(detached).unwrap();
+
+    let mut walker = Walker::new(path.display().to_string(), 100, HashSet::new(), false, 20).unwrap();
+    walker.walk();
+    let sorted = walker.oids.get_sorted_aliases();
+
+    for oid in [base, tagged, detached] {
+        let alias = walker.oids.aliases.get(&oid).copied().unwrap();
+        assert!(sorted.contains(&alias));
+    }
+}

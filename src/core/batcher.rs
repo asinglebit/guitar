@@ -1,4 +1,4 @@
-use git2::{BranchType, Oid, Repository, Revwalk};
+use git2::{BranchType, ObjectType, Oid, Repository, Revwalk};
 use im::HashSet;
 use std::cell::RefCell;
 use std::collections::HashSet as StdHashSet;
@@ -10,7 +10,7 @@ pub struct Batcher {
 }
 
 impl Batcher {
-    // Build the initial revwalk from all visible local and remote branch tips.
+    // Build the initial revwalk from visible branch tips, tags, and a detached HEAD.
     pub fn new(repo: Rc<RefCell<Repository>>, hidden_branch_names: &HashSet<String>, extra_roots: &[Oid]) -> Result<Self, git2::Error> {
         let revwalk = Self::build(&repo.borrow(), hidden_branch_names, extra_roots)?;
         Ok(Self { revwalk: Mutex::new(revwalk) })
@@ -50,6 +50,22 @@ impl Batcher {
                     revwalk.push(oid)?;
                     pushed.insert(oid);
                 }
+            }
+        }
+
+        // A detached HEAD may not be reachable from any branch, so walk from it directly.
+        if repo.head_detached().unwrap_or(false)
+            && let Some(oid) = repo.head().ok().and_then(|head| head.target())
+            && pushed.insert(oid)
+        {
+            revwalk.push(oid)?;
+        }
+
+        // Tags keep history visible in clones that only have tags, such as detached release checkouts.
+        for reference in repo.references_glob("refs/tags/*")?.flatten() {
+            let Ok(commit) = reference.peel(ObjectType::Commit) else { continue };
+            if pushed.insert(commit.id()) {
+                revwalk.push(commit.id())?;
             }
         }
 
