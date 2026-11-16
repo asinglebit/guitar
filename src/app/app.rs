@@ -707,12 +707,19 @@ const WATCHER_QUIET_PERIOD: Duration = Duration::from_millis(300);
 
 impl App {
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
-        // Ask supported terminals to distinguish Esc from modified key sequences.
+        // Ask supported terminals to tell Esc apart from modified keys, and to report the character
+        // a shifted key types (`?` on any layout) instead of its base key. crossterm then drops
+        // Shift from those events, so every key event must go through normalize_key_event.
         enable_raw_mode()?;
         let has_keyboard_enhancement = matches!(supports_keyboard_enhancement(), Ok(true));
 
         if has_keyboard_enhancement {
-            execute!(stdout(), PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES | KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES))?;
+            execute!(
+                stdout(),
+                PushKeyboardEnhancementFlags(
+                    KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES | KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES | KeyboardEnhancementFlags::REPORT_ALTERNATE_KEYS
+                )
+            )?;
         }
         execute!(stdout(), EnableMouseCapture)?;
         // Terminals that understand this report when the window is focused; the rest stay silent

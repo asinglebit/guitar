@@ -4,7 +4,7 @@ use crate::helpers::{
 };
 use facet::Facet;
 use indexmap::IndexMap;
-use ratatui::crossterm::event::{KeyCode, KeyCode::*, KeyModifiers};
+use ratatui::crossterm::event::{KeyCode, KeyCode::*, KeyEvent, KeyModifiers};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -924,6 +924,18 @@ impl KeyBinding {
     pub fn new(code: KeyCode, modifiers: KeyModifiers) -> Self {
         Self { code, modifiers }
     }
+}
+
+// normalize_key_event adds Shift to capital letters, as the legacy encoding reports them, and keeps
+// the other modifiers. Shifted symbols stay bare: `?` arrives without Shift, so keymaps bind it
+// that way. Call it on every key event before the keymap lookup and text input see it.
+pub fn normalize_key_event(mut key_event: KeyEvent) -> KeyEvent {
+    if let KeyCode::Char(c) = key_event.code
+        && c.is_uppercase()
+    {
+        key_event.modifiers |= KeyModifiers::SHIFT;
+    }
+    key_event
 }
 
 #[derive(Facet)]
