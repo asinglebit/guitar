@@ -624,3 +624,35 @@ fn upgrade_keeps_a_user_binding_on_the_file_watcher_key() {
 fn file_watcher_command_has_a_visual_label() {
     assert_eq!(command_to_visual_string(&Command::ToggleFileWatcher), "Toggle file watcher");
 }
+
+#[test]
+fn normalize_key_event_puts_shift_back_on_capitals() {
+    let maps = default_keymaps();
+    let normal = maps.get(&InputMode::Normal).unwrap();
+    let event = normalize_key_event(KeyEvent::new(Char('G'), KeyModifiers::NONE));
+
+    assert_eq!(event.modifiers, KeyModifiers::SHIFT);
+    assert_eq!(command_for_key_binding(normal, &KeyBinding::new(event.code, event.modifiers)), Some(Command::GoToEnd));
+}
+
+#[test]
+fn normalize_key_event_leaves_shifted_symbols_bare() {
+    let maps = default_keymaps();
+    let normal = maps.get(&InputMode::Normal).unwrap();
+
+    for (c, command) in [('?', Command::ToggleHelp), ('{', Command::ScrollUpBranch), ('+', Command::GrowGraphLaneLimit), ('!', Command::ToggleShas)] {
+        let event = normalize_key_event(KeyEvent::new(Char(c), KeyModifiers::NONE));
+
+        assert_eq!(event.modifiers, KeyModifiers::NONE);
+        assert_eq!(command_for_key_binding(normal, &KeyBinding::new(event.code, event.modifiers)), Some(command));
+    }
+}
+
+#[test]
+fn normalize_key_event_keeps_other_modifiers() {
+    let event = normalize_key_event(KeyEvent::new(Char('A'), KeyModifiers::CONTROL));
+    assert_eq!(event.modifiers, KeyModifiers::CONTROL | KeyModifiers::SHIFT);
+
+    let event = normalize_key_event(KeyEvent::new(Char('a'), KeyModifiers::NONE));
+    assert_eq!(event.modifiers, KeyModifiers::NONE);
+}

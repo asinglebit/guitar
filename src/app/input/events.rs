@@ -1,6 +1,7 @@
 use crate::{
     app::app::{App, Direction, Focus, LayoutDrag, MouseDrag, MouseSelectionTarget, ScrollbarDrag, ScrollbarTarget, SettingsSelectionKind, SharedMouseDrag, Viewport},
     helpers::{
+        keymap::normalize_key_event,
         layout::{LAYOUT_HEIGHT_MIN_STACKED_PANE, LAYOUT_WIDTH_MIN_CENTER, LAYOUT_WIDTH_MIN_SIDE_PANE, scrollbar_content_length},
         text::{empty_state_top_padding, sanitize, wrap_words},
     },
@@ -71,7 +72,7 @@ impl App {
     pub fn handle_events(&mut self) -> io::Result<()> {
         match event::read()? {
             Event::Key(key_event) if matches!(key_event.kind, KeyEventKind::Press) => {
-                self.handle_key_event(key_event);
+                self.handle_key_event(normalize_key_event(key_event));
             },
             Event::Mouse(mouse_event) => {
                 self.handle_mouse_event(mouse_event);
